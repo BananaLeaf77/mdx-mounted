@@ -454,17 +454,17 @@ func (r *teacherRepository) DeleteAvailability(ctx context.Context, scheduleID i
 	}
 
 	// 2️⃣ Check if the class has already completed (linked to ClassHistory)
-	var completedCount int64
-	if err := r.db.WithContext(ctx).
-		Model(&domain.ClassHistory{}).
-		Where("booking_id IN (SELECT id FROM bookings WHERE schedule_id = ?)", scheduleID).
-		Count(&completedCount).Error; err != nil {
-		return err
-	}
+	// var completedCount int64
+	// if err := r.db.WithContext(ctx).
+	// 	Model(&domain.ClassHistory{}).
+	// 	Where("booking_id IN (SELECT id FROM bookings WHERE schedule_id = ?)", scheduleID).
+	// 	Count(&completedCount).Error; err != nil {
+	// 	return err
+	// }
 
-	if completedCount > 0 {
-		return errors.New("jadwal ini sudah memiliki riwayat kelas dan tidak dapat dihapus")
-	}
+	// if completedCount > 0 {
+	// 	return errors.New("jadwal ini sudah memiliki riwayat kelas dan tidak dapat dihapus")
+	// }
 
 	// 3️⃣ Soft delete (mark as deleted)
 	if err := r.db.WithContext(ctx).Model(&domain.TeacherSchedule{}).

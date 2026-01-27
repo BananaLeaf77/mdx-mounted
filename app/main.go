@@ -45,7 +45,9 @@ func main() {
 	}
 
 	redisPass := os.Getenv("REDIS_PASSWORD")
-	// Note: Redis password is optional for local development
+	if redisPass == "" {
+		log.Fatal("❌ Failed to fetch Redis password from env")
+	}
 
 	redisClient := config.InitRedisDB(redisAddr, redisPass, 0)
 	// JWT secret validation
@@ -91,9 +93,16 @@ func main() {
 	// ========================================================================
 	// GRACEFUL SHUTDOWN SETUP
 	// ========================================================================
-	port := os.Getenv("APP_PORT")
+	// ========================================================================
+	// GRACEFUL SHUTDOWN SETUP
+	// ========================================================================
+	// Heroku menggunakan variabel "PORT", lokal biasanya menggunakan "APP_PORT"
+	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = os.Getenv("APP_PORT")
+		if port == "" {
+			port = "8080" // Fallback terakhir
+		}
 	}
 	srvAddr := ":" + port
 

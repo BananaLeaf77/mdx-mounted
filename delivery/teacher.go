@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"gorm.io/gorm"
 )
 
@@ -358,76 +356,41 @@ func (h *TeacherHandler) AddAvailability(c *gin.Context) {
 }
 
 // Helper function to convert DTO to domain models with strict validation
-func (h *TeacherHandler) convertToTeacherSchedules(teacherUUID string, slots []dto.SlotsAvailability) ([]domain.TeacherSchedule, error) {
+func (h *TeacherHandler) convertToTeacherSchedules(teacherID string, slots []dto.SlotsAvailability) ([]domain.TeacherSchedule, error) {
 	var schedules []domain.TeacherSchedule
-	uniqueSlots := make(map[string]bool)
 
-	// Define business hour boundaries (7:00 - 22:00)
-	businessStart := time.Date(0, 1, 1, 7, 0, 0, 0, time.UTC) // 07:00
-	businessEnd := time.Date(0, 1, 1, 22, 0, 0, 0, time.UTC)  // 22:00
+	// Get your local timezone (WITA)
+	loc, err := time.LoadLocation("Asia/Makassar") // WITA timezone
+	if err != nil {
+		loc = time.FixedZone("WITA", 8*60*60) // UTC+8 as fallback
+	}
 
-	for _, slotGroup := range slots {
-		// Parse times once per slot group
-		startTime, err := time.Parse("15:04", slotGroup.StartTime)
+	for _, slot := range slots {
+		// Parse start and end times in local timezone
+		startTimeLocal, err := time.ParseInLocation("15:04", slot.StartTime, loc)
 		if err != nil {
-			return nil, fmt.Errorf("invalid start_time format '%s'", slotGroup.StartTime)
+			return nil, fmt.Errorf("invalid start time format: %s", slot.StartTime)
 		}
 
-		endTime, err := time.Parse("15:04", slotGroup.EndTime)
+		endTimeLocal, err := time.ParseInLocation("15:04", slot.EndTime, loc)
 		if err != nil {
-			return nil, fmt.Errorf("invalid end_time format '%s'", slotGroup.EndTime)
+			return nil, fmt.Errorf("invalid end time format: %s", slot.EndTime)
 		}
 
-		// Calculate duration in minutes
-		durationMinutes := int(endTime.Sub(startTime).Minutes())
+		// Convert to UTC for database storage
+		startTimeUTC := startTimeLocal.UTC()
+		endTimeUTC := endTimeLocal.UTC()
 
-		// ✅ STRICT: Validate exactly 1-hour duration / 30 minute
-		if durationMinutes != 60 && durationMinutes != 30 {
-			return nil, fmt.Errorf("slot waktu harus 1 jam atau 30 menit, didapat %s - %s (durasi: %d menit)",
-				slotGroup.StartTime, slotGroup.EndTime, durationMinutes)
-		}
+		// Handle day names - capitalize first letter
+		for _, day := range slot.DayOfTheWeek {
+			dayName := strings.Title(strings.ToLower(day))
 
-		// ✅ Validate business hours (7:00 - 22:00) - STRICTLY
-		// Normalize to same date for comparison
-		startNormalized := time.Date(0, 1, 1, startTime.Hour(), startTime.Minute(), 0, 0, time.UTC)
-		endNormalized := time.Date(0, 1, 1, endTime.Hour(), endTime.Minute(), 0, 0, time.UTC)
-
-		// Check if slot is within business hours
-		if startNormalized.Before(businessStart) || startNormalized.After(businessEnd) {
-			return nil, fmt.Errorf("waktu mulai %s harus antara 07:00 dan 22:00", slotGroup.StartTime)
-		}
-
-		if endNormalized.Before(businessStart) || endNormalized.After(businessEnd) {
-			return nil, fmt.Errorf("waktu selesai %s harus antara 07:00 dan 22:00", slotGroup.EndTime)
-		}
-
-		// Additional check: end time should not exceed 22:00
-		if endNormalized.Hour() == 22 && endNormalized.Minute() > 0 {
-			return nil, fmt.Errorf("waktu selesai %s melebihi batas maksimum 22:00", slotGroup.EndTime)
-		}
-
-		// Create schedules for each day in the group
-		for _, day := range slotGroup.DayOfTheWeek {
-			// Check for duplicate slots in the request
-			slotKey := fmt.Sprintf("%s-%s-%s", day, slotGroup.StartTime, slotGroup.EndTime)
-			if uniqueSlots[slotKey] {
-				return nil, fmt.Errorf("slot waktu yang sama tidak boleh ada, didapat %s %s-%s", day, slotGroup.StartTime, slotGroup.EndTime)
-			}
-			uniqueSlots[slotKey] = true
-
-			// Convert day to title case (e.g., "senin" -> "Senin")
-			dayTitleCase := cases.Title(language.Indonesian).String(strings.ToLower(day))
-
-			// Create domain schedule
 			schedule := domain.TeacherSchedule{
-				TeacherUUID: teacherUUID,
-				DayOfWeek:   dayTitleCase,
-				StartTime:   startTime,
-				EndTime:     endTime,
-				IsBooked:    false,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
-				Duration:    durationMinutes,
+				TeacherUUID: teacherID,
+				DayOfWeek:   dayName,
+				StartTime:   startTimeUTC,
+				EndTime:     endTimeUTC,
+				Duration:    int(endTimeUTC.Sub(startTimeUTC).Minutes()),
 			}
 
 			schedules = append(schedules, schedule)
