@@ -93,9 +93,13 @@ func main() {
 	// ========================================================================
 	// GRACEFUL SHUTDOWN SETUP
 	// ========================================================================
-	port := os.Getenv("APP_PORT")
+	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		// Kalau di lokal, baru pakai APP_PORT atau 8080
+		port = os.Getenv("APP_PORT")
+		if port == "" {
+			port = "8080"
+		}
 	}
 	srvAddr := ":" + port
 
