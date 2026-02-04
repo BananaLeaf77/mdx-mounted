@@ -90,16 +90,17 @@ func (h *AuthHandler) ChangeEmail(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// ✅ Clear cookie (for web)
-	c.SetCookie(
-		"refresh_token",
-		"",
-		-1, // Expire immediately
-		"/",
-		"",    // domain
-		false, // secure=false for dev
-		true,  // HttpOnly
-	)
+	// ✅ Clear cookie (for web) with SameSite=None for cross-domain
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		MaxAge:   -1, // Expire immediately
+		Path:     "/",
+		Domain:   "",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
+	})
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -139,7 +140,15 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	_, err = h.authUC.Me(c.Request.Context(), userUUID)
 	if err != nil {
 		// User deleted - clear cookie and reject
-		c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    "",
+			MaxAge:   -1,
+			Path:     "/",
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteNoneMode,
+		})
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": "User account not found",
@@ -170,16 +179,17 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// ✅ For web clients, update HttpOnly cookie
-	c.SetCookie(
-		"refresh_token",
-		newRefreshToken,
-		60*60*24*7, // 7 days
-		"/",
-		"",    // ✅ replace in prod
-		false, // ✅ secure cookies (HTTPS only)
-		true,  // ✅ HttpOnly
-	)
+	// ✅ For web clients, update HttpOnly cookie with SameSite=None
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefreshToken,
+		MaxAge:   60 * 60 * 24 * 7, // 7 days
+		Path:     "/",
+		Domain:   "",
+		Secure:   true,
+		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
+	})
 
 	// ✅ Return new access token
 	c.JSON(http.StatusOK, gin.H{
@@ -377,21 +387,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if !isMobile {
 		// ✅ For WEB: store refresh_token in HttpOnly secure cookie
-		c.SetCookie(
-			"refresh_token",
-			tokens.RefreshToken, // ✅ correct variable
-			60*60*24*7,          // 7 days
-			"/",	
-			"",    // ⚠️ change to your actual domain in production
-			false, // ✅ secure (HTTPS only)
-			true,  // ✅ HttpOnly
-		)
+		// Use http.SetCookie for SameSite=None support (required for cross-domain)
+		http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    tokens.RefreshToken,
+			MaxAge:   60 * 60 * 24 * 7, // 7 days
+			Path:     "/",
+			Domain:   "",   // Leave empty for auto-detect
+			Secure:   true, // ✅ Required for SameSite=None
+			HttpOnly: true,
+			SameSite: http.SameSiteNoneMode, // ✅ Required for cross-domain
+		})
 
 		utils.PrintLogInfo(&loweredEmail, 200, "Login", nil)
 		c.JSON(http.StatusOK, gin.H{
-			"success":      true,
-			"access_token": tokens.AccessToken,
-			"message":      "Login successful",
+			"success":       true,
+			"access_token":  tokens.AccessToken,
+			"refresh_token": tokens.RefreshToken, // ✅ Also send in body as fallback
+			"message":       "Login successful",
 		})
 		return
 	}
