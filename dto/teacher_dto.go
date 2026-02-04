@@ -14,7 +14,7 @@ type SlotsAvailability struct {
 	StartTime    string   `json:"start_time" binding:"required,timeformat"`
 	EndTime      string   `json:"end_time" binding:"required,timeformat"`
 }
-
+	
 // Request untuk Create Teacher
 type CreateTeacherRequest struct {
 	Name          string  `json:"name" binding:"required,min=3,max=50"`

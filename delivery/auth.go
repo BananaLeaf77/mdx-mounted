@@ -6,44 +6,11 @@ import (
 	"chronosphere/middleware"
 	"chronosphere/utils"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
-
-// Helper function to set cross-domain cookie
-// Uses SameSite=None and Secure=true for cross-origin requests (Vercel ↔ Heroku)
-func setRefreshTokenCookie(c *gin.Context, token string, maxAge int) {
-	// Check if we're in production (HTTPS)
-	isProduction := os.Getenv("APP_ENV") == "production" || os.Getenv("PORT") != ""
-
-	if isProduction {
-		// Production: Use SameSite=None for cross-domain
-		c.SetSameSite(http.SameSiteNoneMode)
-		c.SetCookie(
-			"refresh_token",
-			token,
-			maxAge,
-			"/",
-			"",   // empty domain = current domain
-			true, // Secure = true (required for SameSite=None)
-			true, // HttpOnly
-		)
-	} else {
-		// Development: Use default SameSite
-		c.SetCookie(
-			"refresh_token",
-			token,
-			maxAge,
-			"/",
-			"",
-			false, // Secure = false for localhost
-			true,  // HttpOnly
-		)
-	}
-}
 
 type AuthHandler struct {
 	authUC domain.AuthUseCase
@@ -123,8 +90,16 @@ func (h *AuthHandler) ChangeEmail(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// ✅ Clear cookie (for web) - use helper for cross-domain support
-	setRefreshTokenCookie(c, "", -1)
+	// ✅ Clear cookie (for web)
+	c.SetCookie(
+		"refresh_token",
+		"",
+		-1, // Expire immediately
+		"/",
+		"",    // domain
+		false, // secure=false for dev
+		true,  // HttpOnly
+	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -164,7 +139,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	_, err = h.authUC.Me(c.Request.Context(), userUUID)
 	if err != nil {
 		// User deleted - clear cookie and reject
-		setRefreshTokenCookie(c, "", -1)
+		c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"message": "User account not found",
@@ -195,8 +170,16 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// ✅ For web clients, update HttpOnly cookie with cross-domain support
-	setRefreshTokenCookie(c, newRefreshToken, 60*60*24*7) // 7 days
+	// ✅ For web clients, update HttpOnly cookie
+	c.SetCookie(
+		"refresh_token",
+		newRefreshToken,
+		60*60*24*7, // 7 days
+		"/",
+		"",    // ✅ replace in prod
+		false, // ✅ secure cookies (HTTPS only)
+		true,  // ✅ HttpOnly
+	)
 
 	// ✅ Return new access token
 	c.JSON(http.StatusOK, gin.H{
@@ -393,17 +376,22 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		strings.Contains(strings.ToLower(userAgent), "mobile")
 
 	if !isMobile {
-		// ✅ For WEB: store refresh_token in HttpOnly secure cookie with cross-domain support
-		setRefreshTokenCookie(c, tokens.RefreshToken, 60*60*24*7) // 7 days
+		// ✅ For WEB: store refresh_token in HttpOnly secure cookie
+		c.SetCookie(
+			"refresh_token",
+			tokens.RefreshToken, // ✅ correct variable
+			60*60*24*7,          // 7 days
+			"/",	
+			"",    // ⚠️ change to your actual domain in production
+			false, // ✅ secure (HTTPS only)
+			true,  // ✅ HttpOnly
+		)
 
 		utils.PrintLogInfo(&loweredEmail, 200, "Login", nil)
-		// ✅ Also return refresh_token in body for cross-domain deployment
-		// Cookie tidak bekerja untuk cross-domain (Vercel ↔ Heroku)
 		c.JSON(http.StatusOK, gin.H{
-			"success":       true,
-			"access_token":  tokens.AccessToken,
-			"refresh_token": tokens.RefreshToken, // ✅ ADDED for cross-domain support
-			"message":       "Login successful",
+			"success":      true,
+			"access_token": tokens.AccessToken,
+			"message":      "Login successful",
 		})
 		return
 	}

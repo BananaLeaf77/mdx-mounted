@@ -359,6 +359,17 @@ func (h *TeacherHandler) AddAvailability(c *gin.Context) {
 func (h *TeacherHandler) convertToTeacherSchedules(teacherID string, slots []dto.SlotsAvailability) ([]domain.TeacherSchedule, error) {
 	var schedules []domain.TeacherSchedule
 
+	// Valid day names in Indonesian (case-insensitive)
+	validDays := map[string]string{
+		"senin":  "Senin",
+		"selasa": "Selasa",
+		"rabu":   "Rabu",
+		"kamis":  "Kamis",
+		"jumat":  "Jumat",
+		"sabtu":  "Sabtu",
+		"minggu": "Minggu",
+	}
+
 	// Get your local timezone (WITA)
 	loc, err := time.LoadLocation("Asia/Makassar") // WITA timezone
 	if err != nil {
@@ -366,35 +377,86 @@ func (h *TeacherHandler) convertToTeacherSchedules(teacherID string, slots []dto
 	}
 
 	for _, slot := range slots {
-		// Parse start and end times in local timezone
+		// 1. Validate time format
 		startTimeLocal, err := time.ParseInLocation("15:04", slot.StartTime, loc)
 		if err != nil {
-			return nil, fmt.Errorf("invalid start time format: %s", slot.StartTime)
+			return nil, fmt.Errorf("format waktu mulai tidak valid: %s, gunakan format HH:MM", slot.StartTime)
 		}
 
 		endTimeLocal, err := time.ParseInLocation("15:04", slot.EndTime, loc)
 		if err != nil {
-			return nil, fmt.Errorf("invalid end time format: %s", slot.EndTime)
+			return nil, fmt.Errorf("format waktu selesai tidak valid: %s, gunakan format HH:MM", slot.EndTime)
 		}
 
-		// Convert to UTC for database storage
-		startTimeUTC := startTimeLocal.UTC()
-		endTimeUTC := endTimeLocal.UTC()
+		// 2. Validate time range (07:00 to 22:00 WITA)
+		minTimeLocal, _ := time.ParseInLocation("15:04", "07:00", loc)
+		maxTimeLocal, _ := time.ParseInLocation("15:04", "22:00", loc)
 
-		// Handle day names - capitalize first letter
+		if startTimeLocal.Before(minTimeLocal) {
+			return nil, fmt.Errorf("waktu mulai harus pada atau setelah 07:00")
+		}
+		if endTimeLocal.After(maxTimeLocal) {
+			return nil, fmt.Errorf("waktu selesai harus pada atau sebelum 22:00")
+		}
+
+		// 3. Validate duration (must be exactly 1 hour OR 30 minutes)
+		duration := endTimeLocal.Sub(startTimeLocal)
+		durationMinutes := int(duration.Minutes())
+
+		if durationMinutes != 60 && durationMinutes != 30 {
+			return nil, fmt.Errorf("durasi harus tepat 1 jam (60 menit) atau 30 menit, didapat %v menit", durationMinutes)
+		}
+
+		// 4. Validate start < end
+		if !startTimeLocal.Before(endTimeLocal) {
+			return nil, fmt.Errorf("waktu mulai harus sebelum waktu selesai")
+		}
+
+		// 5. Validate days of the week
+		if len(slot.DayOfTheWeek) == 0 {
+			return nil, fmt.Errorf("minimal satu hari harus ditentukan")
+		}
+
 		for _, day := range slot.DayOfTheWeek {
-			dayName := strings.Title(strings.ToLower(day))
+			dayLower := strings.ToLower(strings.TrimSpace(day))
+			dayName, valid := validDays[dayLower]
+			if !valid {
+				return nil, fmt.Errorf("hari tidak valid: %s, hari yang valid: Senin, Selasa, Rabu, Kamis, Jumat, Sabtu, Minggu", day)
+			}
+
+			// Convert to UTC for database storage - NO LONGER NEEDED as we store string "HH:MM"
+			// startTimeUTC := startTimeLocal.UTC()
+			// endTimeUTC := endTimeLocal.UTC()
 
 			schedule := domain.TeacherSchedule{
 				TeacherUUID: teacherID,
 				DayOfWeek:   dayName,
-				StartTime:   startTimeUTC,
-				EndTime:     endTimeUTC,
-				Duration:    int(endTimeUTC.Sub(startTimeUTC).Minutes()),
+				StartTime:   slot.StartTime,  // "HH:MM"
+				EndTime:     slot.EndTime,    // "HH:MM"
+				Duration:    durationMinutes, // Will be 60 or 30
 			}
 
 			schedules = append(schedules, schedule)
 		}
+	}
+
+	// 6. Check for duplicates within the request
+	seen := make(map[string]bool)
+	for _, schedule := range schedules {
+		// Format times back to WITA for duplicate check key
+		// startWITA := schedule.StartTime.In(loc).Format("15:04")
+		// endWITA := schedule.EndTime.In(loc).Format("15:04")
+		startWITA := schedule.StartTime
+		endWITA := schedule.EndTime
+		key := fmt.Sprintf("%s-%s-%s", schedule.DayOfWeek, startWITA, endWITA)
+
+		if seen[key] {
+			return nil, fmt.Errorf("jadwal duplikat terdeteksi: %s %s-%s",
+				schedule.DayOfWeek,
+				startWITA,
+				endWITA)
+		}
+		seen[key] = true
 	}
 
 	return schedules, nil

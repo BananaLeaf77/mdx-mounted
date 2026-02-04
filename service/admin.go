@@ -5,17 +5,24 @@ import (
 	"chronosphere/utils"
 	"context"
 	"errors"
+	"fmt"
+	"os"
 
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type adminService struct {
 	adminRepo domain.AdminRepository
+	messanger *whatsmeow.Client
 }
 
-func NewAdminService(adminRepo domain.AdminRepository) domain.AdminUseCase {
+func NewAdminService(adminRepo domain.AdminRepository, meow *whatsmeow.Client) domain.AdminUseCase {
 	return &adminService{
 		adminRepo: adminRepo,
+		messanger: meow,
 	}
 }
 
@@ -123,7 +130,52 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 	if packageID <= 0 {
 		return errors.New("invalid package id")
 	}
-	return s.adminRepo.AssignPackageToStudent(ctx, studentUUID, packageID)
+
+	dataStudent, dataPackage, err := s.adminRepo.AssignPackageToStudent(ctx, studentUUID, packageID)
+	if err != nil {
+		return err
+	}
+
+	if s.messanger != nil {
+		// Send WhatsApp notification to student
+		phoneNormalized := utils.NormalizePhoneNumber(dataStudent.Phone)
+		if phoneNormalized != "" && s.messanger != nil {
+			msgToStudent := fmt.Sprintf(
+				`Halo %s,
+
+Paket les Anda telah aktif!
+• Paket: %s (%s)
+• Instrument: %s
+• Kuota: %d sesi
+
+Silakan login ke aplikasi untuk mulai booking sesi.
+
+Terima kasih,
+
+🌐 Website: %s
+🔔 %s Notification System
+`,
+				dataStudent.Name,
+				dataPackage.Name,
+				dataPackage.Description,
+				dataPackage.Instrument.Name,
+				dataPackage.Quota,
+				os.Getenv("TARGETED_DOMAIN"),
+				os.Getenv("APP_NAME"),
+			)
+
+			jid := types.NewJID(phoneNormalized, types.DefaultUserServer)
+			waMessage := &waE2E.Message{
+				Conversation: &msgToStudent,
+			}
+
+			go func() {
+				s.messanger.SendMessage(context.Background(), jid, waMessage)
+			}()
+		}
+	}
+
+	return nil
 }
 
 // CreatePackage creates a package

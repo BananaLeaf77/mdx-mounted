@@ -56,7 +56,7 @@ type AdminRepository interface {
 
 	// Student Management
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
-	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) error
+	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) (*User, *Package, error)
 	GetAllStudents(ctx context.Context) ([]User, error)
 
 	// Manager Management

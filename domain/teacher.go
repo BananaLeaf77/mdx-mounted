@@ -26,7 +26,7 @@ type TeacherRepository interface {
 	GetMySchedules(ctx context.Context, teacherUUID string) (*[]TeacherSchedule, error)
 	DeleteAvailability(ctx context.Context, scheduleID int, teacherUUID string) error
 	GetAllBookedClass(ctx context.Context, uuid string) (*[]Booking, error)
-	CancelBookedClass(ctx context.Context, bookingID int, teacherUUID string, reason *string) error
+	CancelBookedClass(ctx context.Context, bookingID int, teacherUUID string, reason *string) (*Booking, error)
 	FinishClass(ctx context.Context, bookingID int, teacherUUID string, payload ClassHistory) error
 	GetMyClassHistory(ctx context.Context, teacherUUID string) (*[]ClassHistory, error)
 	DeleteAvailabilityBasedOnDay(ctx context.Context, teacherUUID string, dayOfWeek string) error

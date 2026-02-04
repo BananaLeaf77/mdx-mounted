@@ -356,7 +356,7 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 }
 
 // AssignPackageToStudent assigns a package to a student
-func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) error {
+func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) (*domain.User, *domain.Package, error) {
 	tx := r.db.WithContext(ctx).Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -369,19 +369,19 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	if err := tx.Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).First(&student).Error; err != nil {
 		tx.Rollback()
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("siswa tidak ditemukan")
+			return nil, nil, errors.New("siswa tidak ditemukan")
 		}
-		return errors.New(utils.TranslateDBError(err))
+		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
 
 	// 2️⃣ Check package existence
 	var pkg domain.Package
-	if err := tx.Where("id = ? AND deleted_at IS NULL", packageID).First(&pkg).Error; err != nil {
+	if err := tx.Preload("Instrument").Where("id = ? AND deleted_at IS NULL", packageID).First(&pkg).Error; err != nil {
 		tx.Rollback()
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("paket tidak ditemukan")
+			return nil, nil, errors.New("paket tidak ditemukan")
 		}
-		return errors.New(utils.TranslateDBError(err))
+		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
 
 	// 3️⃣ Ensure student profile exists
@@ -391,11 +391,11 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 			studentProfile = domain.StudentProfile{UserUUID: studentUUID}
 			if err := tx.Create(&studentProfile).Error; err != nil {
 				tx.Rollback()
-				return errors.New(utils.TranslateDBError(err))
+				return nil, nil, errors.New(utils.TranslateDBError(err))
 			}
 		} else {
 			tx.Rollback()
-			return errors.New(utils.TranslateDBError(err))
+			return nil, nil, errors.New(utils.TranslateDBError(err))
 		}
 	}
 
@@ -423,11 +423,11 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 
 	if err := tx.Create(&newSub).Error; err != nil {
 		tx.Rollback()
-		return errors.New(utils.TranslateDBError(err))
+		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
 
 	tx.Commit()
-	return nil
+	return &student, &pkg, nil
 }
 
 // CreatePackage inserts a new package

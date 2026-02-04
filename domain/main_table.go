@@ -1,6 +1,8 @@
 package domain
 
-import "time"
+import (
+	"time"
+)
 
 const (
 	RoleAdmin      = "admin"
@@ -93,8 +95,8 @@ type TeacherSchedule struct {
 	ID          int        `gorm:"primaryKey" json:"id"`
 	TeacherUUID string     `gorm:"type:uuid;not null" json:"teacher_uuid"`
 	DayOfWeek   string     `gorm:"size:10;not null" json:"day_of_week"`
-	StartTime   time.Time  `gorm:"type:time;not null" json:"start_time"`
-	EndTime     time.Time  `gorm:"type:time;not null" json:"end_time"`
+	StartTime   string     `gorm:"type:varchar(5);not null" json:"start_time"` // Format "HH:MM"
+	EndTime     string     `gorm:"type:varchar(5);not null" json:"end_time"`   // Format "HH:MM"
 	Duration    int        `gorm:"not null;default:0" json:"duration"`
 	IsBooked    bool       `gorm:"default:false" json:"is_booked"`
 	CreatedAt   time.Time  `gorm:"autoCreateTime" json:"created_at"`

@@ -2,9 +2,28 @@ package utils
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// Helper function to normalize phone numbers for WhatsApp
+func NormalizePhoneNumber(phone string) string {
+	// Remove all non-digit characters
+	phone = strings.TrimSpace(phone)
+	phone = regexp.MustCompile(`[^\d]`).ReplaceAllString(phone, "")
+
+	// Handle Indonesian phone numbers
+	if strings.HasPrefix(phone, "0") {
+		phone = "62" + phone[1:] // Convert 08... to 628...
+	} else if strings.HasPrefix(phone, "62") {
+		// Already correct format
+	} else if strings.HasPrefix(phone, "+62") {
+		phone = phone[1:] // Remove +
+	}
+
+	return phone
+}
 
 func CalculateEndTime(startTime string, durationHours float64) string {
 	const timeLayout = "15:04"
