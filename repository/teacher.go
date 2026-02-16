@@ -156,7 +156,7 @@ func (r *teacherRepository) FinishClass(ctx context.Context, bookingID int, teac
 	// 1️⃣ Get booking with package info
 	var booking domain.Booking
 	err := tx.Preload("Schedule").
-		Preload("StudentPackage.Package").
+		Preload("PackageUsed.Package").
 		Where("id = ? AND status = ?", bookingID, domain.StatusBooked).
 		First(&booking).Error
 	if err != nil {
@@ -609,15 +609,17 @@ func (r *teacherRepository) CancelBookedClass(
 		return nil, errors.New("anda tidak memiliki akses ke booking ini")
 	}
 
-	// Check if class is in the future
-	if booking.ClassDate.Before(time.Now()) {
+	// Check if class is in the future (use WITA timezone for Heroku UTC compatibility)
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	nowWITA := time.Now().In(loc)
+	if booking.ClassDate.Before(nowWITA) {
 		tx.Rollback()
 		return nil, errors.New("tidak bisa membatalkan kelas yang sudah lewat")
 	}
 
 	// H-1 cancellation rule (24 hours before class)
 	minCancelTime := booking.ClassDate.Add(-24 * time.Hour)
-	if time.Now().After(minCancelTime) {
+	if nowWITA.After(minCancelTime) {
 		tx.Rollback()
 		return nil, errors.New("pembatalan hanya bisa dilakukan minimal H-1 (24 jam) sebelum kelas")
 	}
