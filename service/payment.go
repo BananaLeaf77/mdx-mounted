@@ -2,6 +2,7 @@ package service
 
 import (
 	"chronosphere/domain"
+	"chronosphere/utils"
 	"context"
 	"fmt"
 	"log"
@@ -10,6 +11,9 @@ import (
 
 	xendit "github.com/xendit/xendit-go/v6"
 	invoice "github.com/xendit/xendit-go/v6/invoice"
+	"go.mau.fi/whatsmeow"
+	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/types"
 	"gorm.io/gorm"
 )
 
@@ -18,9 +22,10 @@ type paymentService struct {
 	adminRepo    domain.AdminRepository
 	xenditClient *xendit.APIClient
 	db           *gorm.DB
+	messenger    *whatsmeow.Client
 }
 
-func NewPaymentService(paymentRepo domain.PaymentRepository, adminRepo domain.AdminRepository, db *gorm.DB) domain.PaymentUseCase {
+func NewPaymentService(paymentRepo domain.PaymentRepository, adminRepo domain.AdminRepository, db *gorm.DB, messenger *whatsmeow.Client) domain.PaymentUseCase {
 	apiKey := os.Getenv("XENDIT_SECRET_KEY")
 	if apiKey == "" {
 		log.Println("⚠️  XENDIT_SECRET_KEY not set, payment features will not work")
@@ -33,6 +38,7 @@ func NewPaymentService(paymentRepo domain.PaymentRepository, adminRepo domain.Ad
 		adminRepo:    adminRepo,
 		xenditClient: client,
 		db:           db,
+		messenger:    messenger,
 	}
 }
 
@@ -203,6 +209,23 @@ func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.Xendi
 
 		log.Printf("✅ Payment completed: %s | Student: %s | Package: %d", payload.ExternalID, payment.StudentUUID, payment.PackageID)
 
+		// Send WhatsApp notification to student
+		if s.messenger != nil {
+			go func() {
+				student, err := s.adminRepo.GetStudentByUUID(context.Background(), payment.StudentUUID)
+				if err != nil {
+					log.Printf("⚠️ Failed to fetch student for WA notification: %v", err)
+					return
+				}
+				pkg, err := s.adminRepo.GetPackagesByID(context.Background(), payment.PackageID)
+				if err != nil {
+					log.Printf("⚠️ Failed to fetch package for WA notification: %v", err)
+					return
+				}
+				s.sendPaymentSuccessNotification(student, pkg)
+			}()
+		}
+
 	case "EXPIRED":
 		if err := s.paymentRepo.UpdatePaymentStatus(ctx, payload.ExternalID, domain.PaymentStatusExpired, nil, nil); err != nil {
 			log.Printf("❌ Webhook: failed to update expired status: %v", err)
@@ -244,4 +267,40 @@ func (s *paymentService) GetPaymentHistory(ctx context.Context, filter domain.Hi
 
 func (s *paymentService) GetPackageSummary(ctx context.Context) ([]domain.PackageSummary, error) {
 	return s.paymentRepo.GetPackageSummary(ctx)
+}
+
+func (s *paymentService) sendPaymentSuccessNotification(student *domain.User, pkg *domain.Package) {
+	if s.messenger == nil || student == nil || pkg == nil {
+		return
+	}
+
+	phoneNormalized := utils.NormalizePhoneNumber(student.Phone)
+	if phoneNormalized == "" {
+		log.Printf("⚠️ Student %s has no valid phone number for WA notification", student.Name)
+		return
+	}
+
+	jid := types.NewJID(phoneNormalized, types.DefaultUserServer)
+
+	appName := os.Getenv("APP_NAME")
+	if appName == "" {
+		appName = "MadEU"
+	}
+
+	message := fmt.Sprintf(
+		"Halo %s 👋\n\n"+
+			"Pembayaran kamu untuk paket *%s* telah berhasil! ✅\n\n"+
+			"Paket langsung aktif dan kamu bisa langsung booking kelas.\n\n"+
+			"Terima kasih telah menggunakan %s! 🎵",
+		student.Name, pkg.Name, appName,
+	)
+
+	_, err := s.messenger.SendMessage(context.Background(), jid, &waE2E.Message{
+		Conversation: &message,
+	})
+	if err != nil {
+		log.Printf("🔕 Failed to send WhatsApp payment notification to %s: %v", student.Name, err)
+	} else {
+		log.Printf("🔔 WhatsApp payment notification sent to: %s", student.Name)
+	}
 }

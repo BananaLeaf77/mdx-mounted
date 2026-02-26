@@ -120,20 +120,22 @@ func (h *AdminHandler) UpdateAdmin(c *gin.Context) {
 }
 
 type CreatePackageRequest struct {
-	Name         string  `json:"name" binding:"required,min=3,max=50"`
-	Duration     int     `json:"duration" binding:"required,oneof=30 60"`
-	Price        float64 `json:"price" binding:"required,gt=0"`
-	Quota        int     `json:"quota" binding:"required,gt=0"`
-	Description  string  `json:"description,omitempty"`
-	InstrumentID int     `json:"instrument_id" binding:"required,gt=0"`
+	Name            string  `json:"name" binding:"required,min=3,max=50"`
+	Duration        int     `json:"duration" binding:"required,oneof=30 60"`
+	ExpiredDuration int     `json:"expired_duration"`
+	Price           float64 `json:"price" binding:"required,gt=0"`
+	Quota           int     `json:"quota" binding:"required,gt=0"`
+	Description     string  `json:"description,omitempty"`
+	InstrumentID    int     `json:"instrument_id" binding:"required,gt=0"`
 }
 type UpdatePackageRequest struct {
-	Name         string  `json:"name,omitempty" binding:"omitempty,min=3,max=50"`
-	Duration     int     `json:"duration" binding:"required,oneof=30 60"`
-	Quota        int     `json:"quota,omitempty" binding:"omitempty,gt=0"`
-	Description  string  `json:"description,omitempty"`
-	InstrumentID int     `json:"instrument_id,omitempty" binding:"required,gt=0"`
-	Price        float64 `json:"price,omitempty" binding:"omitempty,gt=0"`
+	Name            string  `json:"name,omitempty" binding:"omitempty,min=3,max=50"`
+	Duration        int     `json:"duration" binding:"required,oneof=30 60"`
+	ExpiredDuration int     `json:"expired_duration"`
+	Quota           int     `json:"quota,omitempty" binding:"omitempty,gt=0"`
+	Description     string  `json:"description,omitempty"`
+	InstrumentID    int     `json:"instrument_id,omitempty" binding:"required,gt=0"`
+	Price           float64 `json:"price,omitempty" binding:"omitempty,gt=0"`
 }
 
 type CreateInstrumentRequest struct {
@@ -194,13 +196,18 @@ func (h *AdminHandler) CreatePackage(c *gin.Context) {
 		return
 	}
 
+	if req.ExpiredDuration == 0 {
+		req.ExpiredDuration = domain.DefaultPackageExpiredDuration
+	}
+
 	pkg := &domain.Package{
-		Name:         req.Name,
-		Price:        req.Price,
-		Quota:        req.Quota,
-		Duration:     req.Duration,
-		Description:  req.Description,
-		InstrumentID: req.InstrumentID,
+		Name:            req.Name,
+		Price:           req.Price,
+		Quota:           req.Quota,
+		Duration:        req.Duration,
+		Description:     req.Description,
+		InstrumentID:    req.InstrumentID,
+		ExpiredDuration: req.ExpiredDuration,
 	}
 
 	created, err := h.uc.CreatePackage(c.Request.Context(), pkg)
@@ -245,6 +252,9 @@ func (h *AdminHandler) UpdatePackage(c *gin.Context) {
 		return
 	}
 
+	if req.ExpiredDuration != 0 {
+		pkg.ExpiredDuration = req.ExpiredDuration
+	}
 	pkg.Duration = req.Duration
 	pkg.InstrumentID = req.InstrumentID
 	pkg.Description = req.Description

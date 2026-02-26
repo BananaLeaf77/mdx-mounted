@@ -27,6 +27,8 @@ const (
 
 	RegularRoomLimit int64 = 8
 	DrumRoomLimit    int64 = 3
+
+	DefaultPackageExpiredDuration int = 30
 )
 
 type User struct {
@@ -48,22 +50,24 @@ type User struct {
 }
 
 type StudentProfile struct {
-	UserUUID string           `gorm:"primaryKey;type:uuid;constraint:OnDelete:CASCADE;" json:"user_uuid"`
-	Packages []StudentPackage `gorm:"foreignKey:StudentUUID;constraint:OnDelete:CASCADE;" json:"packages"`
+	UserUUID             string           `gorm:"primaryKey;type:uuid;constraint:OnDelete:CASCADE;" json:"user_uuid"`
+	Packages             []StudentPackage `gorm:"foreignKey:StudentUUID;constraint:OnDelete:CASCADE;" json:"packages"`
+	LatestClassHistories *[]ClassHistory  `gorm:"-" json:"latest_class_histories"`
 }
 
 type Package struct {
-	ID           int        `gorm:"primaryKey" json:"id"`
-	Name         string     `gorm:"not null" json:"name"`
-	Price        float64    `gorm:"not null" json:"price"`
-	Quota        int        `gorm:"not null" json:"quota"`
-	Duration     int        `gorm:"not null;default:30" json:"duration"` // Minutes: 30 or 60
-	Description  string     `json:"description"`
-	InstrumentID int        `gorm:"not null" json:"instrument_id"`
-	Instrument   Instrument `gorm:"foreignKey:InstrumentID" json:"instrument"`
-	CreatedAt    time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt    time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt    *time.Time `gorm:"index" json:"deleted_at,omitempty"`
+	ID              int        `gorm:"primaryKey" json:"id"`
+	Name            string     `gorm:"not null" json:"name"`
+	Price           float64    `gorm:"not null" json:"price"`
+	Quota           int        `gorm:"not null" json:"quota"`
+	Duration        int        `gorm:"not null;default:30" json:"duration"` // Minutes: 30 or 60
+	ExpiredDuration int        `json:"expired_duration"`
+	Description     string     `json:"description"`
+	InstrumentID    int        `gorm:"not null" json:"instrument_id"`
+	Instrument      Instrument `gorm:"foreignKey:InstrumentID" json:"instrument"`
+	CreatedAt       time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt       *time.Time `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 type StudentPackage struct {

@@ -108,60 +108,64 @@ func (r *managerRepo) GetStudentByUUID(ctx context.Context, uuid string) (*domai
 }
 
 func (r *managerRepo) ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) (*domain.User, error) {
-    // First, find the student package directly
-    var studentPackage domain.StudentPackage
-    if err := r.db.WithContext(ctx).
-        Preload("Package").
-        Preload("Package.Instrument").
-        Where("student_uuid = ? AND package_id = ? AND end_date >= ?", studentUUID, packageID, time.Now()).
-        First(&studentPackage).Error; err != nil {
-        if errors.Is(err, gorm.ErrRecordNotFound) {
-            return nil, fmt.Errorf("active package not found for this student")
-        }
-        return nil, err
-    }
+	if incomingQuota > 50 {
+		return nil, fmt.Errorf("quota cannot exceed 50")
+	}
 
-    // Verify the student exists and has the correct role
-    var student domain.User
-    if err := r.db.WithContext(ctx).
-        Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).
-        First(&student).Error; err != nil {
-        return nil, err
-    }
+	// First, find the student package directly
+	var studentPackage domain.StudentPackage
+	if err := r.db.WithContext(ctx).
+		Preload("Package").
+		Preload("Package.Instrument").
+		Where("student_uuid = ? AND package_id = ? AND end_date >= ?", studentUUID, packageID, time.Now()).
+		First(&studentPackage).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("active package not found for this student")
+		}
+		return nil, err
+	}
 
-    // Update the remaining quota
-    studentPackage.RemainingQuota = incomingQuota
+	// Verify the student exists and has the correct role
+	var student domain.User
+	if err := r.db.WithContext(ctx).
+		Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).
+		First(&student).Error; err != nil {
+		return nil, err
+	}
 
-    // Ensure remaining quota doesn't go negative
-    if studentPackage.RemainingQuota < 0 {
-        studentPackage.RemainingQuota = 0
-    }
+	// Update the remaining quota
+	studentPackage.RemainingQuota = incomingQuota
 
-    // Save the student package
-    err := r.db.WithContext(ctx).Save(&studentPackage).Error
-    if err != nil {
-        return nil, err
-    }
+	// Ensure remaining quota doesn't go negative
+	if studentPackage.RemainingQuota < 0 {
+		studentPackage.RemainingQuota = 0
+	}
 
-    // Now query the full student data with all relationships
-    var fullStudent domain.User
-    if err := r.db.WithContext(ctx).
-        // Preload StudentProfile
-        Preload("StudentProfile").
-        // Preload StudentProfile's Packages with nested Package and Instrument
-        Preload("StudentProfile.Packages", func(db *gorm.DB) *gorm.DB {
-            return db.
-                Preload("Package").
-                Preload("Package.Instrument").
-                Where("end_date >= ?", time.Now()) // Only active packages
-        }).
-        // Preload TeacherProfile (if needed, though student won't have one)
-        Preload("TeacherProfile").
-        // Main where clause
-        Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).
-        First(&fullStudent).Error; err != nil {
-        return nil, err
-    }
+	// Save the student package
+	err := r.db.WithContext(ctx).Save(&studentPackage).Error
+	if err != nil {
+		return nil, err
+	}
 
-    return &fullStudent, nil
+	// Now query the full student data with all relationships
+	var fullStudent domain.User
+	if err := r.db.WithContext(ctx).
+		// Preload StudentProfile
+		Preload("StudentProfile").
+		// Preload StudentProfile's Packages with nested Package and Instrument
+		Preload("StudentProfile.Packages", func(db *gorm.DB) *gorm.DB {
+			return db.
+				Preload("Package").
+				Preload("Package.Instrument").
+				Where("end_date >= ?", time.Now()) // Only active packages
+		}).
+		// Preload TeacherProfile (if needed, though student won't have one)
+		Preload("TeacherProfile").
+		// Main where clause
+		Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).
+		First(&fullStudent).Error; err != nil {
+		return nil, err
+	}
+
+	return &fullStudent, nil
 }

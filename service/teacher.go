@@ -16,11 +16,11 @@ import (
 
 type teacherService struct {
 	repo      domain.TeacherRepository
-	messanger *whatsmeow.Client
+	messenger *whatsmeow.Client
 }
 
 func NewTeacherService(TeacherRepo domain.TeacherRepository, meow *whatsmeow.Client) domain.TeacherUseCase {
-	return &teacherService{repo: TeacherRepo, messanger: meow}
+	return &teacherService{repo: TeacherRepo, messenger: meow}
 }
 
 func (s *teacherService) DeleteAvailabilityBasedOnDay(ctx context.Context, teacherUUID string, dayOfWeek string) error {
@@ -48,7 +48,7 @@ func (s *teacherService) CancelBookedClass(ctx context.Context, bookingID int, t
 	}
 
 	// Send WhatsApp messages to teacher and student
-	if s.messanger != nil {
+	if s.messenger != nil {
 		s.sendCancelClassByTeacherNotif(data, reason)
 	}
 
@@ -176,7 +176,7 @@ Terima kasih! 🎵
 
 		// Send to teacher
 		if teacherPhone != "" {
-			_, err := s.messanger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
+			_, err := s.messenger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
 				Conversation: &teacherMessage,
 			})
 			if err != nil {
@@ -188,7 +188,7 @@ Terima kasih! 🎵
 
 		// Send to student
 		if studentPhone != "" {
-			_, err := s.messanger.SendMessage(context.Background(), studentJID, &waE2E.Message{
+			_, err := s.messenger.SendMessage(context.Background(), studentJID, &waE2E.Message{
 				Conversation: &studentMessage,
 			})
 			if err != nil {

@@ -16,13 +16,13 @@ import (
 
 type adminService struct {
 	adminRepo domain.AdminRepository
-	messanger *whatsmeow.Client
+	messenger *whatsmeow.Client
 }
 
 func NewAdminService(adminRepo domain.AdminRepository, meow *whatsmeow.Client) domain.AdminUseCase {
 	return &adminService{
 		adminRepo: adminRepo,
-		messanger: meow,
+		messenger: meow,
 	}
 }
 
@@ -136,10 +136,10 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 		return err
 	}
 
-	if s.messanger != nil {
+	if s.messenger != nil {
 		// Send WhatsApp notification to student
 		phoneNormalized := utils.NormalizePhoneNumber(dataStudent.Phone)
-		if phoneNormalized != "" && s.messanger != nil {
+		if phoneNormalized != "" && s.messenger != nil {
 			msgToStudent := fmt.Sprintf(
 				`Halo %s,
 
@@ -170,7 +170,7 @@ Terima kasih,
 			}
 
 			go func() {
-				s.messanger.SendMessage(context.Background(), jid, waMessage)
+				s.messenger.SendMessage(context.Background(), jid, waMessage)
 			}()
 		}
 	}

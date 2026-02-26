@@ -418,7 +418,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		PackageID:      packageID,
 		RemainingQuota: pkg.Quota,
 		StartDate:      time.Now(),
-		EndDate:        time.Now().AddDate(0, 1, 0),
+		EndDate:        time.Now().AddDate(0, 0, pkg.ExpiredDuration),
 	}
 
 	if err := tx.Create(&newSub).Error; err != nil {

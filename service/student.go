@@ -16,11 +16,11 @@ import (
 
 type studentUseCase struct {
 	repo      domain.StudentRepository
-	messanger *whatsmeow.Client
+	messenger *whatsmeow.Client
 }
 
 func NewStudentUseCase(repo domain.StudentRepository, meowClient *whatsmeow.Client) domain.StudentUseCase {
-	return &studentUseCase{repo: repo, messanger: meowClient}
+	return &studentUseCase{repo: repo, messenger: meowClient}
 }
 
 func (s *studentUseCase) GetMyClassHistory(ctx context.Context, studentUUID string) (*[]domain.ClassHistory, error) {
@@ -40,7 +40,7 @@ func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, s
 	}
 
 	// Send WhatsApp messages to teacher and student
-	if s.messanger != nil {
+	if s.messenger != nil {
 		s.sendCancelClassNotif(data, reason)
 	}
 
@@ -168,7 +168,7 @@ Terima kasih! 🎵
 
 		// Send to teacher
 		if teacherPhone != "" {
-			_, err := s.messanger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
+			_, err := s.messenger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
 				Conversation: &teacherMessage,
 			})
 			if err != nil {
@@ -180,7 +180,7 @@ Terima kasih! 🎵
 
 		// Send to student
 		if studentPhone != "" {
-			_, err := s.messanger.SendMessage(context.Background(), studentJID, &waE2E.Message{
+			_, err := s.messenger.SendMessage(context.Background(), studentJID, &waE2E.Message{
 				Conversation: &studentMessage,
 			})
 			if err != nil {
@@ -200,7 +200,7 @@ func (s *studentUseCase) BookClass(ctx context.Context, studentUUID string, sche
 	}
 
 	// Send WhatsApp messages to teacher and student
-	if s.messanger != nil {
+	if s.messenger != nil {
 		s.sendBookClassNotif(data)
 	}
 
@@ -327,7 +327,7 @@ _Selamat belajar! 🎶_
 
 		// Send to teacher
 		if teacherPhone != "" {
-			_, err := s.messanger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
+			_, err := s.messenger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
 				Conversation: &teacherMessage,
 			})
 			if err != nil {
@@ -339,7 +339,7 @@ _Selamat belajar! 🎶_
 
 		// Send to student
 		if studentPhone != "" {
-			_, err := s.messanger.SendMessage(context.Background(), studentJID, &waE2E.Message{
+			_, err := s.messenger.SendMessage(context.Background(), studentJID, &waE2E.Message{
 				Conversation: &studentMessage,
 			})
 			if err != nil {

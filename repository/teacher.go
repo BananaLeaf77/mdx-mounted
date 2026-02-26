@@ -271,7 +271,13 @@ func (r *teacherRepository) FinishClass(ctx context.Context, bookingID int, teac
 		return fmt.Errorf("Kelas belum dimulai. Kelas akan dimulai pukul %s", startFormatted)
 	}
 
-	// 6️⃣ Create ClassHistory
+	// 6️⃣ Set default notes if empty
+	defaultNotes := "Kelas selesai, tanpa catatan"
+	if payload.Notes == nil || *payload.Notes == "" {
+		payload.Notes = &defaultNotes
+	}
+
+	// 7️⃣ Create ClassHistory
 	classHistory := domain.ClassHistory{
 		BookingID: booking.ID,
 		Status:    domain.StatusCompleted,
@@ -505,6 +511,7 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 
 	err := r.db.WithContext(ctx).
 		Preload("Student").
+		Preload("Student.StudentProfile").
 		Preload("PackageUsed").
 		Preload("PackageUsed.Package").
 		Preload("PackageUsed.Package.Instrument").
@@ -568,6 +575,47 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 		case now.After(classEnd):
 			bookings[i].IsReadyToFinish = true
 		}
+	}
+
+	// ✅ Populate LatestClassHistories for each student
+	for i := range bookings {
+		histories := make([]domain.ClassHistory, 0)
+
+		// Get instrument ID from the booked package
+		var instrumentID int
+		if bookings[i].PackageUsed.Package != nil {
+			instrumentID = bookings[i].PackageUsed.Package.InstrumentID
+		}
+
+		// Fetch completed class histories for this student, filtered by instrument
+		err := r.db.WithContext(ctx).
+			Model(&domain.ClassHistory{}).
+			Preload("Booking").
+			Preload("Booking.Schedule").
+			Preload("Booking.Schedule.Teacher").
+			Preload("Booking.PackageUsed").
+			Preload("Booking.PackageUsed.Package").
+			Preload("Booking.PackageUsed.Package.Instrument").
+			Joins("JOIN bookings ON bookings.id = class_histories.booking_id").
+			Joins("JOIN student_packages ON student_packages.id = bookings.student_package_id").
+			Joins("JOIN packages ON packages.id = student_packages.package_id").
+			Where("bookings.student_uuid = ?", bookings[i].StudentUUID).
+			Where("packages.instrument_id = ?", instrumentID).
+			Where("class_histories.status = ?", domain.StatusCompleted).
+			Order("class_histories.created_at DESC").
+			Find(&histories).Error
+
+		if err != nil {
+			fmt.Printf("⚠️ Failed to fetch histories for student %s: %v\n", bookings[i].StudentUUID, err)
+		}
+
+		if bookings[i].Student.StudentProfile == nil {
+			bookings[i].Student.StudentProfile = &domain.StudentProfile{
+				UserUUID: bookings[i].StudentUUID,
+			}
+		}
+
+		bookings[i].Student.StudentProfile.LatestClassHistories = &histories
 	}
 
 	return &bookings, nil
