@@ -15,6 +15,7 @@ require (
 	github.com/redis/go-redis/v9 v9.14.0
 	github.com/rs/zerolog v1.34.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	github.com/xendit/xendit-go/v6 v6.4.0
 	go.mau.fi/whatsmeow v0.0.0-20250916115455-914d640cc83c
 	golang.org/x/crypto v0.42.0
 	gorm.io/driver/postgres v1.6.0
@@ -60,7 +61,6 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.27 // indirect
-	github.com/xendit/xendit-go/v6 v6.4.0 // indirect
 	go.mau.fi/libsignal v0.2.0 // indirect
 	go.mau.fi/util v0.9.1 // indirect
 	golang.org/x/arch v0.18.0 // indirect
