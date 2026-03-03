@@ -31,6 +31,8 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 		return nil, nil, fmt.Errorf("failed to create sqlstore: %w", err)
 	}
 
+	// defer printer for whatsmeow pointer value
+
 	deviceStore, err := container.GetFirstDevice(ctx)
 	if err != nil {
 		log.Fatal("Failed to get ", utils.ColorText("Device first ", utils.Yellow), ", error: ", err)
