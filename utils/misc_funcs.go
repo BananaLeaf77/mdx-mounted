@@ -7,6 +7,28 @@ import (
 	"time"
 )
 
+func TranslateDayOfWeek(dayOfWeek string) string {
+	dayOfWeek = strings.ToLower(dayOfWeek)
+	switch dayOfWeek {
+	case "monday":
+		return "Senin"
+	case "tuesday":
+		return "Selasa"
+	case "wednesday":
+		return "Rabu"
+	case "thursday":
+		return "Kamis"
+	case "friday":
+		return "Jumat"
+	case "saturday":
+		return "Sabtu"
+	case "sunday":
+		return "Minggu"
+	default:
+		return dayOfWeek
+	}
+}
+
 // Helper function to normalize phone numbers for WhatsApp
 func NormalizePhoneNumber(phone string) string {
 	// Remove all non-digit characters

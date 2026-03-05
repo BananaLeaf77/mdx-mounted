@@ -16,7 +16,7 @@ const (
 	StatusRescheduled   = "rescheduled"
 	StatusOngoing       = "ongoing"
 	StatusUpcoming      = "upcoming"
-	StatusClassFinished = "class_finished"
+	StatusClassFinished = "class_finished_waiting_for_approval"
 
 	GenderMale   = "male"
 	GenderFemale = "female"

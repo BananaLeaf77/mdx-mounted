@@ -392,27 +392,7 @@ func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID 
 			0, 0, loc,
 		)
 
-		var classEnd time.Time
-		is30MinPackage := false
-
-		if bookings[i].PackageUsed.Package != nil {
-			is30MinPackage = bookings[i].PackageUsed.Package.Duration == 30
-		}
-
-		if is30MinPackage {
-			classEnd = classStart.Add(30 * time.Minute)
-		} else {
-			endTimeStr := bookings[i].Schedule.EndTime
-			parsedEnd, _ := time.Parse("15:04", endTimeStr)
-			classEnd = time.Date(
-				bookings[i].ClassDate.Year(),
-				bookings[i].ClassDate.Month(),
-				bookings[i].ClassDate.Day(),
-				parsedEnd.Hour(),
-				parsedEnd.Minute(),
-				0, 0, loc,
-			)
-		}
+		classEnd := classStart.Add(time.Duration(bookings[i].Schedule.Duration) * time.Minute)
 
 		switch {
 		case now.Before(classStart):
@@ -426,6 +406,7 @@ func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID 
 		// finished case
 		if now.Equal(classEnd) || now.After(classEnd) {
 			bookings[i].IsReadyToFinish = true
+			bookings[i].Status = domain.StatusClassFinished
 		}
 	}
 

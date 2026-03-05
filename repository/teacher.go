@@ -2,6 +2,7 @@ package repository
 
 import (
 	"chronosphere/domain"
+	"chronosphere/utils"
 	"context"
 	"errors"
 	"fmt"
@@ -252,17 +253,15 @@ func (r *teacherRepository) FinishClass(ctx context.Context, bookingID int, teac
 		// Format start and end times for better context
 		startFormatted := classStart.Format("15:04")
 		endFormatted := classEnd.Format("15:04")
+		dayOfWeek := classStart.Format("Monday")
+		classDate := classStart.Format("2006-01-02")
 
-		var packageType string
-		if is30MinPackage {
-			packageType = "30 menit"
-		} else {
-			packageType = "60 menit"
-		}
+		// translate day of week to Indonesian
+		dayOfWeek = utils.TranslateDayOfWeek(dayOfWeek)
 
 		return fmt.Errorf(
-			"Kelas %s belum dapat diselesaikan. Kelas berlangsung pukul %s - %s. Tunggu %s lagi hingga kelas berakhir",
-			packageType, startFormatted, endFormatted, timeMsg,
+			"Kelas belum dapat diselesaikan. Kelas berlangsung %s %s pukul %s - %s. Tunggu %s lagi hingga kelas berakhir",
+			dayOfWeek, classDate, startFormatted, endFormatted, timeMsg,
 		)
 	}
 
