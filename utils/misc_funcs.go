@@ -62,6 +62,11 @@ func CalculateEndTime(startTime string, durationHours float64) string {
 
 // GetNextClassDate calculates the next occurrence of a specific day and time
 func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
+	loc, err := time.LoadLocation("Asia/Makassar")
+	if err != nil {
+		loc = time.Local
+	}
+
 	dayMap := map[string]time.Weekday{
 		"minggu": time.Sunday,
 		"senin":  time.Monday,
@@ -75,10 +80,10 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 	targetDay, ok := dayMap[strings.ToLower(dayOfWeek)]
 	if !ok {
 		// Fallback to next week same day if invalid
-		return time.Now().AddDate(0, 0, 7)
+		return time.Now().In(loc).AddDate(0, 0, 7)
 	}
 
-	now := time.Now()
+	now := time.Now().In(loc)
 	currentDay := now.Weekday()
 
 	// Calculate days until target
@@ -91,7 +96,7 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 	if daysUntil == 0 {
 		todayClassTime := time.Date(
 			now.Year(), now.Month(), now.Day(),
-			startTime.Hour(), startTime.Minute(), 0, 0, time.Local,
+			startTime.Hour(), startTime.Minute(), 0, 0, loc,
 		)
 		// If class time has passed today, schedule for next week
 		if now.After(todayClassTime) {
@@ -106,7 +111,7 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 		nextDate.Day(),
 		startTime.Hour(),
 		startTime.Minute(),
-		0, 0, time.Local,
+		0, 0, loc,
 	)
 }
 

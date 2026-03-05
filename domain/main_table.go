@@ -22,9 +22,7 @@ const (
 	GenderFemale = "female"
 
 	RoomFull      = "Ruangan instrumen penuh"
-	RoomAvailable = "Ruangan nstrumen tersedia"
-
-	PaketTidakSesuai = "Paket tidak tersedia"
+	RoomAvailable = "Ruangan instrumen tersedia"
 
 	RegularRoomLimit int64 = 8
 	DrumRoomLimit    int64 = 3
