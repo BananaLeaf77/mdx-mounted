@@ -768,8 +768,8 @@ func (r *adminRepo) DeleteUser(ctx context.Context, uuid string) error {
 
 	// check if they had any booking
 	var bookingCount int64
-	err := tx.Model(&domain.Booking{}).
-		Where("uuid = ? AND status != ?", uuid, domain.StatusBooked).
+	err := tx.Model(&domain.TeacherSchedule{}).
+		Where("teacher_uuid = ? AND is_booked = ?", uuid, true).
 		Count(&bookingCount).Error
 	if err != nil {
 		tx.Rollback()
