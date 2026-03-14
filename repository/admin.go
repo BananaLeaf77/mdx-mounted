@@ -766,6 +766,20 @@ func (r *adminRepo) DeleteUser(ctx context.Context, uuid string) error {
 		return fmt.Errorf("pengguna tidak dapat di nonaktifkan")
 	}
 
+	// check if they had any booking
+	var bookingCount int64
+	err := tx.Model(&domain.Booking{}).
+		Where("uuid = ? AND status != ?", uuid, domain.StatusBooked).
+		Count(&bookingCount).Error
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal menghitung booking: %w", err)
+	}
+	if bookingCount > 0 {
+		tx.Rollback()
+		return fmt.Errorf("guru masih memiliki kelas yang terbooking")
+	}
+
 	// 4️⃣ Soft delete user
 	if err := tx.Model(&domain.User{}).
 		Where("uuid = ?", uuid).

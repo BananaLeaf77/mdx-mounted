@@ -92,16 +92,9 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 		daysUntil += 7
 	}
 
-	// If it's today, check if the time has passed
+	// If it's today, schedule for next week
 	if daysUntil == 0 {
-		todayClassTime := time.Date(
-			now.Year(), now.Month(), now.Day(),
-			startTime.Hour(), startTime.Minute(), 0, 0, loc,
-		)
-		// If class time has passed today, schedule for next week
-		if now.After(todayClassTime) {
-			daysUntil = 7
-		}
+		daysUntil = 7
 	}
 
 	nextDate := now.AddDate(0, 0, daysUntil)
