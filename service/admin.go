@@ -330,3 +330,15 @@ func (s *adminService) DeleteUser(ctx context.Context, uuid string) error {
 	}
 	return nil
 }
+
+// Setting
+func (s *adminService) GetSetting(ctx context.Context) (*domain.Setting, error) {
+	return s.adminRepo.GetSetting(ctx)
+}
+
+func (s *adminService) UpdateSetting(ctx context.Context, setting *domain.Setting) error {
+	if setting == nil {
+		return errors.New("pengaturan tidak valid")
+	}
+	return s.adminRepo.UpdateSetting(ctx, setting)
+}

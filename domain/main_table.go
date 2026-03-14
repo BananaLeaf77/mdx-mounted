@@ -58,6 +58,8 @@ type Package struct {
 	ID              int        `gorm:"primaryKey" json:"id"`
 	Name            string     `gorm:"not null" json:"name"`
 	Price           float64    `gorm:"not null" json:"price"`
+	PromoPrice      float64    `gorm:"default:0" json:"promo_price"`
+	IsPromoActive   bool       `gorm:"default:false" json:"is_promo_active"`
 	Quota           int        `gorm:"not null" json:"quota"`
 	Duration        int        `gorm:"not null;default:30" json:"duration"` // Minutes: 30 or 60
 	ExpiredDuration int        `json:"expired_duration"`
@@ -67,6 +69,14 @@ type Package struct {
 	CreatedAt       time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt       *time.Time `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+type Setting struct {
+	ID              int       `gorm:"primaryKey" json:"id"`
+	RegistrationFee float64   `gorm:"not null;default:50000" json:"registration_fee"`
+	SPPFee          float64   `gorm:"not null;default:200000" json:"spp_fee"`
+	CreatedAt       time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 type StudentPackage struct {

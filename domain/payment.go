@@ -13,11 +13,7 @@ const (
 	PaymentStatusFailed  = "FAILED"
 )
 
-// Fixed fees
-const (
-	RegistrationFee float64 = 50000
-	SPPFee          float64 = 200000
-)
+
 
 type Payment struct {
 	ID              int        `gorm:"primaryKey" json:"id"`

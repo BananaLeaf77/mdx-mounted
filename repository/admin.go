@@ -806,3 +806,44 @@ func (r *adminRepo) GetPackagesByID(ctx context.Context, id int) (*domain.Packag
 
 	return &pkg, nil
 }
+
+// Setting Management
+func (r *adminRepo) GetSetting(ctx context.Context) (*domain.Setting, error) {
+	var setting domain.Setting
+	err := r.db.WithContext(ctx).First(&setting).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// If not found, create a default setting and return
+			setting = domain.Setting{
+				RegistrationFee: 50000,
+				SPPFee:          200000,
+			}
+			errCreate := r.db.WithContext(ctx).Create(&setting).Error
+			if errCreate != nil {
+				return nil, errors.New(utils.TranslateDBError(errCreate))
+			}
+			return &setting, nil
+		}
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+	return &setting, nil
+}
+
+func (r *adminRepo) UpdateSetting(ctx context.Context, setting *domain.Setting) error {
+	var existing domain.Setting
+	err := r.db.WithContext(ctx).First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Create it if it doesn't exist yet
+			setting.ID = 1
+			return r.db.WithContext(ctx).Create(setting).Error
+		}
+		return errors.New(utils.TranslateDBError(err))
+	}
+
+	setting.ID = existing.ID // preserve ID
+	if err := r.db.WithContext(ctx).Save(setting).Error; err != nil {
+		return errors.New(utils.TranslateDBError(err))
+	}
+	return nil
+}

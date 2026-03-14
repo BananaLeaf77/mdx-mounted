@@ -55,8 +55,20 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		return nil, fmt.Errorf("paket tidak ditemukan: %w", err)
 	}
 
+	// 2.5 Get Settings for fees
+	setting, err := s.adminRepo.GetSetting(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil pengaturan biaya: %w", err)
+	}
+
 	// 3. Calculate total amount (package + fixed fees)
-	totalAmount := domain.RegistrationFee + domain.SPPFee + pkg.Price
+	// Apply promo price if active
+	pkgPrice := pkg.Price
+	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
+		pkgPrice = pkg.PromoPrice
+	}
+
+	totalAmount := setting.RegistrationFee + setting.SPPFee + pkgPrice
 
 	// 4. Generate external ID
 	shortUUID := studentUUID
@@ -78,9 +90,9 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 
 	// 7. Build invoice items for Xendit
 	items := []invoice.InvoiceItem{
-		*invoice.NewInvoiceItem("Biaya Pendaftaran", float32(domain.RegistrationFee), 1),
-		*invoice.NewInvoiceItem("Biaya SPP Bulanan", float32(domain.SPPFee), 1),
-		*invoice.NewInvoiceItem(fmt.Sprintf("Paket %s (%dx pertemuan)", pkg.Name, pkg.Quota), float32(pkg.Price), 1),
+		*invoice.NewInvoiceItem("Biaya Pendaftaran", float32(setting.RegistrationFee), 1),
+		*invoice.NewInvoiceItem("Biaya SPP Bulanan", float32(setting.SPPFee), 1),
+		*invoice.NewInvoiceItem(fmt.Sprintf("Paket %s (%dx pertemuan)", pkg.Name, pkg.Quota), float32(pkgPrice), 1),
 	}
 
 	// 8. Build customer

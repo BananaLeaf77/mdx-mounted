@@ -42,6 +42,10 @@ type AdminUseCase interface {
 
 	// Class
 	GetAllClassHistories(ctx context.Context) (*[]ClassHistory, error)
+
+	// Setting
+	GetSetting(ctx context.Context) (*Setting, error)
+	UpdateSetting(ctx context.Context, setting *Setting) error
 }
 
 type AdminRepository interface {
@@ -84,4 +88,8 @@ type AdminRepository interface {
 
 	// Class
 	GetAllClassHistories(ctx context.Context) (*[]ClassHistory, error)
+
+	// Setting
+	GetSetting(ctx context.Context) (*Setting, error)
+	UpdateSetting(ctx context.Context, setting *Setting) error
 }

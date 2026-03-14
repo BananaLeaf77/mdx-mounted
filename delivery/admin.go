@@ -62,8 +62,12 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.DELETE("/instruments/:id", h.DeleteInstrument)
 		admin.GET("/instruments", h.GetAllInstruments)
 
+		// Settings
+		admin.GET("/settings", h.GetSetting)
+		admin.PUT("/settings", h.UpdateSetting)
+
 		// Assign package to student
-		admin.POST("/assign-package", h.AssignPackageToStudent)
+		// admin.POST("/assign-package", h.AssignPackageToStudent)
 
 		// Class Histories
 		admin.GET("/class-histories", h.GetAllClassHistories)
@@ -124,6 +128,8 @@ type CreatePackageRequest struct {
 	Duration        int     `json:"duration" binding:"required,oneof=30 60"`
 	ExpiredDuration int     `json:"expired_duration"`
 	Price           float64 `json:"price" binding:"required,gt=0"`
+	PromoPrice      float64 `json:"promo_price,omitempty"`
+	IsPromoActive   bool    `json:"is_promo_active,omitempty"`
 	Quota           int     `json:"quota" binding:"required,gt=0"`
 	Description     string  `json:"description,omitempty"`
 	InstrumentID    int     `json:"instrument_id" binding:"required,gt=0"`
@@ -136,6 +142,8 @@ type UpdatePackageRequest struct {
 	Description     string  `json:"description,omitempty"`
 	InstrumentID    int     `json:"instrument_id,omitempty" binding:"required,gt=0"`
 	Price           float64 `json:"price,omitempty" binding:"omitempty,gt=0"`
+	PromoPrice      float64 `json:"promo_price,omitempty"`
+	IsPromoActive   bool    `json:"is_promo_active,omitempty"`
 }
 
 type CreateInstrumentRequest struct {
@@ -203,6 +211,8 @@ func (h *AdminHandler) CreatePackage(c *gin.Context) {
 	pkg := &domain.Package{
 		Name:            req.Name,
 		Price:           req.Price,
+		PromoPrice:      req.PromoPrice,
+		IsPromoActive:   req.IsPromoActive,
 		Quota:           req.Quota,
 		Duration:        req.Duration,
 		Description:     req.Description,
@@ -259,6 +269,8 @@ func (h *AdminHandler) UpdatePackage(c *gin.Context) {
 	pkg.InstrumentID = req.InstrumentID
 	pkg.Description = req.Description
 	pkg.Price = req.Price
+	pkg.PromoPrice = req.PromoPrice
+	pkg.IsPromoActive = req.IsPromoActive
 
 	if err := h.uc.UpdatePackage(c.Request.Context(), pkg); err != nil {
 		utils.PrintLogInfo(&name, 500, "UpdatePackage - UseCase", &err)
@@ -665,4 +677,47 @@ func (h *AdminHandler) ClearUserDeletedAt(c *gin.Context) {
 	}
 	utils.PrintLogInfo(&name, 200, "ClearUserDeletedAt", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Pengguna berhasil dipulihkan"})
+}
+
+// SETTINGS =====================================================================================================
+type UpdateSettingRequest struct {
+	RegistrationFee float64 `json:"registration_fee" binding:"required,min=0"`
+	SPPFee          float64 `json:"spp_fee" binding:"required,min=0"`
+}
+
+func (h *AdminHandler) GetSetting(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	setting, err := h.uc.GetSetting(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetSetting - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "message": "Gagal mengambil pengaturan"})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "GetSetting", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": setting, "message": "Pengaturan berhasil diambil"})
+}
+
+func (h *AdminHandler) UpdateSetting(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	var req UpdateSettingRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "UpdateSetting - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Gagal memperbarui pengaturan", "success": false, "error": utils.TranslateValidationError(err)})
+		return
+	}
+
+	setting := &domain.Setting{
+		RegistrationFee: req.RegistrationFee,
+		SPPFee:          req.SPPFee,
+	}
+
+	if err := h.uc.UpdateSetting(c.Request.Context(), setting); err != nil {
+		utils.PrintLogInfo(&name, 500, "UpdateSetting - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "message": "Gagal memperbarui pengaturan"})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "UpdateSetting", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Pengaturan berhasil diperbarui"})
 }
