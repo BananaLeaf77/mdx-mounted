@@ -238,11 +238,7 @@ func (r *studentRepository) BookClass(
 	}
 
 	// 4️⃣ Room Availability Check
-	loc, err := time.LoadLocation("Asia/Makassar")
-	if err != nil {
-		loc = time.Local
-	}
-	now := time.Now().In(loc)
+	now := time.Now()
 	// Determine room limit based on the PACKAGE's instrument (which matches request)
 	// (Note: Package.Instrument was preloaded above)
 	isDrum := strings.EqualFold(studentPackage.Package.Instrument.Name, "Drum") ||
