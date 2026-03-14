@@ -13,8 +13,6 @@ const (
 	PaymentStatusFailed  = "FAILED"
 )
 
-
-
 type Payment struct {
 	ID              int        `gorm:"primaryKey" json:"id"`
 	StudentUUID     string     `gorm:"type:uuid;not null" json:"student_uuid"`

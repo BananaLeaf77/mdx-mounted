@@ -42,15 +42,18 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 	// client.AddEventHandler(eventHandler)
 
 	if client.Store.ID == nil {
-		qrChan, _ := client.GetQRChannel(ctx)
-		if err := client.Connect(); err != nil {
-			log.Fatal("Failed to connect ", utils.ColorText("Whatsapp ", utils.Red), "client, error: ", err)
-			return nil, nil, fmt.Errorf("failed to connect client: %w", err)
-		}
-		for evt := range qrChan {
-			if evt.Event == "code" {
-				// Create email body with instructions
-				emailBody := `Please scan the attached QR code with WhatsApp to authenticate your MadEU Notification account.
+		for {
+			qrChan, _ := client.GetQRChannel(ctx)
+			if err := client.Connect(); err != nil {
+				log.Fatal("Failed to connect ", utils.ColorText("Whatsapp ", utils.Red), "client, error: ", err)
+				return nil, nil, fmt.Errorf("failed to connect client: %w", err)
+			}
+
+			var loggedIn bool
+			for evt := range qrChan {
+				if evt.Event == "code" {
+					// Create email body with instructions
+					emailBody := `Please scan the attached QR code with WhatsApp to authenticate your MadEU Notification account.
 
 Instructions:
 1. Open WhatsApp on your mobile phone
@@ -61,30 +64,43 @@ Instructions:
 
 Note: This QR code will expire in a short time. If it expires, you'll receive a new one automatically.`
 
-				// Send email with QR code attachment
-				err := utils.SendQRCodeEmail(
-					os.Getenv("QR_CODE_EMAIL_RECEIVER"),
-					"MadEU Notification - WhatsApp Authentication QR Code",
-					emailBody,
-					evt.Code,
-				)
-
-				if err != nil {
-					log.Printf("Failed to send QR code email: %v", err)
-					// Fallback to plain text email
-					utils.SendEmail(
+					// Send email with QR code attachment
+					err := utils.SendQRCodeEmail(
 						os.Getenv("QR_CODE_EMAIL_RECEIVER"),
-						"MadEU Notification - WhatsApp QR Code",
-						"Scan this QR code with WhatsApp: "+evt.Code,
+						"MadEU Notification - WhatsApp Authentication QR Code",
+						emailBody,
+						evt.Code,
 					)
-				}
 
-				fmt.Println("QR code has been sent to your email!")
-				fmt.Println("Scan this QR code with WhatsApp (also shown in terminal):")
-				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-			} else {
-				fmt.Println("Login event:", evt.Event)
+					if err != nil {
+						log.Printf("Failed to send QR code email: %v", err)
+						// Fallback to plain text email
+						utils.SendEmail(
+							os.Getenv("QR_CODE_EMAIL_RECEIVER"),
+							"MadEU Notification - WhatsApp QR Code",
+							"Scan this QR code with WhatsApp: "+evt.Code,
+						)
+					}
+
+					fmt.Println("QR code has been sent to your email!")
+					fmt.Println("Scan this QR code with WhatsApp (also shown in terminal):")
+					qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+				} else if evt.Event == "success" {
+					fmt.Println("Login event: success")
+					loggedIn = true
+				} else if evt.Event == "timeout" {
+					fmt.Println("Login event: timeout. Generating a new QR code...")
+				} else {
+					fmt.Println("Login event:", evt.Event)
+				}
 			}
+
+			if loggedIn {
+				break
+			}
+			
+			// Disconnect to reset state before retrying
+			client.Disconnect()
 		}
 	} else {
 		if err := client.Connect(); err != nil {
