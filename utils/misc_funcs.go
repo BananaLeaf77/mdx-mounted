@@ -141,7 +141,7 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 
 	// Calculate days until target
 	daysUntil := int(targetDay - currentDay)
-
+	
 	// If today is the target day
 	if daysUntil == 0 {
 		targetTime := time.Date(
@@ -152,13 +152,12 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 			startTime.Minute(),
 			0, 0, loc,
 		)
-
+		
 		// If the class time today hasn't passed yet, return today's date
-		// (ignore the 24-hour rule for same-day bookings)
 		if targetTime.After(now) {
 			return targetTime
 		}
-
+		
 		// If class time today has passed, we need next week
 		daysUntil = 7
 	} else if daysUntil < 0 {
@@ -174,12 +173,6 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 		startTime.Minute(),
 		0, 0, loc,
 	)
-
-	// Only enforce H-1 rule for future dates (not today)
-	// If it's a future date and less than 24 hours away, push to next week
-	if daysUntil > 0 && targetTime.Sub(now) < 24*time.Hour {
-		targetTime = targetTime.AddDate(0, 0, 7)
-	}
 
 	return targetTime
 }
