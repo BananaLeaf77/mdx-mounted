@@ -60,50 +60,50 @@ func CalculateEndTime(startTime string, durationHours float64) string {
 	return endTime.Format(timeLayout)
 }
 
-// func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
-// 	loc, err := time.LoadLocation("Asia/Makassar")
-// 	if err != nil {
-// 		loc = time.Local
-// 	}
-// 	dayMap := map[string]time.Weekday{
-// 		"minggu": time.Sunday,
-// 		"senin":  time.Monday,
-// 		"selasa": time.Tuesday,
-// 		"rabu":   time.Wednesday,
-// 		"kamis":  time.Thursday,
-// 		"jumat":  time.Friday,
-// 		"sabtu":  time.Saturday,
-// 	}
-// 	targetDay, ok := dayMap[strings.ToLower(dayOfWeek)]
-// 	if !ok {
-// 		return time.Now().In(loc).AddDate(0, 0, 7)
-// 	}
-// 	now := time.Now().In(loc)
-// 	currentDay := now.Weekday()
+func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
+	loc, err := time.LoadLocation("Asia/Makassar")
+	if err != nil {
+		loc = time.Local
+	}
+	dayMap := map[string]time.Weekday{
+		"minggu": time.Sunday,
+		"senin":  time.Monday,
+		"selasa": time.Tuesday,
+		"rabu":   time.Wednesday,
+		"kamis":  time.Thursday,
+		"jumat":  time.Friday,
+		"sabtu":  time.Saturday,
+	}
+	targetDay, ok := dayMap[strings.ToLower(dayOfWeek)]
+	if !ok {
+		return time.Now().In(loc).AddDate(0, 0, 7)
+	}
+	now := time.Now().In(loc)
+	currentDay := now.Weekday()
 
-// 	daysUntil := int(targetDay - currentDay)
-// 	if daysUntil < 0 {
-// 		daysUntil += 7
-// 	}
+	daysUntil := int(targetDay - currentDay)
+	if daysUntil < 0 {
+		daysUntil += 7
+	}
 
-// 	nextDate := now.AddDate(0, 0, daysUntil)
-// 	targetTime := time.Date(
-// 		nextDate.Year(),
-// 		nextDate.Month(),
-// 		nextDate.Day(),
-// 		startTime.Hour(),
-// 		startTime.Minute(),
-// 		0, 0, loc,
-// 	)
+	nextDate := now.AddDate(0, 0, daysUntil)
+	targetTime := time.Date(
+		nextDate.Year(),
+		nextDate.Month(),
+		nextDate.Day(),
+		startTime.Hour(),
+		startTime.Minute(),
+		0, 0, loc,
+	)
 
-// 	// H-1 rule: only skip to next week if the class is TODAY and has already
-// 	// passed (or is within 24 hours on the same day). A future day is always valid.
-// 	if daysUntil == 0 && targetTime.Sub(now) < 24*time.Hour {
-// 		targetTime = targetTime.AddDate(0, 0, 7)
-// 	}
+	// H-1 rule: only skip to next week if the class is TODAY and has already
+	// passed (or is within 24 hours on the same day). A future day is always valid.
+	if daysUntil == 0 && targetTime.Sub(now) < 24*time.Hour {
+		targetTime = targetTime.AddDate(0, 0, 7)
+	}
 
-// 	return targetTime
-// }
+	return targetTime
+}
 
 // GetDayName returns Indonesian day name from time.Weekday
 func GetDayName(weekday time.Weekday) string {
@@ -117,59 +117,4 @@ func GetDayName(weekday time.Weekday) string {
 		time.Saturday:  "Sabtu",
 	}
 	return dayNames[weekday]
-}
-
-// GetNextClassDate calculates the next occurrence of a specific day and time
-func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
-	loc, err := time.LoadLocation("Asia/Makassar")
-	if err != nil {
-		loc = time.Local
-	}
-
-	dayMap := map[string]time.Weekday{
-		"minggu": time.Sunday,
-		"senin":  time.Monday,
-		"selasa": time.Tuesday,
-		"rabu":   time.Wednesday,
-		"kamis":  time.Thursday,
-		"jumat":  time.Friday,
-		"sabtu":  time.Saturday,
-	}
-
-	targetDay, ok := dayMap[strings.ToLower(dayOfWeek)]
-	if !ok {
-		// Fallback to next week same day if invalid
-		return time.Now().In(loc).AddDate(0, 0, 7)
-	}
-
-	now := time.Now().In(loc)
-	currentDay := now.Weekday()
-
-	// Calculate days until target
-	daysUntil := int(targetDay - currentDay)
-	if daysUntil < 0 {
-		daysUntil += 7
-	}
-
-	// If it's today, check if the time has passed
-	if daysUntil == 0 {
-		todayClassTime := time.Date(
-			now.Year(), now.Month(), now.Day(),
-			startTime.Hour(), startTime.Minute(), 0, 0, loc,
-		)
-		// If class time has passed today, schedule for next week
-		if now.After(todayClassTime) {
-			daysUntil = 7
-		}
-	}
-
-	nextDate := now.AddDate(0, 0, daysUntil)
-	return time.Date(
-		nextDate.Year(),
-		nextDate.Month(),
-		nextDate.Day(),
-		startTime.Hour(),
-		startTime.Minute(),
-		0, 0, loc,
-	)
 }
