@@ -65,7 +65,6 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 	if err != nil {
 		loc = time.Local
 	}
-
 	dayMap := map[string]time.Weekday{
 		"minggu": time.Sunday,
 		"senin":  time.Monday,
@@ -75,17 +74,13 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 		"jumat":  time.Friday,
 		"sabtu":  time.Saturday,
 	}
-
 	targetDay, ok := dayMap[strings.ToLower(dayOfWeek)]
 	if !ok {
-		// Fallback to next week same day if invalid
 		return time.Now().In(loc).AddDate(0, 0, 7)
 	}
-
 	now := time.Now().In(loc)
 	currentDay := now.Weekday()
 
-	// Calculate days until target
 	daysUntil := int(targetDay - currentDay)
 	if daysUntil < 0 {
 		daysUntil += 7
@@ -101,11 +96,9 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 		0, 0, loc,
 	)
 
-	// Enforce H-1 rule for next occurrences (must be at least 24 hours away)
-	// If the next class occurrence is less than 24 hours away (or already passed),
-	// the user cannot book it or the class is already locked.
-	// Therefore, the next legitimate occurrence is 7 days later.
-	if targetTime.Sub(now) < 24*time.Hour {
+	// H-1 rule: only skip to next week if the class is TODAY and has already
+	// passed (or is within 24 hours on the same day). A future day is always valid.
+	if daysUntil == 0 && targetTime.Sub(now) < 24*time.Hour {
 		targetTime = targetTime.AddDate(0, 0, 7)
 	}
 
