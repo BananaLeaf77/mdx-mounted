@@ -19,13 +19,134 @@ func NewManagerRepository(db *gorm.DB) domain.ManagerRepository {
 	return &managerRepo{db: db}
 }
 
+func (r *managerRepo) GetSetting(ctx context.Context) (*domain.Setting, error) {
+	var setting domain.Setting
+	err := r.db.WithContext(ctx).First(&setting).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// If not found, create a default setting and return
+			setting = domain.Setting{
+				RegistrationFee: 50000,
+			}
+			errCreate := r.db.WithContext(ctx).Create(&setting).Error
+			if errCreate != nil {
+				return nil, errors.New(utils.TranslateDBError(errCreate))
+			}
+			return &setting, nil
+		}
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+	return &setting, nil
+}
+
+func (r *managerRepo) UpdateSetting(ctx context.Context, setting *domain.Setting) error {
+	var existing domain.Setting
+	err := r.db.WithContext(ctx).First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Create it if it doesn't exist yet
+			setting.ID = 1
+			return r.db.WithContext(ctx).Create(setting).Error
+		}
+		return errors.New(utils.TranslateDBError(err))
+	}
+
+	setting.ID = existing.ID // preserve ID
+	if err := r.db.WithContext(ctx).Save(setting).Error; err != nil {
+		return errors.New(utils.TranslateDBError(err))
+	}
+	return nil
+}
+
 func (r *managerRepo) UpdateStudent(ctx context.Context, student *domain.User) error {
 	if student.UUID == "" {
 		return errors.New("uuid siswa tidak boleh kosong")
 	}
 
-	if err := r.db.WithContext(ctx).Save(student).Error; err != nil {
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Verify student exists
+	var existing domain.User
+	if err := tx.Where("uuid = ? AND role = ? AND deleted_at IS NULL", student.UUID, domain.RoleStudent).
+		First(&existing).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("siswa tidak ditemukan")
+		}
+		return fmt.Errorf("error mencari siswa: %w", err)
+	}
+
+	// Check phone duplicate (only if phone is being updated)
+	if student.Phone != "" && student.Phone != existing.Phone {
+		var phoneCount int64
+		if err := tx.Model(&domain.User{}).
+			Where("phone = ? AND uuid != ?", student.Phone, student.UUID).
+			Count(&phoneCount).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("error checking phone: %w", err)
+		}
+		if phoneCount > 0 {
+			tx.Rollback()
+			return errors.New("nomor telepon sudah digunakan oleh pengguna lain")
+		}
+	}
+
+	// Check email duplicate (only if email is being updated)
+	if student.Email != "" && student.Email != existing.Email {
+		var emailCount int64
+		if err := tx.Model(&domain.User{}).
+			Where("email = ? AND uuid != ?", student.Email, student.UUID).
+			Count(&emailCount).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("error checking email: %w", err)
+		}
+		if emailCount > 0 {
+			tx.Rollback()
+			return errors.New("email sudah digunakan oleh pengguna lain")
+		}
+	}
+
+	// Build update map with only provided fields
+	updates := map[string]interface{}{}
+
+	if student.Name != "" {
+		updates["name"] = student.Name
+	}
+	if student.Gender != "" {
+		updates["gender"] = student.Gender
+	}
+	if student.Email != "" {
+		updates["email"] = student.Email
+	}
+	if student.Phone != "" {
+		updates["phone"] = student.Phone
+	}
+	if student.Image != nil {
+		updates["image"] = student.Image
+	}
+	if student.Password != "" {
+		updates["password"] = student.Password
+	}
+
+	if len(updates) == 0 {
+		tx.Rollback()
+		return errors.New("tidak ada data yang diperbarui")
+	}
+
+	if err := tx.Model(&domain.User{}).
+		Where("uuid = ?", student.UUID).
+		Updates(updates).Error; err != nil {
+		tx.Rollback()
 		return errors.New(utils.TranslateDBError(err))
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("gagal commit transaction: %w", err)
 	}
 
 	return nil

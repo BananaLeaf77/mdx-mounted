@@ -881,7 +881,6 @@ func (r *adminRepo) GetSetting(ctx context.Context) (*domain.Setting, error) {
 			// If not found, create a default setting and return
 			setting = domain.Setting{
 				RegistrationFee: 50000,
-				SPPFee:          200000,
 			}
 			errCreate := r.db.WithContext(ctx).Create(&setting).Error
 			if errCreate != nil {

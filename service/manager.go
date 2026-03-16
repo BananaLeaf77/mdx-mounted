@@ -26,19 +26,34 @@ type managerService struct {
 	messenger   *whatsmeow.Client
 }
 
+// Setting
+func (s *managerService) GetSetting(ctx context.Context) (*domain.Setting, error) {
+	return s.managerRepo.GetSetting(ctx)
+}
+
+func (s *managerService) UpdateSetting(ctx context.Context, setting *domain.Setting) error {
+	if setting == nil {
+		return errors.New("pengaturan tidak valid")
+	}
+	return s.managerRepo.UpdateSetting(ctx, setting)
+}
+
+
 // Students =====================================================================================================
 
 func (s *managerService) UpdateStudent(ctx context.Context, student *domain.User) error {
 	if student.UUID == "" {
-		return errors.New(utils.TranslateDBError(errors.New("uuid siswa tidak boleh kosong")))
+		return errors.New("uuid siswa tidak boleh kosong")
 	}
 
-	// encrypt password
-	hashed, err := bcrypt.GenerateFromPassword([]byte(student.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return errors.New(utils.TranslateDBError(err))
+	// Only hash password if a new one was provided
+	if student.Password != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(student.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return errors.New("gagal mengenkripsi password")
+		}
+		student.Password = string(hashed)
 	}
-	student.Password = string(hashed)
 
 	if err := s.managerRepo.UpdateStudent(ctx, student); err != nil {
 		return errors.New(utils.TranslateDBError(err))

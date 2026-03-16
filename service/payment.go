@@ -68,7 +68,7 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		pkgPrice = pkg.PromoPrice
 	}
 
-	totalAmount := setting.RegistrationFee + setting.SPPFee + pkgPrice
+	totalAmount := setting.RegistrationFee + pkgPrice
 
 	// 4. Generate external ID
 	shortUUID := studentUUID
@@ -91,7 +91,6 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	// 7. Build invoice items for Xendit
 	items := []invoice.InvoiceItem{
 		*invoice.NewInvoiceItem("Biaya Pendaftaran", float32(setting.RegistrationFee), 1),
-		*invoice.NewInvoiceItem("Biaya SPP Bulanan", float32(setting.SPPFee), 1),
 		*invoice.NewInvoiceItem(fmt.Sprintf("Paket %s (%dx pertemuan)", pkg.Name, pkg.Quota), float32(pkgPrice), 1),
 	}
 

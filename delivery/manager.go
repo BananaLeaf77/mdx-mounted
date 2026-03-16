@@ -29,8 +29,47 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 		manager.PUT("/students/:uuid/packages/:package_id/quota", h.ModifyStudentPackageQuota)
 		manager.PUT("/modify", h.UpdateManager)
 		manager.PUT("/modify/student/:uuid", h.UpdateStudent)
+		manager.GET("/settings", h.GetSetting)
+		manager.PUT("/settings", h.UpdateSetting)
 	}
 }
+
+func (h *ManagerHandler) GetSetting(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	setting, err := h.uc.GetSetting(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetSetting - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "message": "Gagal mengambil pengaturan"})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "GetSetting", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": setting, "message": "Pengaturan berhasil diambil"})
+}
+
+func (h *ManagerHandler) UpdateSetting(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	var req UpdateSettingRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "UpdateSetting - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"message": "Gagal memperbarui pengaturan", "success": false, "error": utils.TranslateValidationError(err)})
+		return
+	}
+
+	setting := &domain.Setting{
+		RegistrationFee: req.RegistrationFee,
+	}
+
+	if err := h.uc.UpdateSetting(c.Request.Context(), setting); err != nil {
+		utils.PrintLogInfo(&name, 500, "UpdateSetting - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error(), "message": "Gagal memperbarui pengaturan"})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "UpdateSetting", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Pengaturan berhasil diperbarui"})
+}
+
 
 func (h *ManagerHandler) UpdateStudent(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
@@ -47,6 +86,9 @@ func (h *ManagerHandler) UpdateStudent(c *gin.Context) {
 	}
 	user := dto.MapUpdateStudentRequest(&req)
 	user.UUID = uuid
+	// Pass password separately so service can hash it only when present
+	user.Password = req.Password
+
 	if err := h.uc.UpdateStudent(c.Request.Context(), user); err != nil {
 		utils.PrintLogInfo(&name, 500, "UpdateStudent - UseCase", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{

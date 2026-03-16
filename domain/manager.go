@@ -8,6 +8,10 @@ type ManagerUseCase interface {
 	ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) error
 	UpdateManager(ctx context.Context, manager *User) error
 	UpdateStudent(ctx context.Context, student *User) error
+
+	// Setting
+	GetSetting(ctx context.Context) (*Setting, error)
+	UpdateSetting(ctx context.Context, setting *Setting) error
 }
 
 type ManagerRepository interface {
@@ -16,4 +20,8 @@ type ManagerRepository interface {
 	ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) (*User, error)
 	UpdateManager(ctx context.Context, manager *User) error
 	UpdateStudent(ctx context.Context, student *User) error
+
+	// Setting
+	GetSetting(ctx context.Context) (*Setting, error)
+	UpdateSetting(ctx context.Context, setting *Setting) error
 }

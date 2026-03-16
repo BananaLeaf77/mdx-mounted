@@ -15,14 +15,25 @@ type ManagerUpdateStudentRequest struct {
 }
 
 func MapUpdateStudentRequest(req *ManagerUpdateStudentRequest) *domain.User {
-	return &domain.User{
-		Name:     req.Name,
-		Gender:   req.Gender,
-		Email:    req.Email,
-		Phone:    req.Phone,
-		Password: req.Password, // Will be hashed in service
-		Image:    req.Image,
+	user := &domain.User{}
+
+	if req.Name != "" {
+		user.Name = req.Name
 	}
+	if req.Gender != "" {
+		user.Gender = req.Gender
+	}
+	if req.Email != "" {
+		user.Email = req.Email
+	}
+	if req.Phone != "" {
+		user.Phone = req.Phone
+	}
+	if req.Image != nil {
+		user.Image = req.Image
+	}
+
+	return user
 }
 
 // Request untuk Create Teacher

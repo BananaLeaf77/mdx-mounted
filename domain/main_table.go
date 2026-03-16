@@ -75,7 +75,6 @@ type Package struct {
 type Setting struct {
 	ID              int       `gorm:"primaryKey" json:"id"`
 	RegistrationFee float64   `gorm:"not null;default:50000" json:"registration_fee"`
-	SPPFee          float64   `gorm:"not null;default:200000" json:"spp_fee"`
 	CreatedAt       time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

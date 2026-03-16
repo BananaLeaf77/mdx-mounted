@@ -729,7 +729,6 @@ func (h *AdminHandler) ClearUserDeletedAt(c *gin.Context) {
 // SETTINGS =====================================================================================================
 type UpdateSettingRequest struct {
 	RegistrationFee float64 `json:"registration_fee" binding:"required,min=0"`
-	SPPFee          float64 `json:"spp_fee" binding:"required,min=0"`
 }
 
 func (h *AdminHandler) GetSetting(c *gin.Context) {
@@ -756,7 +755,6 @@ func (h *AdminHandler) UpdateSetting(c *gin.Context) {
 
 	setting := &domain.Setting{
 		RegistrationFee: req.RegistrationFee,
-		SPPFee:          req.SPPFee,
 	}
 
 	if err := h.uc.UpdateSetting(c.Request.Context(), setting); err != nil {
