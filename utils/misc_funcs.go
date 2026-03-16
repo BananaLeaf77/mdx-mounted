@@ -96,9 +96,9 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 		0, 0, loc,
 	)
 
-	// H-1 rule: only skip to next week if the class is TODAY and has already
-	// passed (or is within 24 hours on the same day). A future day is always valid.
-	if daysUntil == 0 && targetTime.Sub(now) < 24*time.Hour {
+	// H-6 rule: only skip to next week if the class is TODAY and starts within 6 hours
+	// (or has already passed). A future day is always valid.
+	if daysUntil == 0 && targetTime.Sub(now) < 6*time.Hour {
 		targetTime = targetTime.AddDate(0, 0, 7)
 	}
 

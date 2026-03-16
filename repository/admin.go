@@ -515,6 +515,71 @@ func (r *adminRepo) GetAllStudents(ctx context.Context) ([]domain.User, error) {
 	return students, err
 }
 
+// GetFilteredStudents returns students filtered by activity status:
+//   - active:         has at least one active package (remaining_quota > 0 AND end_date >= now)
+//   - inactive_short: no active package, last package purchase was within the last 3 months
+//   - inactive_long:  no active package, last package purchase was more than 3 months ago (or never purchased)
+//   - all (default):  returns all students without filter
+func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.StudentActivityFilter) ([]domain.User, error) {
+	var students []domain.User
+	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
+	baseQuery := r.db.WithContext(ctx).Where("role = ? AND deleted_at IS NULL", domain.RoleStudent)
+
+	switch filter {
+	case domain.StudentFilterActive:
+		// Has an active student_package
+		err := baseQuery.
+			Where(`uuid IN (
+				SELECT DISTINCT sp.student_uuid
+				FROM student_packages sp
+				WHERE sp.remaining_quota > 0
+				  AND sp.end_date >= ?
+			)`, time.Now()).
+			Find(&students).Error
+		return students, err
+
+	case domain.StudentFilterInactiveShort:
+		// No active package AND last purchase was < 3 months ago
+		err := baseQuery.
+			Where(`uuid NOT IN (
+				SELECT DISTINCT sp.student_uuid
+				FROM student_packages sp
+				WHERE sp.remaining_quota > 0
+				  AND sp.end_date >= ?
+			)`, time.Now()).
+			Where(`uuid IN (
+				SELECT DISTINCT sp2.student_uuid
+				FROM student_packages sp2
+				WHERE sp2.start_date >= ?
+			)`, threeMonthsAgo).
+			Find(&students).Error
+		return students, err
+
+	case domain.StudentFilterInactiveLong:
+		// No active package AND (never purchased OR last purchase was > 3 months ago)
+		err := baseQuery.
+			Where(`uuid NOT IN (
+				SELECT DISTINCT sp.student_uuid
+				FROM student_packages sp
+				WHERE sp.remaining_quota > 0
+				  AND sp.end_date >= ?
+			)`, time.Now()).
+			Where(`uuid NOT IN (
+				SELECT DISTINCT sp2.student_uuid
+				FROM student_packages sp2
+				WHERE sp2.start_date >= ?
+			)`, threeMonthsAgo).
+			Find(&students).Error
+		return students, err
+
+	default: // StudentFilterAll or empty/unknown
+		err := baseQuery.Find(&students).Error
+		return students, err
+	}
+}
+
+
+
 // GetStudentByUUID fetches a student by UUID
 func (r *adminRepo) GetStudentByUUID(ctx context.Context, uuid string) (*domain.User, error) {
 	var student domain.User

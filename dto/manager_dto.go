@@ -5,6 +5,26 @@ import (
 	"strings"
 )
 
+type ManagerUpdateStudentRequest struct {
+	Name     string  `json:"name" binding:"omitempty,min=3,max=50"`
+	Gender   string  `json:"gender" binding:"omitempty,oneof=male female"`
+	Email    string  `json:"email" binding:"omitempty,email"`
+	Phone    string  `json:"phone" binding:"omitempty,numeric,min=9,max=14"`
+	Password string  `json:"password" binding:"omitempty,min=8,max=16"`
+	Image    *string `json:"image" binding:"omitempty,url"`
+}
+
+func MapUpdateStudentRequest(req *ManagerUpdateStudentRequest) *domain.User {
+	return &domain.User{
+		Name:     req.Name,
+		Gender:   req.Gender,
+		Email:    req.Email,
+		Phone:    req.Phone,
+		Password: req.Password, // Will be hashed in service
+		Image:    req.Image,
+	}
+}
+
 // Request untuk Create Teacher
 type CreateManagerRequest struct {
 	Name     string  `json:"name" binding:"required,min=3,max=50"`

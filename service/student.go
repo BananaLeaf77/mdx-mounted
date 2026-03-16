@@ -94,7 +94,7 @@ Terima kasih! 🎵
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	} else {
 		teacherMessage = fmt.Sprintf(`*PEMBATALAN KELAS* 
@@ -121,7 +121,7 @@ Terima kasih! 🎵
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	}
 
@@ -153,7 +153,7 @@ Terima kasih! 🎵
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		os.Getenv("TARGETED_DOMAIN"),
+		"https://www.madeu.app",
 		os.Getenv("APP_NAME"))
 
 	// Capture values before launching goroutine to avoid data races on booking.
@@ -248,7 +248,7 @@ Terima kasih! 🎵
 			classTime,
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	} else {
 		teacherMessage = fmt.Sprintf(`*PEMBERITAHUAN KELAS BARU*
@@ -274,7 +274,7 @@ Terima kasih! 🎵
 			classTime,
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	}
 
@@ -307,7 +307,7 @@ _Selamat belajar! 🎶_
 		classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		os.Getenv("TARGETED_DOMAIN"),
+		"https://www.madeu.app",
 		os.Getenv("APP_NAME"))
 
 	// Capture values before launching goroutine to avoid data races on booking.

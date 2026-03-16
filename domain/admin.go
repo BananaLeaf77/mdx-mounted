@@ -2,6 +2,20 @@ package domain
 
 import "context"
 
+// StudentActivityFilter defines the status filter for student listing
+type StudentActivityFilter string
+
+const (
+	// StudentFilterAll returns all students (no filter)
+	StudentFilterAll StudentActivityFilter = "all"
+	// StudentFilterActive - has at least one active package (remaining_quota > 0 and end_date not expired)
+	StudentFilterActive StudentActivityFilter = "active"
+	// StudentFilterInactiveShort - no active package, last purchase was < 3 months ago (or never bought)
+	StudentFilterInactiveShort StudentActivityFilter = "inactive_short"
+	// StudentFilterInactiveLong - no active package AND no purchase in the last 3+ months
+	StudentFilterInactiveLong StudentActivityFilter = "inactive_long"
+)
+
 type AdminUseCase interface {
 	// Self
 	UpdateAdmin(ctx context.Context, payload User) error
@@ -16,6 +30,7 @@ type AdminUseCase interface {
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) error
 	GetAllStudents(ctx context.Context) ([]User, error)
+	GetFilteredStudents(ctx context.Context, filter StudentActivityFilter) ([]User, error)
 
 	// Manager Management
 	CreateManager(ctx context.Context, user *User) (*User, error)
@@ -62,6 +77,7 @@ type AdminRepository interface {
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) (*User, *Package, error)
 	GetAllStudents(ctx context.Context) ([]User, error)
+	GetFilteredStudents(ctx context.Context, filter StudentActivityFilter) ([]User, error)
 
 	// Manager Management
 	CreateManager(ctx context.Context, user *User) (*User, error)

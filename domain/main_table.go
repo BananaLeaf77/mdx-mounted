@@ -60,6 +60,7 @@ type Package struct {
 	Price           float64    `gorm:"not null" json:"price"`
 	PromoPrice      float64    `gorm:"default:0" json:"promo_price"`
 	IsPromoActive   bool       `gorm:"default:false" json:"is_promo_active"`
+	IsTrial         bool       `gorm:"default:false" json:"is_trial"` // Paket percobaan/trial
 	Quota           int        `gorm:"not null" json:"quota"`
 	Duration        int        `gorm:"not null;default:30" json:"duration"` // Minutes: 30 or 60
 	ExpiredDuration int        `json:"expired_duration"`
@@ -90,10 +91,40 @@ type StudentPackage struct {
 	Package *Package `gorm:"foreignKey:PackageID" json:"package,omitempty"`
 }
 
+// TeacherAlbum stores up to 5 profile photos for a teacher
+type TeacherAlbum struct {
+	ID          int        `gorm:"primaryKey" json:"id"`
+	TeacherUUID string     `gorm:"type:uuid;not null;index;constraint:OnDelete:CASCADE;" json:"teacher_uuid"`
+	URL         string     `gorm:"type:text;not null" json:"url"`
+	Caption     string     `gorm:"size:200" json:"caption,omitempty"`
+	Order       int        `gorm:"default:0" json:"order"` // Display order 1-5
+	CreatedAt   time.Time  `gorm:"autoCreateTime" json:"created_at"`
+}
+
 type TeacherProfile struct {
-	UserUUID    string       `gorm:"primaryKey;type:uuid;constraint:OnDelete:CASCADE;" json:"user_uuid"`
-	Bio         string       `json:"bio"`
-	Instruments []Instrument `gorm:"many2many:teacher_instruments;constraint:OnDelete:CASCADE;" json:"instruments"`
+	UserUUID string `gorm:"primaryKey;type:uuid;constraint:OnDelete:CASCADE;" json:"user_uuid"`
+
+	// Basic bio
+	Bio string `gorm:"type:text" json:"bio"`
+
+	// Education & credentials
+	Education    string `gorm:"type:text" json:"education"`     // e.g. "S1 Pendidikan Musik, ISI Yogyakarta"
+	Certificates string `gorm:"type:text" json:"certificates"` // e.g. "Grade 8 ABRSM, Diploma Berklee Online"
+
+	// Professional experience
+	YearsOfExperience int    `gorm:"default:0" json:"years_of_experience"` // Tahun pengalaman mengajar
+	Experience        string `gorm:"type:text" json:"experience"`           // Narasi pengalaman, pertunjukan, dll
+
+	// Teaching style & specialty
+	TeachingStyle string `gorm:"type:text" json:"teaching_style"` // e.g. "Sabar, fun, berbasis teori"
+	Specialties   string `gorm:"type:text" json:"specialties"`    // e.g. "Jazz, Classical, Improvisation"
+
+	// Languages (comma-separated or JSON string)
+	Languages string `gorm:"size:200" json:"languages"` // e.g. "Bahasa Indonesia, English"
+
+	// Relationships
+	Instruments []Instrument  `gorm:"many2many:teacher_instruments;constraint:OnDelete:CASCADE;" json:"instruments"`
+	Album       []TeacherAlbum `gorm:"foreignKey:TeacherUUID;references:UserUUID" json:"album,omitempty"` // Max 5
 }
 
 type Instrument struct {

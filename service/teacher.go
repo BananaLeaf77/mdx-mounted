@@ -103,7 +103,7 @@ Terima kasih! 🎵
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	} else {
 		teacherMessage = fmt.Sprintf(`*PEMBATALAN KELAS* 
@@ -129,7 +129,7 @@ Pembatalan kelas berhasil:
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	}
 
@@ -161,7 +161,7 @@ Terima kasih! 🎵
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		os.Getenv("TARGETED_DOMAIN"),
+		"https://www.madeu.app",
 		os.Getenv("APP_NAME"))
 
 	// Send messages asynchronously (don't block the booking)

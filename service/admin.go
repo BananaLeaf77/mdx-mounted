@@ -160,7 +160,7 @@ Terima kasih,
 				dataPackage.Description,
 				dataPackage.Instrument.Name,
 				dataPackage.Quota,
-				os.Getenv("TARGETED_DOMAIN"),
+				"https://www.madeu.app",
 				os.Getenv("APP_NAME"),
 			)
 
@@ -247,6 +247,13 @@ func (s *adminService) GetAllInstruments(ctx context.Context) ([]domain.Instrume
 func (s *adminService) GetAllStudents(ctx context.Context) ([]domain.User, error) {
 	return s.adminRepo.GetAllStudents(ctx)
 }
+
+// GetFilteredStudents returns students filtered by activity status
+func (s *adminService) GetFilteredStudents(ctx context.Context, filter domain.StudentActivityFilter) ([]domain.User, error) {
+	return s.adminRepo.GetFilteredStudents(ctx, filter)
+}
+
+
 
 // GetAllUsers returns all users
 func (s *adminService) GetAllUsers(ctx context.Context) ([]domain.User, error) {

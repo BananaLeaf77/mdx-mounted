@@ -253,8 +253,19 @@ func (r *studentRepository) BookClass(
 	// Parse StartTime string (HH:MM) to time.Time for utility
 	startTimeParsed, _ := time.Parse("15:04", schedule.StartTime)
 	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsed)
-	if classDate.Before(now) {
-		classDate = classDate.AddDate(0, 0, 7) // Next week
+
+	// H-6 validation: booking can only be done at least 6 hours before class starts
+	// Build the actual class start datetime from classDate + start time
+	classStartFull := time.Date(
+		classDate.Year(), classDate.Month(), classDate.Day(),
+		startTimeParsed.Hour(), startTimeParsed.Minute(), 0, 0, loc,
+	)
+	if classStartFull.Sub(now) < 6*time.Hour {
+		tx.Rollback()
+		return nil, fmt.Errorf(
+			"pemesanan hanya bisa dilakukan minimal H-6 jam sebelum kelas dimulai. Kelas ini dimulai pukul %s",
+			schedule.StartTime,
+		)
 	}
 
 	var bookingCount int64

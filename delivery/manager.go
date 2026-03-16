@@ -22,13 +22,45 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 	h := &ManagerHandler{uc: uc}
 
 	manager := app.Group("/manager")
-	manager.Use(config.AuthMiddleware(jwtManager), middleware.ManagerAndAdminOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
+	manager.Use(config.AuthMiddleware(jwtManager), middleware.ManagerOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
 	{
 		manager.GET("/students", h.GetAllStudents)
 		manager.GET("/students/:uuid", h.GetStudentByUUID)
 		manager.PUT("/students/:uuid/packages/:package_id/quota", h.ModifyStudentPackageQuota)
 		manager.PUT("/modify", h.UpdateManager)
+		manager.PUT("/modify/student/:uuid", h.UpdateStudent)
 	}
+}
+
+func (h *ManagerHandler) UpdateStudent(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	uuid := c.Param("uuid")
+	var req dto.ManagerUpdateStudentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "UpdateStudent - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   utils.TranslateValidationError(err),
+			"message": "Gagal mengubah data siswa",
+		})
+		return
+	}
+	user := dto.MapUpdateStudentRequest(&req)
+	user.UUID = uuid
+	if err := h.uc.UpdateStudent(c.Request.Context(), user); err != nil {
+		utils.PrintLogInfo(&name, 500, "UpdateStudent - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   utils.TranslateDBError(err),
+			"message": "Gagal mengubah data siswa",
+		})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "UpdateStudent", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Data siswa berhasil diubah",
+	})
 }
 
 func (h *ManagerHandler) UpdateManager(c *gin.Context) {

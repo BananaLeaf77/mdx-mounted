@@ -4,12 +4,14 @@ import (
 	"chronosphere/domain"
 	"chronosphere/utils"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func NewManagerService(managerRepo domain.ManagerRepository, meow *whatsmeow.Client) domain.ManagerUseCase {
@@ -25,6 +27,25 @@ type managerService struct {
 }
 
 // Students =====================================================================================================
+
+func (s *managerService) UpdateStudent(ctx context.Context, student *domain.User) error {
+	if student.UUID == "" {
+		return errors.New(utils.TranslateDBError(errors.New("uuid siswa tidak boleh kosong")))
+	}
+
+	// encrypt password
+	hashed, err := bcrypt.GenerateFromPassword([]byte(student.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New(utils.TranslateDBError(err))
+	}
+	student.Password = string(hashed)
+
+	if err := s.managerRepo.UpdateStudent(ctx, student); err != nil {
+		return errors.New(utils.TranslateDBError(err))
+	}
+	return nil
+}
+
 // ✅ Get All Students
 func (s *managerService) GetAllStudents(ctx context.Context) ([]domain.User, error) {
 	data, err := s.managerRepo.GetAllStudents(ctx)
@@ -75,7 +96,7 @@ Terima kasih atas pengertiannya.
 `,
 			data.Name,
 			incomingQuota,
-			os.Getenv("TARGETED_DOMAIN"),
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"),
 		)
 

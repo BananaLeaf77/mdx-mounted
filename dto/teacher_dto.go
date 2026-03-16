@@ -17,28 +17,50 @@ type SlotsAvailability struct {
 	
 // Request untuk Create Teacher
 type CreateTeacherRequest struct {
-	Name          string  `json:"name" binding:"required,min=3,max=50"`
-	Email         string  `json:"email" binding:"required,email"`
-	Gender        string  `json:"gender" binding:"required,oneof=male female"`
-	Phone         string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Password      string  `json:"password" binding:"required,min=8"`
-	Image         *string `json:"image" binding:"omitempty,url"`
-	Bio           *string `json:"bio" binding:"omitempty,max=500"`
-	InstrumentIDs []int   `json:"instrument_ids" binding:"required,min=1,dive,gt=0"`
+	Name              string  `json:"name" binding:"required,min=3,max=50"`
+	Email             string  `json:"email" binding:"required,email"`
+	Gender            string  `json:"gender" binding:"required,oneof=male female"`
+	Phone             string  `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Password          string  `json:"password" binding:"required,min=8"`
+	Image             *string `json:"image" binding:"omitempty,url"`
+	Bio               *string `json:"bio" binding:"omitempty,max=1000"`
+	Education         *string `json:"education" binding:"omitempty,max=500"`
+	Certificates      *string `json:"certificates" binding:"omitempty,max=500"`
+	YearsOfExperience *int    `json:"years_of_experience" binding:"omitempty,min=0"`
+	Experience        *string `json:"experience" binding:"omitempty,max=1000"`
+	TeachingStyle     *string `json:"teaching_style" binding:"omitempty,max=500"`
+	Specialties       *string `json:"specialties" binding:"omitempty,max=500"`
+	Languages         *string `json:"languages" binding:"omitempty,max=200"`
+	InstrumentIDs     []int   `json:"instrument_ids" binding:"required,min=1,dive,gt=0"`
 }
 
-// Request untuk Update Teacher
+// Request untuk Update Teacher (by Admin)
 type UpdateTeacherProfileRequest struct {
-	InstrumentIDs []int `json:"instrument_ids" binding:"required,min=1,dive,gt=0"`
+	InstrumentIDs     []int   `json:"instrument_ids" binding:"required,min=1,dive,gt=0"`
+	Bio               *string `json:"bio" binding:"omitempty,max=1000"`
+	Education         *string `json:"education" binding:"omitempty,max=500"`
+	Certificates      *string `json:"certificates" binding:"omitempty,max=500"`
+	YearsOfExperience *int    `json:"years_of_experience" binding:"omitempty,min=0"`
+	Experience        *string `json:"experience" binding:"omitempty,max=1000"`
+	TeachingStyle     *string `json:"teaching_style" binding:"omitempty,max=500"`
+	Specialties       *string `json:"specialties" binding:"omitempty,max=500"`
+	Languages         *string `json:"languages" binding:"omitempty,max=200"`
 }
 
+// Request untuk Update Teacher Profile (by Teacher themselves)
 type UpdateTeacherProfileRequestByTeacher struct {
-	Name string `json:"name" binding:"required,min=3,max=50"`
-	// Email string  `json:"email" binding:"required,email"`
-	Phone  string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Image  *string `json:"image" binding:"omitempty,url"`
-	Bio    *string `json:"bio" binding:"omitempty,max=500"`
-	Gender string  `json:"gender" binding:"required,oneof=male female"`
+	Name              string  `json:"name" binding:"required,min=3,max=50"`
+	Phone             string  `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Image             *string `json:"image" binding:"omitempty,url"`
+	Gender            string  `json:"gender" binding:"required,oneof=male female"`
+	Bio               *string `json:"bio" binding:"omitempty,max=1000"`
+	Education         *string `json:"education" binding:"omitempty,max=500"`
+	Certificates      *string `json:"certificates" binding:"omitempty,max=500"`
+	YearsOfExperience *int    `json:"years_of_experience" binding:"omitempty,min=0"`
+	Experience        *string `json:"experience" binding:"omitempty,max=1000"`
+	TeachingStyle     *string `json:"teaching_style" binding:"omitempty,max=500"`
+	Specialties       *string `json:"specialties" binding:"omitempty,max=500"`
+	Languages         *string `json:"languages" binding:"omitempty,max=200"`
 }
 
 func MapCreateTeacherRequestToUserByTeacher(req *UpdateTeacherProfileRequestByTeacher) domain.User {

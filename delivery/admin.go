@@ -42,6 +42,7 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 
 		// Student
 		admin.GET("/students", h.GetAllStudents)
+		admin.GET("/students/filter", h.GetFilteredStudents)
 		admin.GET("/students/:uuid", h.GetStudentByUUID)
 
 		// Users
@@ -130,6 +131,7 @@ type CreatePackageRequest struct {
 	Price           float64 `json:"price" binding:"required,gt=0"`
 	PromoPrice      float64 `json:"promo_price,omitempty"`
 	IsPromoActive   bool    `json:"is_promo_active,omitempty"`
+	IsTrial         bool    `json:"is_trial,omitempty"`
 	Quota           int     `json:"quota" binding:"required,gt=0"`
 	Description     string  `json:"description,omitempty"`
 	InstrumentID    int     `json:"instrument_id" binding:"required,gt=0"`
@@ -144,6 +146,7 @@ type UpdatePackageRequest struct {
 	Price           float64 `json:"price,omitempty" binding:"omitempty,gt=0"`
 	PromoPrice      float64 `json:"promo_price,omitempty"`
 	IsPromoActive   bool    `json:"is_promo_active,omitempty"`
+	IsTrial         bool    `json:"is_trial,omitempty"`
 }
 
 type CreateInstrumentRequest struct {
@@ -213,6 +216,7 @@ func (h *AdminHandler) CreatePackage(c *gin.Context) {
 		Price:           req.Price,
 		PromoPrice:      req.PromoPrice,
 		IsPromoActive:   req.IsPromoActive,
+		IsTrial:         req.IsTrial,
 		Quota:           req.Quota,
 		Duration:        req.Duration,
 		Description:     req.Description,
@@ -271,6 +275,7 @@ func (h *AdminHandler) UpdatePackage(c *gin.Context) {
 	pkg.Price = req.Price
 	pkg.PromoPrice = req.PromoPrice
 	pkg.IsPromoActive = req.IsPromoActive
+	pkg.IsTrial = req.IsTrial
 
 	if err := h.uc.UpdatePackage(c.Request.Context(), pkg); err != nil {
 		utils.PrintLogInfo(&name, 500, "UpdatePackage - UseCase", &err)
@@ -651,6 +656,48 @@ func (h *AdminHandler) GetAllStudents(c *gin.Context) {
 	}
 	utils.PrintLogInfo(&name, 200, "GetAllStudents", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": students, "message": "Data siswa berhasil diambil"})
+}
+
+// GetFilteredStudents returns students filtered by activity status.
+// Query param: status = active | inactive_short | inactive_long | all (default: all)
+// - active:          has at least one active package
+// - inactive_short:  no active package, last purchase was < 3 months ago
+// - inactive_long:   no active package, last purchase was > 3 months ago (or never bought)
+func (h *AdminHandler) GetFilteredStudents(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	statusParam := c.DefaultQuery("status", "all")
+	var filter domain.StudentActivityFilter
+
+	switch statusParam {
+	case string(domain.StudentFilterActive):
+		filter = domain.StudentFilterActive
+	case string(domain.StudentFilterInactiveShort):
+		filter = domain.StudentFilterInactiveShort
+	case string(domain.StudentFilterInactiveLong):
+		filter = domain.StudentFilterInactiveLong
+	default:
+		filter = domain.StudentFilterAll
+	}
+
+	students, err := h.uc.GetFilteredStudents(c.Request.Context(), filter)
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetFilteredStudents - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil data siswa berdasarkan filter",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetFilteredStudents", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    students,
+		"filter":  statusParam,
+		"message": "Data siswa berhasil diambil",
+	})
 }
 
 func (h *AdminHandler) GetStudentByUUID(c *gin.Context) {

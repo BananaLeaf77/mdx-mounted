@@ -7,6 +7,7 @@ type ManagerUseCase interface {
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) error
 	UpdateManager(ctx context.Context, manager *User) error
+	UpdateStudent(ctx context.Context, student *User) error
 }
 
 type ManagerRepository interface {
@@ -14,4 +15,5 @@ type ManagerRepository interface {
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) (*User, error)
 	UpdateManager(ctx context.Context, manager *User) error
+	UpdateStudent(ctx context.Context, student *User) error
 }

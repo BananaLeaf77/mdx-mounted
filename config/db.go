@@ -111,6 +111,7 @@ func runMigrations(db *gorm.DB) error {
 		&domain.User{},
 		&domain.Instrument{},
 		&domain.TeacherProfile{},
+		&domain.TeacherAlbum{},
 		&domain.StudentProfile{},
 		&domain.Package{},
 		&domain.StudentPackage{},

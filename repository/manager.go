@@ -2,6 +2,7 @@ package repository
 
 import (
 	"chronosphere/domain"
+	"chronosphere/utils"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,18 @@ type managerRepo struct {
 
 func NewManagerRepository(db *gorm.DB) domain.ManagerRepository {
 	return &managerRepo{db: db}
+}
+
+func (r *managerRepo) UpdateStudent(ctx context.Context, student *domain.User) error {
+	if student.UUID == "" {
+		return errors.New("uuid siswa tidak boleh kosong")
+	}
+
+	if err := r.db.WithContext(ctx).Save(student).Error; err != nil {
+		return errors.New(utils.TranslateDBError(err))
+	}
+
+	return nil
 }
 
 func (r *managerRepo) UpdateManager(ctx context.Context, payload *domain.User) error {
