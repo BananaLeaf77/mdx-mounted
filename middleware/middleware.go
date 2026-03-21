@@ -9,6 +9,57 @@ import (
 	"gorm.io/gorm"
 )
 
+func FinanceOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := utils.GetAPIHitter(c)
+		role, exists := c.Get("role")
+		if !exists || role != domain.RoleFinance {
+			utils.PrintLogInfo(&name, 403, "FinanceOnly Middleware - Role Check", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses finance diperlukan",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// FinanceAndManagerOnly allows finance, manager, and admin roles to access
+// financial reports. Admin retains full access as the super-role.
+func FinanceAndManagerOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := utils.GetAPIHitter(c)
+		role, exists := c.Get("role")
+		if !exists {
+			utils.PrintLogInfo(&name, 403, "FinanceAndManagerOnly Middleware - No Role", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses tidak diizinkan",
+			})
+			c.Abort()
+			return
+		}
+
+		r, _ := role.(string)
+		allowed := r == domain.RoleFinance ||
+			r == domain.RoleManagement ||
+			r == domain.RoleAdmin
+
+		if !allowed {
+			utils.PrintLogInfo(&name, 403, "FinanceAndManagerOnly Middleware - Role Check", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses finance, manajer, atau admin diperlukan",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 // role checking middleware
 func AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {

@@ -71,6 +71,7 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB) {
 	paymentRepo := repository.NewPaymentRepository(db)
 	teacherPaymentRepo := repository.NewTeacherPaymentRepository(db)
 	reportRepo := repository.NewReportRepository(db)
+	financeRepo := repository.NewFinanceRepository(db)
 
 	// Init services
 	studentService := service.NewStudentUseCase(studentRepo, nil)
@@ -81,6 +82,7 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB) {
 	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, nil)
 	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
 	reportService := service.NewReportService(reportRepo)
+	financeService := service.NewFinanceService(financeRepo)
 
 	// RATE LIMITER
 	middleware.InitRateLimiter(redisClient)
@@ -100,6 +102,7 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB) {
 	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
 	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
+	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager())
 
 	return app, db
 }
@@ -161,6 +164,7 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB) {
 	paymentRepo := repository.NewPaymentRepository(db)
 	teacherPaymentRepo := repository.NewTeacherPaymentRepository(db)
 	reportRepo := repository.NewReportRepository(db)
+	financeRepo := repository.NewFinanceRepository(db)
 
 	// Init services
 	studentService := service.NewStudentUseCase(studentRepo, WhatsappClient)
@@ -171,6 +175,7 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB) {
 	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, WhatsappClient)
 	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
 	reportService := service.NewReportService(reportRepo)
+	financeService := service.NewFinanceService(financeRepo)
 
 	// RATE LIMITER
 	// middleware.InitRateLimiter(redisClient)
@@ -190,6 +195,7 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB) {
 	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
 	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
+	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager())
 
 	return app, db
 }
@@ -248,7 +254,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB) {
 	paymentRepo := repository.NewPaymentRepository(db)
 	teacherPaymentRepo := repository.NewTeacherPaymentRepository(db)
 	reportRepo := repository.NewReportRepository(db)
-
+	financeRepo := repository.NewFinanceRepository(db)
 	// Init services
 	studentService := service.NewStudentUseCase(studentRepo, WhatsappClient)
 	managementService := service.NewManagerService(managerRepo, WhatsappClient)
@@ -258,7 +264,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB) {
 	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, WhatsappClient)
 	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
 	reportService := service.NewReportService(reportRepo)
-
+	financeService := service.NewFinanceService(financeRepo)
 	// RATE LIMITER
 	middleware.InitRateLimiter(redisClient)
 
@@ -277,6 +283,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB) {
 	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
 	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
+	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager())
 
 	return app, db
 }

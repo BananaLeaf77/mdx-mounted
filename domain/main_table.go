@@ -9,6 +9,7 @@ const (
 	RoleTeacher    = "teacher"
 	RoleStudent    = "student"
 	RoleManagement = "management"
+	RoleFinance    = "finance"
 
 	StatusBooked        = "booked"
 	StatusCompleted     = "completed"

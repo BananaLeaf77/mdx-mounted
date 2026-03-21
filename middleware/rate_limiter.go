@@ -498,7 +498,7 @@ func RateLimiter() gin.HandlerFunc {
 		// On public routes role will be empty — that's fine, they still get limited.
 		if role, exists := c.Get("role"); exists {
 			r, _ := role.(string)
-			if r == domain.RoleAdmin || r == domain.RoleManagement {
+			if r == domain.RoleAdmin || r == domain.RoleManagement || r == domain.RoleFinance {
 				c.Next()
 				return
 			}
