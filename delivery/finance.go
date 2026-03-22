@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,6 +45,7 @@ func NewFinanceHandler(
 	financeUC domain.FinanceUseCase,
 	paymentUC domain.PaymentUseCase,
 	jwtManager *utils.JWTManager,
+	db *gorm.DB,
 ) {
 	h := &FinanceHandler{
 		financeUC: financeUC,
@@ -62,7 +64,7 @@ func NewFinanceHandler(
 
 	// ── Finance user: own profile ─────────────────────────────────────────────
 	financeProfile := app.Group("/finance")
-	financeProfile.Use(config.AuthMiddleware(jwtManager), middleware.FinanceOnly())
+	financeProfile.Use(config.AuthMiddleware(jwtManager), middleware.FinanceOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
 	{
 		financeProfile.PUT("/modify", h.UpdateFinance)
 	}
@@ -72,7 +74,7 @@ func NewFinanceHandler(
 	// in delivery/payment.go so admin access is NOT broken.
 	// These new endpoints at /finance/payment/* open the same data to finance & manager.
 	reports := app.Group("/finance/payment")
-	reports.Use(config.AuthMiddleware(jwtManager), middleware.FinanceAndManagerOnly())
+	reports.Use(config.AuthMiddleware(jwtManager), middleware.FinanceAndManagerOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
 	{
 		reports.GET("/profit", h.GetTotalProfit)
 		reports.GET("/history", h.GetPaymentHistoryFinance)

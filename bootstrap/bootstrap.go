@@ -102,7 +102,7 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB) {
 	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
 	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
-	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager())
+	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 
 	return app, db
 }
@@ -195,7 +195,7 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB) {
 	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
 	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
-	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager())
+	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 
 	return app, db
 }
@@ -283,7 +283,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB) {
 	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
 	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
-	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager())
+	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 
 	return app, db
 }
