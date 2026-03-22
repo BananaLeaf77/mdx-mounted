@@ -720,17 +720,17 @@ func (r *studentRepository) GetTeacherSchedulesBasedOnInstrumentIDs(ctx context.
 
 func (r *studentRepository) GetAllAvailablePackages(ctx context.Context) (*[]domain.Package, *domain.Setting, error) {
 	var packages []domain.Package
-	if err := r.db.WithContext(ctx).Preload("Instrument").Where("deleted_at IS NULL").Find(&packages).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Instrument").Find(&packages).Error; err != nil {
 		return nil, nil, err
 	}
 
-	// get registration fee TOO
+	// get registration fee
 	var registrationFee domain.Setting
-	if err := r.db.WithContext(ctx).Where("deleted_at IS NULL").First(&registrationFee).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&registrationFee).Error; err != nil {
 		return nil, nil, err
 	}
 
-	// get the registration fee only
+	// only expose registration_fee, hide teacher_commission from public endpoint
 	registrationFee.TeacherCommission = 0
 
 	return &packages, &registrationFee, nil
