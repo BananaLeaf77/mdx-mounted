@@ -718,12 +718,22 @@ func (r *studentRepository) GetTeacherSchedulesBasedOnInstrumentIDs(ctx context.
 	return &schedules, nil
 }
 
-func (r *studentRepository) GetAllAvailablePackages(ctx context.Context) (*[]domain.Package, error) {
+func (r *studentRepository) GetAllAvailablePackages(ctx context.Context) (*[]domain.Package, *domain.Setting, error) {
 	var packages []domain.Package
 	if err := r.db.WithContext(ctx).Preload("Instrument").Where("deleted_at IS NULL").Find(&packages).Error; err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &packages, nil
+
+	// get registration fee TOO
+	var registrationFee domain.Setting
+	if err := r.db.WithContext(ctx).Where("deleted_at IS NULL").First(&registrationFee).Error; err != nil {
+		return nil, nil, err
+	}
+
+	// get the registration fee only
+	registrationFee.TeacherCommission = 0
+
+	return &packages, &registrationFee, nil
 }
 
 func (r *studentRepository) GetMyProfile(ctx context.Context, userUUID string) (*domain.User, error) {

@@ -302,7 +302,7 @@ func (h *StudentHandler) GetMyBookedClasses(c *gin.Context) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (h *StudentHandler) GetAllAvailablePackages(c *gin.Context) {
-	packages, err := h.studUC.GetAllAvailablePackages(c.Request.Context())
+	packages, setting, err := h.studUC.GetAllAvailablePackages(c.Request.Context())
 	if err != nil {
 		utils.PrintLogInfo(nil, 500, "GetAllAvailablePackages", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -313,8 +313,18 @@ func (h *StudentHandler) GetAllAvailablePackages(c *gin.Context) {
 		return
 	}
 
+	type returnModifiedResponse struct {
+		Packages []domain.Package `json:"packages"`
+		Setting  domain.Setting   `json:"setting"`
+	}
+
+	res := returnModifiedResponse{
+		Packages: *packages,
+		Setting:  *setting,
+	}
+
 	utils.PrintLogInfo(nil, 200, "GetAllAvailablePackages", nil)
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": packages})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": res})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -87,7 +87,7 @@ func (s *studentUseCase) UpdateStudentData(ctx context.Context, userUUID string,
 	return s.repo.UpdateStudentData(ctx, userUUID, user)
 }
 
-func (s *studentUseCase) GetAllAvailablePackages(ctx context.Context) (*[]domain.Package, error) {
+func (s *studentUseCase) GetAllAvailablePackages(ctx context.Context) (*[]domain.Package, *domain.Setting, error) {
 	return s.repo.GetAllAvailablePackages(ctx)
 }
 

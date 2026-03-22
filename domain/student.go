@@ -22,7 +22,7 @@ type ScheduleAvailabilityResult struct {
 type StudentUseCase interface {
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
-	GetAllAvailablePackages(ctx context.Context) (*[]Package, error)
+	GetAllAvailablePackages(ctx context.Context) (*[]Package, *Setting, error)
 
 	// BookClass: instrumentID is nil for regular packages (derived from the package's instrument).
 	// For trial packages instrumentID must be provided — the student picks which instrument to study.
@@ -42,7 +42,7 @@ type StudentUseCase interface {
 type StudentRepository interface {
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
-	GetAllAvailablePackages(ctx context.Context) (*[]Package, error)
+	GetAllAvailablePackages(ctx context.Context) (*[]Package, *Setting, error)
 
 	// BookClass with explicit packageID. instrumentID is nil for regular packages (resolved from package),
 	// required (non-nil) for trial packages.
