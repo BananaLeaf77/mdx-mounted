@@ -216,7 +216,7 @@ func ValidateTurnedOffUserMiddleware(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		if role != domain.RoleTeacher && role != domain.RoleManagement {
+		if role != domain.RoleTeacher && role != domain.RoleManagement && role != domain.RoleFinance {
 			c.Next()
 			return
 		}
