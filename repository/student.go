@@ -703,6 +703,10 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		if err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 		}
+
+		// Temporary debug — remove after confirming
+		fmt.Printf("[DEBUG] studentUUID=%s priorPaidCount=%d\n", *studentUUID, priorPaidCount)
+
 		if priorPaidCount > 0 {
 			setting.RegistrationFee = 0
 		}
