@@ -22,7 +22,7 @@ type ScheduleAvailabilityResult struct {
 type StudentUseCase interface {
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
-	GetAllAvailablePackages(ctx context.Context) (*[]Package, *Setting, error)
+	GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]Package, *Setting, error)
 
 	// BookClass auto-selects the best active non-trial package for the given instrument.
 	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
@@ -41,7 +41,7 @@ type StudentUseCase interface {
 type StudentRepository interface {
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
-	GetAllAvailablePackages(ctx context.Context) (*[]Package, *Setting, error)
+	GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]Package, *Setting, error)
 
 	// BookClass auto-selects the best active non-trial package for the given instrument.
 	// Returns the saved booking for downstream use (e.g. WhatsApp notification).

@@ -82,8 +82,8 @@ func (s *studentUseCase) UpdateStudentData(ctx context.Context, userUUID string,
 	return s.repo.UpdateStudentData(ctx, userUUID, user)
 }
 
-func (s *studentUseCase) GetAllAvailablePackages(ctx context.Context) (*[]domain.Package, *domain.Setting, error) {
-	return s.repo.GetAllAvailablePackages(ctx)
+func (s *studentUseCase) GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]domain.Package, *domain.Setting, error) {
+	return s.repo.GetAllAvailablePackages(ctx, studentUUID)
 }
 
 func (s *studentUseCase) GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]domain.Booking, error) {

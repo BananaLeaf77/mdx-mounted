@@ -301,7 +301,15 @@ func (h *StudentHandler) GetMyBookedClasses(c *gin.Context) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (h *StudentHandler) GetAllAvailablePackages(c *gin.Context) {
-	packages, setting, err := h.studUC.GetAllAvailablePackages(c.Request.Context())
+	// userUUID is optional — unauthenticated visitors still see packages,
+	// authenticated students get registration fee zeroed if they're returning buyers.
+	var studentUUID *string
+	if uid, exists := c.Get("userUUID"); exists {
+		s := uid.(string)
+		studentUUID = &s
+	}
+
+	packages, setting, err := h.studUC.GetAllAvailablePackages(c.Request.Context(), studentUUID)
 	if err != nil {
 		utils.PrintLogInfo(nil, 500, "GetAllAvailablePackages", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
