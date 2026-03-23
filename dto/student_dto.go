@@ -18,15 +18,9 @@ func MapUpdateStudentRequestByStudent(req *UpdateStudentDataRequest) domain.User
 	}
 }
 
-// BookClassRequest:
-//   - schedule_id:    always required
-//   - package_id:    always required (student_packages.id)
-//   - instrument_id: optional for regular packages (derived from package),
-//     required for trial packages (student picks which instrument to study)
 type BookClassRequest struct {
-	ScheduleID   int  `json:"schedule_id" binding:"required,min=1"`
-	PackageID    int  `json:"package_id" binding:"required,min=1"`
-	InstrumentID *int `json:"instrument_id" binding:"omitempty,min=1"`
+	ScheduleID   int `json:"schedule_id" binding:"required,min=1"`
+	InstrumentID int `json:"instrument_id" binding:"required,min=1"`
 }
 
 type CancelBookingRequest struct {

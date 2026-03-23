@@ -48,25 +48,20 @@ func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, s
 	return nil
 }
 
-// BookClass passes all required identifiers to the repository.
-// instrumentID is nil for regular packages — the repo derives it from the package.
-// For trial packages the client must provide it.
 func (s *studentUseCase) BookClass(
 	ctx context.Context,
 	studentUUID string,
 	scheduleID int,
-	packageID int,
-	instrumentID *int,
-) error {
-	data, err := s.repo.BookClass(ctx, studentUUID, scheduleID, packageID, instrumentID)
+	instrumentID int,
+) (*domain.Booking, error) {
+	data, err := s.repo.BookClass(ctx, studentUUID, scheduleID, instrumentID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	if s.messenger != nil {
 		s.sendBookClassNotif(data)
 	}
-	return nil
+	return data, nil
 }
 
 // GetAvailableSchedules delegates to the repository with the selected packageID,

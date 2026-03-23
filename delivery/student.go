@@ -186,15 +186,14 @@ func (h *StudentHandler) BookClass(c *gin.Context) {
 		return
 	}
 
-	if err := h.studUC.BookClass(
+	if _, err := h.studUC.BookClass(
 		c.Request.Context(),
 		userUUID.(string),
 		payload.ScheduleID,
-		payload.PackageID,
-		payload.InstrumentID, // *int — nil for regular packages, required for trial
+		payload.InstrumentID,
 	); err != nil {
-		utils.PrintLogInfo(&name, 500, "BookClass", &err)
-		c.JSON(http.StatusInternalServerError, gin.H{
+		utils.PrintLogInfo(&name, 400, "BookClass", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   err.Error(),
 			"message": "Gagal memesan kelas",

@@ -191,8 +191,7 @@ func (r *studentRepository) BookClass(
 	ctx context.Context,
 	studentUUID string,
 	scheduleID int,
-	packageID int,
-	instrumentID *int,
+	instrumentID int,
 ) (*domain.Booking, error) {
 	tx := r.db.WithContext(ctx).Begin()
 	defer func() {
@@ -203,7 +202,8 @@ func (r *studentRepository) BookClass(
 
 	// ── 1. Load & validate schedule ──────────────────────────────────────────
 	var schedule domain.TeacherSchedule
-	if err := tx.Preload("Teacher").
+	if err := tx.
+		Preload("Teacher").
 		Preload("TeacherProfile.Instruments").
 		Where("id = ? AND deleted_at IS NULL", scheduleID).
 		First(&schedule).Error; err != nil {
@@ -214,60 +214,15 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal mengambil jadwal: %w", err)
 	}
 
-	// ── 2. Load & validate the chosen student package ────────────────────────
-	var studentPackage domain.StudentPackage
-	if err := tx.Joins("JOIN packages ON packages.id = student_packages.package_id").
-		Preload("Package.Instrument").
-		Where("student_packages.id = ?", packageID).
-		Where("student_packages.student_uuid = ?", studentUUID).
-		Where("student_packages.remaining_quota > 0").
-		Where("student_packages.end_date >= ?", time.Now()).
-		First(&studentPackage).Error; err != nil {
-		tx.Rollback()
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("paket tidak ditemukan, tidak aktif, atau kuota habis")
-		}
-		return nil, fmt.Errorf("gagal mencari paket: %w", err)
-	}
-
-	isTrial := studentPackage.Package != nil && studentPackage.Package.IsTrial
-
-	// ── 3. Resolve the effective instrument ID ───────────────────────────────
-	// Regular package: derive from the package itself (instrumentID param must be nil or match).
-	// Trial package:   instrumentID is required from the caller.
-	var resolvedInstrumentID int
-
-	if isTrial {
-		if instrumentID == nil {
-			tx.Rollback()
-			return nil, errors.New("paket trial membutuhkan instrument_id untuk menentukan instrumen yang dipelajari")
-		}
-		resolvedInstrumentID = *instrumentID
-	} else {
-		if studentPackage.Package == nil {
-			tx.Rollback()
-			return nil, errors.New("data paket tidak lengkap")
-		}
-		resolvedInstrumentID = *studentPackage.Package.InstrumentID
-
-		// If the client also sent an instrumentID, validate it matches the package — defensive check.
-		if instrumentID != nil && *instrumentID != resolvedInstrumentID {
-			tx.Rollback()
-			return nil, fmt.Errorf(
-				"instrument_id yang dikirim (%d) tidak sesuai dengan instrumen paket (%d)",
-				*instrumentID,
-				resolvedInstrumentID,
-			)
-		}
-	}
-
-	// ── 4. Verify teacher teaches the resolved instrument ────────────────────
+	// ── 2. Verify teacher teaches the requested instrument ───────────────────
 	teacherTeachesInstrument := false
+	var bookedInstrumentName string
 	var teacherInstrumentNames []string
 	for _, inst := range schedule.TeacherProfile.Instruments {
 		teacherInstrumentNames = append(teacherInstrumentNames, inst.Name)
-		if inst.ID == resolvedInstrumentID {
+		if inst.ID == instrumentID {
 			teacherTeachesInstrument = true
+			bookedInstrumentName = inst.Name
 		}
 	}
 	if !teacherTeachesInstrument {
@@ -278,28 +233,33 @@ func (r *studentRepository) BookClass(
 		)
 	}
 
-	// ── 5. Duration check (regular only — trial allows any duration) ──────────
-	if !isTrial && studentPackage.Package.Duration != schedule.Duration {
+	// ── 3. Auto-select best package ───────────────────────────────────────────
+	// Strategy: non-trial, matching instrument + duration, has quota, not expired.
+	// Tie-break: closest expiry first (use-it-before-you-lose-it).
+	var studentPackage domain.StudentPackage
+	if err := tx.
+		Joins("JOIN packages ON packages.id = student_packages.package_id").
+		Preload("Package").
+		Preload("Package.Instrument").
+		Where("student_packages.student_uuid = ?", studentUUID).
+		Where("packages.instrument_id = ?", instrumentID).
+		Where("packages.is_trial = false").
+		Where("packages.duration = ?", schedule.Duration).
+		Where("student_packages.remaining_quota > 0").
+		Where("student_packages.end_date > NOW()").
+		Order("student_packages.end_date ASC").
+		First(&studentPackage).Error; err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf(
-			"durasi paket (%d menit) tidak cocok dengan durasi jadwal (%d menit)",
-			studentPackage.Package.Duration,
-			schedule.Duration,
-		)
-	}
-
-	// ── 6. Resolve instrument name for room-type categorisation ──────────────
-	var bookedInstrumentName string
-	for _, inst := range schedule.TeacherProfile.Instruments {
-		if inst.ID == resolvedInstrumentID {
-			bookedInstrumentName = inst.Name
-			break
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf(
+				"tidak ada paket aktif untuk instrumen ini dengan durasi %d menit. Silakan beli paket terlebih dahulu",
+				schedule.Duration,
+			)
 		}
+		return nil, fmt.Errorf("gagal mencari paket: %w", err)
 	}
-	isDrum := strings.EqualFold(bookedInstrumentName, "drum") ||
-		strings.EqualFold(bookedInstrumentName, "drums")
 
-	// ── 7. Compute next class date ────────────────────────────────────────────
+	// ── 4. Compute next class date (reuse utils.GetNextClassDate) ────────────
 	loc, err := time.LoadLocation("Asia/Makassar")
 	if err != nil {
 		loc = time.Local
@@ -309,7 +269,7 @@ func (r *studentRepository) BookClass(
 	startTimeParsed, _ := time.Parse("15:04", schedule.StartTime)
 	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsed)
 
-	// H-6 enforcement
+	// ── 5. H-6 enforcement ────────────────────────────────────────────────────
 	classStartFull := time.Date(
 		classDate.Year(), classDate.Month(), classDate.Day(),
 		startTimeParsed.Hour(), startTimeParsed.Minute(), 0, 0, loc,
@@ -317,14 +277,17 @@ func (r *studentRepository) BookClass(
 	if classStartFull.Sub(now) < 6*time.Hour {
 		tx.Rollback()
 		return nil, fmt.Errorf(
-			"pemesanan hanya bisa dilakukan minimal H-6 jam sebelum kelas dimulai. Kelas ini dimulai pukul %s",
+			"pemesanan hanya bisa dilakukan minimal 6 jam sebelum kelas dimulai. Kelas ini dimulai pukul %s",
 			schedule.StartTime,
 		)
 	}
 
-	// ── 8. Room capacity check ────────────────────────────────────────────────
+	// ── 6. Room capacity check ────────────────────────────────────────────────
+	isDrum := strings.EqualFold(bookedInstrumentName, "drum") ||
+		strings.EqualFold(bookedInstrumentName, "drums")
+
 	var bookingCount int64
-	if err := r.countRoomUsage(tx, classDate, schedule.StartTime, resolvedInstrumentID, isDrum, &bookingCount); err != nil {
+	if err := r.countRoomUsage(tx, classDate, schedule.StartTime, instrumentID, isDrum, &bookingCount); err != nil {
 		tx.Rollback()
 		return nil, fmt.Errorf("gagal memeriksa ketersediaan ruangan: %w", err)
 	}
@@ -338,7 +301,7 @@ func (r *studentRepository) BookClass(
 		return nil, errors.New("ruangan penuh untuk jam ini")
 	}
 
-	// ── 9. Student conflict check ─────────────────────────────────────────────
+	// ── 7. Student conflict check ─────────────────────────────────────────────
 	var existingBookingCount int64
 	if err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
@@ -353,18 +316,18 @@ func (r *studentRepository) BookClass(
 	if existingBookingCount > 0 {
 		tx.Rollback()
 		return nil, fmt.Errorf(
-			"anda sudah memiliki kelas di %s pukul %s. Silakan pilih waktu lain",
+			"kamu sudah memiliki kelas pada %s pukul %s. Silakan pilih waktu lain",
 			utils.GetDayName(classDate.Weekday()),
 			schedule.StartTime,
 		)
 	}
 
-	// ── 10. Create booking ────────────────────────────────────────────────────
+	// ── 8. Create booking ─────────────────────────────────────────────────────
 	newBooking := domain.Booking{
 		StudentUUID:      studentUUID,
 		ScheduleID:       schedule.ID,
 		StudentPackageID: studentPackage.ID,
-		InstrumentID:     resolvedInstrumentID,
+		InstrumentID:     instrumentID,
 		ClassDate:        classDate,
 		Status:           domain.StatusBooked,
 		BookedAt:         time.Now(),
@@ -375,7 +338,7 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal membuat booking: %w", err)
 	}
 
-	// ── 11. Mark schedule as booked ───────────────────────────────────────────
+	// ── 9. Mark schedule as booked ────────────────────────────────────────────
 	if err := tx.Model(&domain.TeacherSchedule{}).
 		Where("id = ?", schedule.ID).
 		Update("is_booked", true).Error; err != nil {
@@ -383,7 +346,7 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal memperbarui status jadwal: %w", err)
 	}
 
-	// ── 12. Deduct quota ──────────────────────────────────────────────────────
+	// ── 10. Deduct quota from the auto-selected package ───────────────────────
 	if err := tx.Model(&domain.StudentPackage{}).
 		Where("id = ?", studentPackage.ID).
 		UpdateColumn("remaining_quota", gorm.Expr("remaining_quota - 1")).Error; err != nil {
@@ -391,8 +354,9 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal mengurangi kuota paket: %w", err)
 	}
 
-	// ── 13. Reload with relations for notifications ───────────────────────────
-	if err := tx.Preload("Student").
+	// ── 11. Reload with relations for notifications ───────────────────────────
+	if err := tx.
+		Preload("Student").
 		Preload("Schedule.Teacher").
 		Preload("PackageUsed.Package.Instrument").
 		First(&newBooking, newBooking.ID).Error; err != nil {
@@ -405,6 +369,7 @@ func (r *studentRepository) BookClass(
 	}
 	return &newBooking, nil
 }
+
 
 // countRoomUsage counts active bookings for a given date/time slot by instrument category.
 // This unified helper works correctly for both trial and regular package bookings because

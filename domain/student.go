@@ -24,10 +24,9 @@ type StudentUseCase interface {
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
 	GetAllAvailablePackages(ctx context.Context) (*[]Package, *Setting, error)
 
-	// BookClass: instrumentID is nil for regular packages (derived from the package's instrument).
-	// For trial packages instrumentID must be provided — the student picks which instrument to study.
-	BookClass(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID *int) error
-
+	// BookClass auto-selects the best active non-trial package for the given instrument.
+	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
+	BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*Booking, error)
 	GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error
 
@@ -44,10 +43,9 @@ type StudentRepository interface {
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
 	GetAllAvailablePackages(ctx context.Context) (*[]Package, *Setting, error)
 
-	// BookClass with explicit packageID. instrumentID is nil for regular packages (resolved from package),
-	// required (non-nil) for trial packages.
-	BookClass(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID *int) (*Booking, error)
-
+	// BookClass auto-selects the best active non-trial package for the given instrument.
+	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
+	BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*Booking, error)
 	GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) (*Booking, error)
 
