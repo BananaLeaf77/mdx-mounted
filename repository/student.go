@@ -695,7 +695,6 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		var priorPaidCount int64
 		err := r.db.WithContext(ctx).
 			Table("payments").
-			Joins("JOIN packages ON packages.id = payments.package_id").
 			Where("payments.student_uuid = ?", *studentUUID).
 			Where("payments.status = ?", domain.PaymentStatusPaid).
 			Where("packages.is_trial = false").
