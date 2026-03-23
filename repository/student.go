@@ -506,6 +506,9 @@ func (r *studentRepository) GetAvailableSchedules(
 	instrumentID int,
 ) (*[]domain.ScheduleAvailabilityResult, error) {
 
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	now := time.Now().In(loc)
+
 	// ── 1. Fetch candidate schedules ─────────────────────────────────────────
 	var schedules []domain.TeacherSchedule
 	if err := r.db.WithContext(ctx).
@@ -525,16 +528,13 @@ func (r *studentRepository) GetAvailableSchedules(
 	}
 
 	// ── 2. Load student's active packages for this instrument ─────────────────
-	// BUG FIX: instrument_id on packages is nullable (*int in Go / integer in DB).
-	// Using a raw struct scan with explicit column aliases avoids any GORM
-	// nullability mis-handling. We also cast instrument_id explicitly in SQL
-	// so the comparison is always integer = integer.
 	type pkgRow struct {
-		Duration int
-		ID       int
+		Duration int `gorm:"column:duration"`
+		ID       int `gorm:"column:id"`
 	}
 	var activePkgs []pkgRow
-	err := r.db.WithContext(ctx).Raw(`
+
+	if err := r.db.WithContext(ctx).Raw(`
 		SELECT p.duration AS duration, sp.id AS id
 		FROM student_packages sp
 		JOIN packages p ON p.id = sp.package_id
@@ -542,11 +542,13 @@ func (r *studentRepository) GetAvailableSchedules(
 		  AND p.instrument_id = ?
 		  AND p.is_trial = false
 		  AND sp.remaining_quota > 0
-		  AND sp.end_date >= NOW()
-	`, studentUUID, instrumentID).Scan(&activePkgs).Error
-	if err != nil {
+		  AND sp.end_date AT TIME ZONE 'Asia/Makassar' >= ?
+	`, studentUUID, instrumentID, now).Scan(&activePkgs).Error; err != nil {
 		return nil, fmt.Errorf("gagal memuat paket siswa: %w", err)
 	}
+
+	fmt.Printf("[DEBUG] studentUUID=%s instrumentID=%d activePkgs=%+v\n",
+		studentUUID, instrumentID, activePkgs)
 
 	compatibleDurations := make(map[int]bool, 2)
 	for _, p := range activePkgs {
@@ -569,7 +571,7 @@ func (r *studentRepository) GetAvailableSchedules(
 		roomLimit = domain.DrumRoomLimit
 	}
 
-	// ── 4. Teacher finished-class counts (single aggregation query) ──────────
+	// ── 4. Teacher finished-class counts ─────────────────────────────────────
 	teacherFinishedCounts, err := r.fetchTeacherFinishedClassCounts(ctx)
 	if err != nil {
 		teacherFinishedCounts = make(map[string]int)
