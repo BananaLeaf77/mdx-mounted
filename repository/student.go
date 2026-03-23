@@ -677,11 +677,8 @@ func (r *studentRepository) GetTeacherSchedulesBasedOnInstrumentIDs(ctx context.
 
 func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]domain.Package, *domain.Setting, error) {
 	var packages []domain.Package
-	if err := r.db.WithContext(ctx).Preload("Instrument").Find(&packages).Error; err != nil {
-		return nil, nil, err
-	}
-
 	var setting domain.Setting
+
 	if err := r.db.WithContext(ctx).First(&setting).Error; err != nil {
 		return nil, nil, err
 	}
@@ -689,27 +686,56 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 	// Hide teacher commission from public endpoint
 	setting.TeacherCommission = 0
 
-	// If the student is authenticated and has already completed at least one
-	// non-trial purchase, zero out the registration fee — it's a one-time charge.
+	// Determine whether to exclude trial packages and whether to zero the registration fee.
+	// Both checks share a single student context query block to avoid duplicate DB round-trips.
+	excludeTrial := false
+
 	if studentUUID != nil {
+		// Count how many trial packages the student has ever purchased (paid).
+		var trialPurchaseCount int64
+		if err := r.db.WithContext(ctx).
+			Table("payments").
+			Joins("JOIN packages ON packages.id = payments.package_id").
+			Where("payments.student_uuid = ?", *studentUUID).
+			Where("payments.status = ?", domain.PaymentStatusPaid).
+			Where("packages.is_trial = true").
+			Count(&trialPurchaseCount).Error; err != nil {
+			return nil, nil, fmt.Errorf("gagal memeriksa riwayat paket trial: %w", err)
+		}
+
+		if trialPurchaseCount > 0 {
+			excludeTrial = true
+		}
+
+		// Count non-trial paid purchases to determine registration fee waiver.
 		var priorPaidCount int64
-		err := r.db.WithContext(ctx).
+		if err := r.db.WithContext(ctx).
 			Table("payments").
 			Joins("JOIN packages ON packages.id = payments.package_id").
 			Where("payments.student_uuid = ?", *studentUUID).
 			Where("payments.status = ?", domain.PaymentStatusPaid).
 			Where("packages.is_trial = false").
-			Count(&priorPaidCount).Error
-		if err != nil {
+			Count(&priorPaidCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 		}
 
 		// Temporary debug — remove after confirming
-		fmt.Printf("[DEBUG] studentUUID=%s priorPaidCount=%d\n", *studentUUID, priorPaidCount)
+		fmt.Printf("[DEBUG] studentUUID=%s trialPurchaseCount=%d priorPaidCount=%d\n",
+			*studentUUID, trialPurchaseCount, priorPaidCount)
 
 		if priorPaidCount > 0 {
 			setting.RegistrationFee = 0
 		}
+	}
+
+	// Build package query — conditionally exclude trial packages.
+	query := r.db.WithContext(ctx).Preload("Instrument")
+	if excludeTrial {
+		query = query.Where("is_trial = false")
+	}
+
+	if err := query.Find(&packages).Error; err != nil {
+		return nil, nil, err
 	}
 
 	return &packages, &setting, nil
