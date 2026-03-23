@@ -20,7 +20,7 @@ func NewStudentHandler(r *gin.Engine, studUC domain.StudentUseCase, jwtManager *
 	handler := &StudentHandler{studUC: studUC}
 
 	// Public: list of all packages (no auth required)
-	r.GET("/packages", handler.GetAllAvailablePackages)
+	r.GET("/packages", middleware.OptionalAuthMiddleware(jwtManager), handler.GetAllAvailablePackages)
 
 	student := r.Group("/student")
 	student.Use(config.AuthMiddleware(jwtManager), middleware.StudentOnly())
@@ -300,9 +300,8 @@ func (h *StudentHandler) GetMyBookedClasses(c *gin.Context) {
 // GetAllAvailablePackages
 // ─────────────────────────────────────────────────────────────────────────────
 
+// delivery/student.go
 func (h *StudentHandler) GetAllAvailablePackages(c *gin.Context) {
-	// userUUID is optional — unauthenticated visitors still see packages,
-	// authenticated students get registration fee zeroed if they're returning buyers.
 	var studentUUID *string
 	if uid, exists := c.Get("userUUID"); exists {
 		s := uid.(string)

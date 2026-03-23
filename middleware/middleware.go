@@ -4,6 +4,7 @@ import (
 	"chronosphere/domain"
 	"chronosphere/utils"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -198,6 +199,32 @@ func TeacherOnly() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		c.Next()
+	}
+}
+
+// OptionalAuthMiddleware populates the user context if a valid Bearer token is present,
+// but does NOT block the request if the token is missing or invalid.
+// Use this on public routes that need to behave differently for authenticated users.
+func OptionalAuthMiddleware(jwtManager *utils.JWTManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			c.Next()
+			return
+		}
+
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		userUUID, role, name, err := jwtManager.VerifyToken(tokenStr)
+		if err != nil {
+			// Token present but invalid — still allow the request through
+			c.Next()
+			return
+		}
+
+		c.Set("userUUID", userUUID)
+		c.Set("role", role)
+		c.Set("name", name)
 		c.Next()
 	}
 }
