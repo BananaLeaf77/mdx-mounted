@@ -230,11 +230,11 @@ func (h *StudentHandler) GetAvailableSchedules(c *gin.Context) {
 		return
 	}
 
-	packageIDStr := c.Query("package_id")
+	packageIDStr := c.Query("instrument_id")
 	if packageIDStr == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "package_id wajib diisi",
+			"error":   "instrument_id wajib diisi",
 			"message": "Gagal mengambil jadwal tersedia",
 		})
 		return
