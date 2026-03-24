@@ -8,6 +8,7 @@ import (
 	"chronosphere/utils"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -133,6 +134,12 @@ func (h *StudentHandler) CancelBookedClass(c *gin.Context) {
 			"message": "Gagal membatalkan kelas yang dipesan",
 		})
 		return
+	}
+
+	// After binding the CancelBookingRequest:
+	if req.Reason != nil {
+		normalized := strings.ReplaceAll(*req.Reason, `\n`, "\n")
+		req.Reason = &normalized
 	}
 
 	if req.Reason != nil && len(*req.Reason) == 0 {

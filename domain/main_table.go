@@ -180,19 +180,18 @@ type Booking struct {
 	CancelledAt      *time.Time      `json:"cancelled_at,omitempty"`
 	CanceledBy       *string         `gorm:"type:uuid" json:"canceled_by,omitempty"`
 	CancelUser       *User           `gorm:"foreignKey:CanceledBy;references:UUID" json:"cancel_user,omitempty"`
-	Notes            *string         `json:"notes,omitempty"`
+	Notes            *string         `gorm:"type:text" json:"notes,omitempty"`
 
 	IsReadyToFinish bool `gorm:"-" json:"is_ready_to_finish"`
 	IsManual        bool `gorm:"default:false" json:"is_manual"`
 }
 
 type ClassHistory struct {
-	ID        int     `gorm:"primaryKey" json:"id"`
-	BookingID int     `gorm:"not null;unique" json:"booking_id"`
-	Booking   Booking `gorm:"foreignKey:BookingID;constraint:OnDelete:CASCADE;" json:"booking"`
-	Status    string  `gorm:"size:20;default:'completed'" json:"status"`
-	Notes     *string `json:"notes,omitempty"`
-
+	ID             int                  `gorm:"primaryKey" json:"id"`
+	BookingID      int                  `gorm:"not null;unique" json:"booking_id"`
+	Booking        Booking              `gorm:"foreignKey:BookingID;constraint:OnDelete:CASCADE;" json:"booking"`
+	Status         string               `gorm:"size:20;default:'completed'" json:"status"`
+	Notes          *string              `gorm:"type:text" json:"notes,omitempty"`
 	Documentations []ClassDocumentation `gorm:"foreignKey:ClassHistoryID" json:"documentations"`
 	CreatedAt      time.Time            `gorm:"autoCreateTime" json:"created_at"`
 }

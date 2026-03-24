@@ -24,5 +24,5 @@ type BookClassRequest struct {
 }
 
 type CancelBookingRequest struct {
-	Reason *string `json:"reason" binding:"omitempty,max=255"`
+	Reason *string `json:"reason" binding:"omitempty,max=2000"`
 }

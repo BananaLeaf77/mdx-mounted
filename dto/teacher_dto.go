@@ -95,9 +95,9 @@ func MapCreateTeacherRequestToUser(req *CreateTeacherRequest) *domain.User {
 
 // Simplified request - teacher only needs to provide notes and optional photos
 type FinishClassRequest struct {
-	BookingID    int      `json:"booking_id" binding:"required,gt=0"`
-	Notes        string   `json:"notes" binding:"omitempty,max=2000"`
-	DocumentURLs []string `json:"documentations,omitempty" binding:"omitempty,dive,url"`
+    BookingID    int      `json:"booking_id" binding:"required,gt=0"`
+    Notes        string   `json:"notes" binding:"omitempty,max=2000"`
+    DocumentURLs []string `json:"documentations,omitempty" binding:"omitempty,dive,url"`
 }
 
 // ✅ Update mapper to handle string time conversion

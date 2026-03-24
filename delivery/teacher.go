@@ -144,6 +144,8 @@ func (h *TeacherHandler) FinishClass(c *gin.Context) {
 		return
 	}
 
+	req.Notes = strings.ReplaceAll(req.Notes, `\n`, "\n")
+
 	// ✅ Map DTO → domain model (this now returns error)
 	payload, err := dto.MapFinishClassRequestToClassHistory(&req, bookingID)
 	if err != nil {
@@ -223,6 +225,12 @@ func (h *TeacherHandler) CancelBookedClass(c *gin.Context) {
 			"message": "Gagal membatalkan kelas yang dipesan",
 		})
 		return
+	}
+
+	// After binding the CancelBookingRequest:
+	if req.Reason != nil {
+		normalized := strings.ReplaceAll(*req.Reason, `\n`, "\n")
+		req.Reason = &normalized
 	}
 
 	if req.Reason != nil && len(*req.Reason) == 0 {
