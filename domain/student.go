@@ -20,6 +20,8 @@ type ScheduleAvailabilityResult struct {
 }
 
 type StudentUseCase interface {
+	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int) (*[]ScheduleAvailabilityResult, error)
+	BookClassTrial(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID int) (*Booking, error)
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
 	GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]Package, *Setting, error)
@@ -39,6 +41,8 @@ type StudentUseCase interface {
 }
 
 type StudentRepository interface {
+	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int) (*[]ScheduleAvailabilityResult, error)
+	BookClassTrial(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID int) (*Booking, error)
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
 	GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]Package, *Setting, error)

@@ -363,7 +363,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 			tx.Rollback()
 		}
 	}()
- 
+
 	// 1. Check student existence
 	var student domain.User
 	if err := tx.Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).
@@ -374,7 +374,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		}
 		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
- 
+
 	// 2. Check package existence
 	var pkg domain.Package
 	if err := tx.Preload("Instrument").
@@ -386,7 +386,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		}
 		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
- 
+
 	// 3. Ensure student profile exists
 	var studentProfile domain.StudentProfile
 	if err := tx.Where("user_uuid = ?", studentUUID).First(&studentProfile).Error; err != nil {
@@ -401,7 +401,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 			return nil, nil, errors.New(utils.TranslateDBError(err))
 		}
 	}
- 
+
 	// 4. Snapshot the effective price at purchase time.
 	//    Use promo price when promo is active and promo price is set,
 	//    otherwise fall back to the base price.
@@ -412,7 +412,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
 		pricePaid = pkg.PromoPrice
 	}
- 
+
 	// 5. Assign new package with snapshotted price
 	newSub := domain.StudentPackage{
 		StudentUUID:    studentUUID,
@@ -422,19 +422,18 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		StartDate:      time.Now(),
 		EndDate:        time.Now().AddDate(0, 0, pkg.ExpiredDuration),
 	}
- 
+
 	if err := tx.Create(&newSub).Error; err != nil {
 		tx.Rollback()
 		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
- 
+
 	if err := tx.Commit().Error; err != nil {
 		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
- 
+
 	return &student, &pkg, nil
 }
- 
 
 // CreatePackage inserts a new package
 func (r *adminRepo) CreatePackage(ctx context.Context, pkg *domain.Package) (*domain.Package, error) {
@@ -445,16 +444,25 @@ func (r *adminRepo) CreatePackage(ctx context.Context, pkg *domain.Package) (*do
 		return nil, errors.New(utils.TranslateDBError(err))
 	}
 
-	//check instrument id exists
-	var instrumentCount int64
-	err = r.db.WithContext(ctx).Model(&domain.Instrument{}).
-		Where("id = ? AND deleted_at IS NULL", pkg.InstrumentID).
-		Count(&instrumentCount).Error
-	if err != nil {
-		return nil, errors.New(utils.TranslateDBError(err))
-	}
-	if instrumentCount == 0 {
-		return nil, errors.New("instrumen tidak ditemukan")
+	// In CreatePackage — replace the instrument check block:
+	if !pkg.IsTrial {
+		if pkg.InstrumentID == nil {
+			return nil, errors.New("instrumen wajib diisi untuk paket reguler")
+		}
+		var instrumentCount int64
+		err = r.db.WithContext(ctx).Model(&domain.Instrument{}).
+			Where("id = ? AND deleted_at IS NULL", pkg.InstrumentID).
+			Count(&instrumentCount).Error
+		if err != nil {
+			return nil, errors.New(utils.TranslateDBError(err))
+		}
+		if instrumentCount == 0 {
+			return nil, errors.New("instrumen tidak ditemukan")
+		}
+	} else {
+		// Trial packages: force nil instrument and zero duration
+		pkg.InstrumentID = nil
+		pkg.Duration = 0
 	}
 
 	if err := r.db.WithContext(ctx).Create(pkg).Error; err != nil {

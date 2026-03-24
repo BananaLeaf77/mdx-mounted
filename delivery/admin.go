@@ -134,7 +134,7 @@ type CreatePackageRequest struct {
 	IsTrial         bool    `json:"is_trial,omitempty"`
 	Quota           int     `json:"quota" binding:"required,gt=0"`
 	Description     string  `json:"description,omitempty"`
-	InstrumentID    *int    `json:"instrument_id" binding:"required,gt=0"`
+	InstrumentID    *int    `json:"instrument_id" binding:"omitempty,gt=0"` // was: required,gt=0
 }
 type UpdatePackageRequest struct {
 	Name            string  `json:"name,omitempty" binding:"omitempty,min=3,max=50"`
@@ -281,7 +281,7 @@ func (h *AdminHandler) UpdatePackage(c *gin.Context) {
 	if req.ExpiredDuration != 0 {
 		pkg.ExpiredDuration = req.ExpiredDuration
 	}
-	
+
 	pkg.Duration = req.Duration
 	pkg.InstrumentID = req.InstrumentID
 	pkg.Description = req.Description

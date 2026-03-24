@@ -74,6 +74,31 @@ func (s *studentUseCase) GetAvailableSchedules(
 	return s.repo.GetAvailableSchedules(ctx, studentUUID, instrumentID)
 }
 
+func (s *studentUseCase) GetAvailableSchedulesTrial(
+	ctx context.Context,
+	studentUUID string,
+	packageID int,
+) (*[]domain.ScheduleAvailabilityResult, error) {
+	return s.repo.GetAvailableSchedulesTrial(ctx, studentUUID, packageID)
+}
+
+func (s *studentUseCase) BookClassTrial(
+	ctx context.Context,
+	studentUUID string,
+	scheduleID int,
+	packageID int,
+	instrumentID int,
+) (*domain.Booking, error) {
+	data, err := s.repo.BookClassTrial(ctx, studentUUID, scheduleID, packageID, instrumentID)
+	if err != nil {
+		return nil, err
+	}
+	if s.messenger != nil {
+		s.sendBookClassNotif(data) // reuse existing notification helper
+	}
+	return data, nil
+}
+
 func (s *studentUseCase) GetMyProfile(ctx context.Context, userUUID string) (*domain.User, error) {
 	return s.repo.GetMyProfile(ctx, userUUID)
 }

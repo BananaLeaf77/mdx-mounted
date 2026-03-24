@@ -26,3 +26,9 @@ type BookClassRequest struct {
 type CancelBookingRequest struct {
 	Reason *string `json:"reason" binding:"omitempty,max=2000"`
 }
+
+type BookClassTrialRequest struct {
+    ScheduleID   int `json:"schedule_id"   binding:"required,min=1"`
+    PackageID    int `json:"package_id"    binding:"required,min=1"` // student_packages.id
+    InstrumentID int `json:"instrument_id" binding:"required,min=1"`
+}
