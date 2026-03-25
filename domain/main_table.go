@@ -140,9 +140,9 @@ type Instrument struct {
 
 type TeacherSchedule struct {
 	ID          int        `gorm:"primaryKey" json:"id"`
-	TeacherUUID string     `gorm:"type:uuid;not null" json:"teacher_uuid"`
-	DayOfWeek   string     `gorm:"size:10;not null" json:"day_of_week"`
-	StartTime   string     `gorm:"type:varchar(5);not null" json:"start_time"` // Format "HH:MM"
+	TeacherUUID string     `gorm:"type:uuid;not null;index" json:"teacher_uuid"`
+	DayOfWeek   string     `gorm:"size:10;not null;index" json:"day_of_week"`
+	StartTime   string     `gorm:"type:varchar(5);not null;index" json:"start_time"` // Format "HH:MM"
 	EndTime     string     `gorm:"type:varchar(5);not null" json:"end_time"`   // Format "HH:MM"
 	Duration    int        `gorm:"not null;default:0" json:"duration"`
 	IsBooked    bool       `gorm:"default:false" json:"is_booked"`
@@ -165,15 +165,15 @@ type TeacherSchedule struct {
 
 type Booking struct {
 	ID               int             `gorm:"primaryKey" json:"id"`
-	StudentUUID      string          `gorm:"type:uuid;not null" json:"student_uuid"`
+	StudentUUID      string          `gorm:"type:uuid;not null;index" json:"student_uuid"`
 	Student          User            `gorm:"foreignKey:StudentUUID;references:UUID" json:"student"`
-	ScheduleID       int             `gorm:"not null" json:"schedule_id"`
+	ScheduleID       int             `gorm:"not null;index" json:"schedule_id"`
 	Schedule         TeacherSchedule `gorm:"foreignKey:ScheduleID" json:"schedule"`
-	StudentPackageID int             `gorm:"not null" json:"student_package_id"`              // ✅ Added this field
+	StudentPackageID int             `gorm:"not null;index" json:"student_package_id"`              // ✅ Added this field
 	PackageUsed      StudentPackage  `gorm:"foreignKey:StudentPackageID" json:"package_used"` // ✅ Added relationship
-	ClassDate        time.Time       `gorm:"not null" json:"class_date"`                      // ✅ Add this field
-	InstrumentID     int             `gorm:"not null;default:0" json:"instrument_id"`         // ← NEW
-	Status           string          `gorm:"size:20;default:'booked'" json:"status"`
+	ClassDate        time.Time       `gorm:"not null;index" json:"class_date"`                      // ✅ Add this field
+	InstrumentID     int             `gorm:"not null;default:0;index" json:"instrument_id"`         // ← NEW
+	Status           string          `gorm:"size:20;default:'booked';index" json:"status"`
 	BookedAt         time.Time       `gorm:"autoCreateTime" json:"booked_at"`
 	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
 	RescheduledAt    *time.Time      `json:"rescheduled_at,omitempty"`

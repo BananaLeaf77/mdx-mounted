@@ -55,12 +55,22 @@ func (r *userRepository) GetAllUsers(ctx context.Context) ([]domain.User, error)
 
 func (r *userRepository) GetUserByUUID(ctx context.Context, uuid string) (*domain.User, error) {
 	var user domain.User
-	if err := r.db.WithContext(ctx).
-		Preload("TeacherProfile.Instruments").
-		Preload("StudentProfile.Packages.Package").
-		First(&user, "uuid = ?", uuid).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&user, "uuid = ?", uuid).Error; err != nil {
 		return nil, err
 	}
+
+	// Selectively preload based on role
+	query := r.db.WithContext(ctx)
+	if user.Role == domain.RoleTeacher {
+		query = query.Preload("TeacherProfile.Instruments")
+	} else if user.Role == domain.RoleStudent {
+		query = query.Preload("StudentProfile.Packages.Package")
+	}
+
+	if err := query.First(&user, "uuid = ?", uuid).Error; err != nil {
+		return &user, nil // Return what we have if second fetch fails for some reason
+	}
+
 	return &user, nil
 }
 

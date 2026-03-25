@@ -19,8 +19,6 @@ func NewTeacherRepository(db *gorm.DB) domain.TeacherRepository {
 	return &teacherRepository{db: db}
 }
 
-
-
 func (r *teacherRepository) DeleteAvailabilityBasedOnDay(ctx context.Context, teacherUUID string, dayOfWeek string) error {
 	// Check if there are any booked classes on this day
 	var bookedCount int64
@@ -67,14 +65,11 @@ func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID s
 		Where("teacher_schedules.teacher_uuid = ?", teacherUUID). // Filter by teacher
 		Preload("Booking").
 		Preload("Booking.Schedule").
-		Preload("Booking.Schedule.Teacher").        // Preload teacher info (optional)
-		Preload("Booking.Schedule.TeacherProfile"). // Preload teacher profile (optional)
 		Preload("Booking.Student").
-		Preload("Booking.PackageUsed").
-		Preload("Booking.PackageUsed.Package").
 		Preload("Booking.PackageUsed.Package.Instrument").
 		Preload("Documentations").
 		Order("class_histories.created_at DESC").
+		Limit(100). // Avoid fetching massive history in one go
 		Find(&histories).Error
 
 	if err != nil {
@@ -557,45 +552,61 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 
 	}
 
-	// ✅ Populate LatestClassHistories for each student
-	for i := range bookings {
-		histories := make([]domain.ClassHistory, 0)
-
-		// Get instrument ID from the booked package
-		var instrumentID int
-		if bookings[i].PackageUsed.Package != nil {
-			instrumentID = *bookings[i].PackageUsed.Package.InstrumentID
-		}
-
-		// Fetch completed class histories for this student, filtered by instrument
-		err := r.db.WithContext(ctx).
-			Model(&domain.ClassHistory{}).
-			Preload("Booking").
-			Preload("Booking.Schedule").
-			Preload("Booking.Schedule.Teacher").
-			Preload("Booking.PackageUsed").
-			Preload("Booking.PackageUsed.Package").
-			Preload("Booking.PackageUsed.Package.Instrument").
-			Joins("JOIN bookings ON bookings.id = class_histories.booking_id").
-			Joins("JOIN student_packages ON student_packages.id = bookings.student_package_id").
-			Joins("JOIN packages ON packages.id = student_packages.package_id").
-			Where("bookings.student_uuid = ?", bookings[i].StudentUUID).
-			Where("packages.instrument_id = ?", instrumentID).
-			Where("class_histories.status = ?", domain.StatusCompleted).
-			Order("class_histories.created_at DESC").
-			Find(&histories).Error
-
-		if err != nil {
-			fmt.Printf("⚠️ Failed to fetch histories for student %s: %v\n", bookings[i].StudentUUID, err)
-		}
-
-		if bookings[i].Student.StudentProfile == nil {
-			bookings[i].Student.StudentProfile = &domain.StudentProfile{
-				UserUUID: bookings[i].StudentUUID,
+	// ✅ Efficiently populate LatestClassHistories for all students in one/two queries
+	if len(bookings) > 0 {
+		studentUUIDs := make([]string, 0)
+		studentUUIDMap := make(map[string]bool)
+		for _, b := range bookings {
+			if !studentUUIDMap[b.StudentUUID] {
+				studentUUIDs = append(studentUUIDs, b.StudentUUID)
+				studentUUIDMap[b.StudentUUID] = true
 			}
 		}
 
-		bookings[i].Student.StudentProfile.LatestClassHistories = &histories
+		// Fetch all completed histories for these students in one go
+		var allHistories []domain.ClassHistory
+		err := r.db.WithContext(ctx).
+			Preload("Booking.Schedule.Teacher").
+			Preload("Booking.PackageUsed.Package.Instrument").
+			Joins("JOIN bookings ON bookings.id = class_histories.booking_id").
+			Where("bookings.student_uuid IN ?", studentUUIDs).
+			Where("class_histories.status = ?", domain.StatusCompleted).
+			Order("class_histories.created_at DESC").
+			// Limit total histories to avoid fetching thousands if student has long history
+			// but we still want enough for each student's "latest" view.
+			Limit(200).
+			Find(&allHistories).Error
+
+		if err != nil {
+			fmt.Printf("⚠️ Failed to fetch bulk histories: %v\n", err)
+		} else {
+			// Map histories to student UUID and instrument
+			historyMap := make(map[string][]domain.ClassHistory)
+			for _, h := range allHistories {
+				key := fmt.Sprintf("%s-%d", h.Booking.StudentUUID, h.Booking.InstrumentID)
+				historyMap[key] = append(historyMap[key], h)
+			}
+
+			// Assign back to bookings
+			for i := range bookings {
+				if bookings[i].Student.StudentProfile == nil {
+					bookings[i].Student.StudentProfile = &domain.StudentProfile{
+						UserUUID: bookings[i].StudentUUID,
+					}
+				}
+
+				instrumentID := bookings[i].InstrumentID
+				key := fmt.Sprintf("%s-%d", bookings[i].StudentUUID, instrumentID)
+				
+				studentHistories := historyMap[key]
+				// Optionally limit to top 5 latest per student/instrument
+				if len(studentHistories) > 5 {
+					studentHistories = studentHistories[:5]
+				}
+				
+				bookings[i].Student.StudentProfile.LatestClassHistories = &studentHistories
+			}
+		}
 	}
 
 	return &bookings, nil
