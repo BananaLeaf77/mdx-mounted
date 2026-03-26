@@ -414,13 +414,17 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	}
 
 	// 5. Assign new package with snapshotted price
+	expiredDays := pkg.ExpiredDuration
+	if expiredDays <= 0 {
+		expiredDays = domain.DefaultPackageExpiredDuration // 30 days fallback
+	}
 	newSub := domain.StudentPackage{
 		StudentUUID:    studentUUID,
 		PackageID:      packageID,
 		RemainingQuota: pkg.Quota,
 		PricePaid:      pricePaid,
 		StartDate:      time.Now(),
-		EndDate:        time.Now().AddDate(0, 0, pkg.ExpiredDuration),
+		EndDate:        time.Now().AddDate(0, 0, expiredDays),
 	}
 
 	if err := tx.Create(&newSub).Error; err != nil {
@@ -466,7 +470,7 @@ func (r *adminRepo) CreatePackage(ctx context.Context, pkg *domain.Package) (*do
 	}
 
 	if err := r.db.WithContext(ctx).Create(pkg).Error; err != nil {
-		return nil, errors.New(utils.	TranslateDBError(err))
+		return nil, errors.New(utils.TranslateDBError(err))
 	}
 
 	// Guard: Instrument is nil for trial packages (InstrumentID is nil)
