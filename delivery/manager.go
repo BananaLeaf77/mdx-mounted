@@ -176,7 +176,8 @@ func (h *ManagerHandler) UpdateSetting(c *gin.Context) {
 	}
 
 	setting := &domain.Setting{
-		RegistrationFee: req.RegistrationFee,
+		RegistrationFee:   req.RegistrationFee,
+		TeacherCommission: req.TeacherCommission,
 	}
 
 	if err := h.uc.UpdateSetting(c.Request.Context(), setting); err != nil {
