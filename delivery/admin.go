@@ -142,7 +142,7 @@ type UpdatePackageRequest struct {
 	ExpiredDuration int     `json:"expired_duration"`
 	Quota           int     `json:"quota,omitempty" binding:"omitempty,gt=0"`
 	Description     string  `json:"description,omitempty"`
-	InstrumentID    *int    `json:"instrument_id,omitempty" binding:"required,gt=0"`
+	InstrumentID    *int    `json:"instrument_id,omitempty" binding:"omitempty,gt=0"`
 	Price           float64 `json:"price,omitempty" binding:"omitempty,gt=0"`
 	PromoPrice      float64 `json:"promo_price,omitempty"`
 	IsPromoActive   bool    `json:"is_promo_active,omitempty"`
