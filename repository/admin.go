@@ -574,11 +574,11 @@ func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.Stude
 				WHERE sp.remaining_quota > 0
 				  AND sp.end_date >= ?
 			)`, time.Now()).
-			Where(`uuid IN (
+			Where(`(uuid IN (
 				SELECT DISTINCT sp2.student_uuid
 				FROM student_packages sp2
 				WHERE sp2.start_date >= ?
-			) OR created_at >= ?`, threeMonthsAgo, threeMonthsAgo).
+			) OR created_at >= ?)`, threeMonthsAgo, threeMonthsAgo).
 			Find(&students).Error
 		return students, err
 
