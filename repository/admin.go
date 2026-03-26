@@ -336,16 +336,21 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 		return errors.New(utils.TranslateDBError(err))
 	}
 
-	// check instrument id exists
-	var instrumentCount int64
-	err = r.db.WithContext(ctx).Model(&domain.Instrument{}).
-		Where("id = ? AND deleted_at IS NULL", pkg.InstrumentID).
-		Count(&instrumentCount).Error
-	if err != nil {
-		return errors.New(utils.TranslateDBError(err))
-	}
-	if instrumentCount == 0 {
-		return errors.New("instrumen tidak ditemukan")
+	// check instrument id exists if not trial
+	if !pkg.IsTrial {
+		var instrumentCount int64
+		err = r.db.WithContext(ctx).Model(&domain.Instrument{}).
+			Where("id = ? AND deleted_at IS NULL", pkg.InstrumentID).
+			Count(&instrumentCount).Error
+		if err != nil {
+			return errors.New(utils.TranslateDBError(err))
+		}
+		if instrumentCount == 0 {
+			return errors.New("instrumen tidak ditemukan")
+		}
+	} else {
+		pkg.InstrumentID = nil
+		pkg.Duration = 0
 	}
 
 	if err := r.db.WithContext(ctx).Save(pkg).Error; err != nil {
