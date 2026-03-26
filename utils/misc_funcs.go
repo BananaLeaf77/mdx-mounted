@@ -105,6 +105,15 @@ func GetNextClassDate(dayOfWeek string, startTime time.Time) time.Time {
 	return targetTime
 }
 
+func CheckCancelAbleFromNow(classDate time.Time) bool {
+	loc, err := time.LoadLocation("Asia/Makassar")
+	if err != nil {
+		loc = time.Local
+	}
+	now := time.Now().In(loc)
+	return classDate.Sub(now) > 24*time.Hour
+}
+
 // GetDayName returns Indonesian day name from time.Weekday
 func GetDayName(weekday time.Weekday) string {
 	dayNames := map[time.Weekday]string{

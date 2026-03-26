@@ -157,6 +157,7 @@ type TeacherSchedule struct {
 	NextClassDate *time.Time `gorm:"-" json:"next_class_date,omitempty"`
 
 	// Availability flags
+	IsCancelAbleFromNow    *bool `gorm:"-" json:"is_cancel_able_from_now,omitempty"`
 	IsBookedSameDayAndTime *bool `gorm:"-" json:"is_booked_same_day_and_time,omitempty"`
 	IsDurationCompatible   *bool `gorm:"-" json:"is_duration_compatible,omitempty"` // Student's package duration matches
 	IsRoomAvailable        *bool `gorm:"-" json:"is_room_available,omitempty"`      // Room slot available

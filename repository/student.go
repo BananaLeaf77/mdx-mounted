@@ -917,6 +917,9 @@ func (r *studentRepository) GetAvailableSchedules(
 			result.IsBookedSameDayAndTime = ptrBool(false)
 		}
 
+		// 6d. iscancelablefromnow
+		result.IsCancelAbleFromNow = ptrBool(utils.CheckCancelAbleFromNow(next))
+
 		result.IsFullyAvailable = ptrBool(
 			*result.IsRoomAvailable &&
 				*result.IsDurationCompatible &&
