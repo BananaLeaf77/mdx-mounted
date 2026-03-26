@@ -51,13 +51,14 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 	err := r.db.WithContext(ctx).
 		Table("class_histories ch").
 		Select(`
-			ts.teacher_uuid                         AS teacher_uuid,
-			COUNT(ch.id)                            AS class_count,
-			SUM(sp.price_paid)                      AS total_price_paid
+			ts.teacher_uuid                                             AS teacher_uuid,
+			COUNT(ch.id)                                               AS class_count,
+			SUM(COALESCE(NULLIF(sp.price_paid, 0), p.price))           AS total_price_paid
 		`).
 		Joins("JOIN bookings b ON b.id = ch.booking_id").
 		Joins("JOIN teacher_schedules ts ON ts.id = b.schedule_id").
 		Joins("JOIN student_packages sp ON sp.id = b.student_package_id").
+		Joins("JOIN packages p ON p.id = sp.package_id").
 		Where("ch.status = ?", domain.StatusCompleted).
 		Where("ch.created_at >= ? AND ch.created_at <= ?", periodStart, periodEnd).
 		Group("ts.teacher_uuid").
