@@ -4,6 +4,7 @@ import (
 	"chronosphere/middleware"
 	"chronosphere/utils"
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -162,10 +163,11 @@ func AuthMiddleware(jwtManager *utils.JWTManager) gin.HandlerFunc {
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 		// ✅ Safe token verification
-		userUUID, role, name, err := func() (string, string, string, error) {
+		userUUID, role, name, err := func() (u, r, n string, e error) {
 			defer func() {
-				if r := recover(); r != nil {
-					log.Printf("🔥 Token verification panic: %v", r)
+				if rec := recover(); rec != nil {
+					log.Printf("🔥 Token verification panic: %v", rec)
+					e = fmt.Errorf("token verification failed: %v", rec)
 				}
 			}()
 			return jwtManager.VerifyToken(tokenStr)

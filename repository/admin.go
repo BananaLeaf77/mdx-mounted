@@ -466,10 +466,13 @@ func (r *adminRepo) CreatePackage(ctx context.Context, pkg *domain.Package) (*do
 	}
 
 	if err := r.db.WithContext(ctx).Create(pkg).Error; err != nil {
-		return nil, errors.New(utils.TranslateDBError(err))
+		return nil, errors.New(utils.	TranslateDBError(err))
 	}
 
-	pkg.Instrument.ID = *pkg.InstrumentID
+	// Guard: Instrument is nil for trial packages (InstrumentID is nil)
+	if pkg.InstrumentID != nil && pkg.Instrument != nil {
+		pkg.Instrument.ID = *pkg.InstrumentID
+	}
 	return pkg, nil
 }
 
