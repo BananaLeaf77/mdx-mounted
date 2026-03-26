@@ -414,17 +414,18 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDays := pkg.ExpiredDuration
-	if expiredDays <= 0 {
-		expiredDays = domain.DefaultPackageExpiredDuration // 30 days fallback
+	expiredDuration := pkg.ExpiredDuration
+	if expiredDuration <= 0 {
+		expiredDuration = domain.DefaultPackageExpiredDuration
 	}
+
 	newSub := domain.StudentPackage{
 		StudentUUID:    studentUUID,
 		PackageID:      packageID,
 		RemainingQuota: pkg.Quota,
 		PricePaid:      pricePaid,
 		StartDate:      time.Now(),
-		EndDate:        time.Now().AddDate(0, 0, expiredDays),
+		EndDate:        time.Now().AddDate(0, 0, expiredDuration),
 	}
 
 	if err := tx.Create(&newSub).Error; err != nil {
