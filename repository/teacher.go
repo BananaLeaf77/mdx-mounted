@@ -574,7 +574,6 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 			Order("class_histories.created_at DESC").
 			// Limit total histories to avoid fetching thousands if student has long history
 			// but we still want enough for each student's "latest" view.
-			Limit(200).
 			Find(&allHistories).Error
 
 		if err != nil {
@@ -597,13 +596,13 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 
 				instrumentID := bookings[i].InstrumentID
 				key := fmt.Sprintf("%s-%d", bookings[i].StudentUUID, instrumentID)
-				
+
 				studentHistories := historyMap[key]
 				// Optionally limit to top 5 latest per student/instrument
 				if len(studentHistories) > 5 {
 					studentHistories = studentHistories[:5]
 				}
-				
+
 				bookings[i].Student.StudentProfile.LatestClassHistories = &studentHistories
 			}
 		}

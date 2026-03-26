@@ -18,25 +18,29 @@ type TeacherPaymentHandler struct {
 func NewTeacherPaymentHandler(app *gin.Engine, uc domain.TeacherPaymentUseCase, jwtManager *utils.JWTManager) {
 	h := &TeacherPaymentHandler{uc: uc}
 
-	admin := app.Group("/admin/teacher-payments")
-	admin.Use(config.AuthMiddleware(jwtManager), middleware.AdminOnly())
+	financeAndManager := app.Group("/finance/teacher-payments")
+	financeAndManager.Use(config.AuthMiddleware(jwtManager), middleware.FinanceAndManagerOnly())
+	{
+		// GET /admin/teacher-payments?status=unpaid
+		// status: unpaid | paid | (empty = all)
+		financeAndManager.GET("", h.GetAllPayments)
+	}
+
+	managerOnly := app.Group("/finance/teacher-payments")
+	managerOnly.Use(config.AuthMiddleware(jwtManager), middleware.ManagerOnly())
 	{
 		// POST /admin/teacher-payments/generate?year=2025&month=1
 		// Calculates earnings for all teachers for the given month and inserts
 		// unpaid payment records. Idempotent — safe to call multiple times.
-		admin.POST("/generate", h.GenerateMonthlyPayments)
-
-		// GET /admin/teacher-payments?status=unpaid
-		// status: unpaid | paid | (empty = all)
-		admin.GET("", h.GetAllPayments)
+		managerOnly.POST("/generate", h.GenerateMonthlyPayments)
 
 		// GET /admin/teacher-payments/teacher/:uuid
 		// Payment history for a specific teacher.
-		admin.GET("/teacher/:uuid", h.GetPaymentsByTeacher)
+		managerOnly.GET("/teacher/:uuid", h.GetPaymentsByTeacher)
 
 		// PUT /admin/teacher-payments/:id/mark-paid
 		// Body: { proof_image_url, notes }
-		admin.PUT("/:id/mark-paid", h.MarkAsPaid)
+		managerOnly.PUT("/:id/mark-paid", h.MarkAsPaid)
 	}
 }
 

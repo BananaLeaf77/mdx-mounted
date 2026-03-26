@@ -28,3 +28,7 @@ removed rate limiter on admin and manager, admin takes on teacher salary, studen
 
 
 registrasi fee kena 1x saja psatt beli paket pertama
+
+finance jak amnager nolih laporan guru dan murid
+
+
