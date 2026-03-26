@@ -63,9 +63,9 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.DELETE("/instruments/:id", h.DeleteInstrument)
 		admin.GET("/instruments", h.GetAllInstruments)
 
-		// Settings
-		admin.GET("/settings", h.GetSetting)
-		admin.PUT("/settings", h.UpdateSetting)
+		// // Settings
+		// admin.GET("/settings", h.GetSetting)
+		// admin.PUT("/settings", h.UpdateSetting)
 
 		// Assign package to student
 		// admin.POST("/assign-package", h.AssignPackageToStudent)

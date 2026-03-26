@@ -566,7 +566,7 @@ func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.Stude
 		return students, err
 
 	case domain.StudentFilterInactiveShort:
-		// No active package AND last purchase was < 3 months ago
+		// No active package AND (last purchase was < 3 months ago OR registered < 3 months ago)
 		err := baseQuery.
 			Where(`uuid NOT IN (
 				SELECT DISTINCT sp.student_uuid
@@ -578,12 +578,12 @@ func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.Stude
 				SELECT DISTINCT sp2.student_uuid
 				FROM student_packages sp2
 				WHERE sp2.start_date >= ?
-			)`, threeMonthsAgo).
+			) OR created_at >= ?`, threeMonthsAgo, threeMonthsAgo).
 			Find(&students).Error
 		return students, err
 
 	case domain.StudentFilterInactiveLong:
-		// No active package AND (never purchased OR last purchase was > 3 months ago)
+		// No active package AND (never purchased OR last purchase was > 3 months ago) AND registered > 3 months ago
 		err := baseQuery.
 			Where(`uuid NOT IN (
 				SELECT DISTINCT sp.student_uuid
@@ -595,7 +595,7 @@ func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.Stude
 				SELECT DISTINCT sp2.student_uuid
 				FROM student_packages sp2
 				WHERE sp2.start_date >= ?
-			)`, threeMonthsAgo).
+			) AND created_at < ?`, threeMonthsAgo, threeMonthsAgo).
 			Find(&students).Error
 		return students, err
 
