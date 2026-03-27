@@ -498,7 +498,8 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 		Preload("Schedule").
 		Preload("Schedule.Teacher").
 		Where("schedule_id IN (SELECT id FROM teacher_schedules WHERE teacher_uuid = ? AND deleted_at IS NULL)", teacherUUID).
-		Where("status = ?", domain.StatusBooked)
+		Where("status = ?", domain.StatusBooked).
+		Order("class_date ASC")
 
 	if !f.IsAll() {
 		q = q.Limit(f.SafeLimit()).Offset(f.Offset())
