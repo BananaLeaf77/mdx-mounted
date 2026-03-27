@@ -40,29 +40,62 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 	periodStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Nanosecond) // last nanosecond of the month
 
-	// ── 1. Aggregate completed classes per teacher for the period ─────────────
-	// Each row: teacher_uuid, class_count, total_price_paid
+	// ── 1. Aggregate classes per teacher for the period ──────────────────────
+	// Two sources are combined via UNION ALL:
+	//   a) Formally completed classes (teacher called FinishClass → class_history exists)
+	//   b) Stale bookings: class_date is in the period and already past, but the teacher
+	//      never finished the class (no class_history). Teacher still owes notes/docs,
+	//      but should still be paid for the class.
+	// Period is based on b.class_date so a late-finished Feb class still counts for Feb.
 	type aggRow struct {
 		TeacherUUID    string
 		ClassCount     int
 		TotalPricePaid float64
 	}
 
+	rawSQL := `
+		SELECT
+			teacher_uuid,
+			COUNT(*)               AS class_count,
+			SUM(per_class_revenue) AS total_price_paid
+		FROM (
+			-- a) Formally completed: teacher submitted notes + docs via FinishClass
+			SELECT
+				ts.teacher_uuid,
+				COALESCE(NULLIF(sp.price_paid, 0), p.price) / NULLIF(p.quota, 0) AS per_class_revenue
+			FROM class_histories ch
+			JOIN bookings         b  ON b.id  = ch.booking_id
+			JOIN teacher_schedules ts ON ts.id = b.schedule_id
+			JOIN student_packages sp ON sp.id  = b.student_package_id
+			JOIN packages         p  ON p.id   = sp.package_id
+			WHERE ch.status   = ?
+			  AND b.class_date >= ? AND b.class_date <= ?
+
+			UNION ALL
+
+			-- b) Stale: booking is still "booked", class already happened in the period,
+			--    no class_history exists yet (teacher forgot to finish)
+			SELECT
+				ts.teacher_uuid,
+				COALESCE(NULLIF(sp.price_paid, 0), p.price) / NULLIF(p.quota, 0) AS per_class_revenue
+			FROM bookings          b
+			JOIN teacher_schedules ts ON ts.id = b.schedule_id
+			JOIN student_packages sp ON sp.id  = b.student_package_id
+			JOIN packages          p  ON p.id  = sp.package_id
+			WHERE b.status     = ?
+			  AND b.class_date >= ? AND b.class_date <= ?
+			  AND NOT EXISTS (
+				  SELECT 1 FROM class_histories ch2 WHERE ch2.booking_id = b.id
+			  )
+		) AS combined
+		GROUP BY teacher_uuid`
+
 	var rows []aggRow
 	err := r.db.WithContext(ctx).
-		Table("class_histories ch").
-		Select(`
-			ts.teacher_uuid                                             AS teacher_uuid,
-			COUNT(ch.id)                                               AS class_count,
-			SUM(COALESCE(NULLIF(sp.price_paid, 0), p.price))           AS total_price_paid
-		`).
-		Joins("JOIN bookings b ON b.id = ch.booking_id").
-		Joins("JOIN teacher_schedules ts ON ts.id = b.schedule_id").
-		Joins("JOIN student_packages sp ON sp.id = b.student_package_id").
-		Joins("JOIN packages p ON p.id = sp.package_id").
-		Where("ch.status = ?", domain.StatusCompleted).
-		Where("ch.created_at >= ? AND ch.created_at <= ?", periodStart, periodEnd).
-		Group("ts.teacher_uuid").
+		Raw(rawSQL,
+			domain.StatusCompleted, periodStart, periodEnd, // for part (a)
+			domain.StatusBooked, periodStart, periodEnd,    // for part (b)
+		).
 		Scan(&rows).Error
 
 	if err != nil {
@@ -99,9 +132,10 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 		return nil, fmt.Errorf("gagal memeriksa data pembayaran existing: %w", err)
 	}
 
-	existingMap := make(map[string]bool, len(existing))
+	// key: teacher_uuid → existing record (so we can check status and update if needed)
+	existingMap := make(map[string]domain.TeacherPayment, len(existing))
 	for _, e := range existing {
-		existingMap[e.TeacherUUID] = true
+		existingMap[e.TeacherUUID] = e
 	}
 
 	// ── 4. Insert new records + build response ────────────────────────────────
@@ -130,11 +164,33 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 			PeriodEnd:      periodEnd.Format("2006-01-02"),
 		})
 
-		// Skip if already generated for this period
-		if existingMap[row.TeacherUUID] {
+		// ── Upsert logic ────────────────────────────────────────────────────────
+		if prev, exists := existingMap[row.TeacherUUID]; exists {
+			// Already paid → never touch it; keep existing amounts in detail
+			if prev.Status == domain.TeacherPaymentStatusPaid {
+				log.Printf(
+					"[TeacherPayment] teacher=%s already PAID — skipped",
+					row.TeacherUUID,
+				)
+				continue
+			}
+
+			// Unpaid → re-calculate and update so stale rows are corrected
+			if err := r.db.WithContext(ctx).
+				Model(&domain.TeacherPayment{}).
+				Where("id = ?", prev.ID).
+				Updates(map[string]interface{}{
+					"class_count":   row.ClassCount,
+					"total_earning": earning,
+					"amount_due":    earning,
+				}).Error; err != nil {
+				return nil, fmt.Errorf("gagal memperbarui data pembayaran untuk guru %s: %w", row.TeacherUUID, err)
+			}
+			log.Printf("[TeacherPayment] teacher=%s unpaid record updated id=%d", row.TeacherUUID, prev.ID)
 			continue
 		}
 
+		// No record yet → insert new
 		record := domain.TeacherPayment{
 			TeacherUUID:  row.TeacherUUID,
 			PeriodStart:  periodStart,
