@@ -27,8 +27,8 @@ func (s *teacherService) DeleteAvailabilityBasedOnDay(ctx context.Context, teach
 	return s.repo.DeleteAvailabilityBasedOnDay(ctx, teacherUUID, dayOfWeek)
 }
 
-func (s *teacherService) GetMyClassHistory(ctx context.Context, teacherUUID string) (*[]domain.ClassHistory, error) {
-	return s.repo.GetMyClassHistory(ctx, teacherUUID)
+func (s *teacherService) GetMyClassHistory(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
+	return s.repo.GetMyClassHistory(ctx, teacherUUID, f)
 }
 
 func (s *teacherService) FinishClass(ctx context.Context, bookingID int, teacherUUID string, payload domain.ClassHistory) error {
@@ -201,8 +201,8 @@ Terima kasih! 🎵
 	}()
 }
 
-func (s *teacherService) GetAllBookedClass(ctx context.Context, teacherUUID string) (*[]domain.Booking, error) {
-	return s.repo.GetAllBookedClass(ctx, teacherUUID)
+func (s *teacherService) GetAllBookedClass(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
+	return s.repo.GetAllBookedClass(ctx, teacherUUID, f)
 }
 
 func (s *teacherService) GetMyProfile(ctx context.Context, uuid string) (*domain.User, error) {

@@ -364,10 +364,10 @@ func (r *studentRepository) GetTeacherDetails(ctx context.Context, teacherUUID s
 // GetMyClassHistory
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (r *studentRepository) GetMyClassHistory(ctx context.Context, studentUUID string) (*[]domain.ClassHistory, error) {
+func (r *studentRepository) GetMyClassHistory(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
 	var histories []domain.ClassHistory
 
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Preload("Booking").
 		Preload("Booking.Schedule").
 		Preload("Booking.Schedule.Teacher").
@@ -380,10 +380,13 @@ func (r *studentRepository) GetMyClassHistory(ctx context.Context, studentUUID s
 		Preload("Documentations").
 		Joins("LEFT JOIN bookings ON class_histories.booking_id = bookings.id").
 		Where("bookings.student_uuid = ?", studentUUID).
-		Order("bookings.class_date DESC").
-		Find(&histories).Error
+		Order("bookings.class_date DESC")
 
-	if err != nil {
+	if !f.IsAll() {
+		q = q.Limit(f.SafeLimit()).Offset(f.Offset())
+	}
+
+	if err := q.Find(&histories).Error; err != nil {
 		return nil, fmt.Errorf("failed to fetch class history: %w", err)
 	}
 	return &histories, nil
@@ -733,10 +736,10 @@ func (r *studentRepository) countRoomUsage(
 // GetMyBookedClasses
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]domain.Booking, error) {
+func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
 	var bookings []domain.Booking
 
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Where("student_uuid = ? AND status IN ?", studentUUID, []string{domain.StatusBooked, domain.StatusRescheduled}).
 		Preload("Schedule").
 		Preload("PackageUsed").
@@ -744,10 +747,13 @@ func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID 
 		Preload("PackageUsed.Package.Instrument").
 		Preload("Schedule.Teacher").
 		Preload("Schedule.TeacherProfile.Instruments").
-		Order("class_date ASC, booked_at DESC").
-		Find(&bookings).Error
+		Order("class_date ASC, booked_at DESC")
 
-	if err != nil {
+	if !f.IsAll() {
+		q = q.Limit(f.SafeLimit()).Offset(f.Offset())
+	}
+
+	if err := q.Find(&bookings).Error; err != nil {
 		return nil, fmt.Errorf("failed to fetch booked classes: %w", err)
 	}
 

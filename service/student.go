@@ -27,8 +27,8 @@ func (s *studentUseCase) GetTeacherDetails(ctx context.Context, teacherUUID stri
 	return s.repo.GetTeacherDetails(ctx, teacherUUID)
 }
 
-func (s *studentUseCase) GetMyClassHistory(ctx context.Context, studentUUID string) (*[]domain.ClassHistory, error) {
-	return s.repo.GetMyClassHistory(ctx, studentUUID)
+func (s *studentUseCase) GetMyClassHistory(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
+	return s.repo.GetMyClassHistory(ctx, studentUUID, f)
 }
 
 func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error {
@@ -111,8 +111,8 @@ func (s *studentUseCase) GetAllAvailablePackages(ctx context.Context, studentUUI
 	return s.repo.GetAllAvailablePackages(ctx, studentUUID)
 }
 
-func (s *studentUseCase) GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]domain.Booking, error) {
-	return s.repo.GetMyBookedClasses(ctx, studentUUID)
+func (s *studentUseCase) GetMyBookedClasses(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
+	return s.repo.GetMyBookedClasses(ctx, studentUUID, f)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

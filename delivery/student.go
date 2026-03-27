@@ -172,7 +172,8 @@ func (h *StudentHandler) GetMyClassHistory(c *gin.Context) {
 		return
 	}
 
-	histories, err := h.studUC.GetMyClassHistory(c.Request.Context(), userUUID.(string))
+	f := parsePaginationStudent(c)
+	histories, err := h.studUC.GetMyClassHistory(c.Request.Context(), userUUID.(string), f)
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "GetMyClassHistory", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -184,7 +185,13 @@ func (h *StudentHandler) GetMyClassHistory(c *gin.Context) {
 	}
 
 	utils.PrintLogInfo(&name, 200, "GetMyClassHistory", nil)
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": histories})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    histories,
+		"page":    f.Page,
+		"limit":   f.Limit,
+		"total":   len(*histories),
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -379,7 +386,8 @@ func (h *StudentHandler) GetMyBookedClasses(c *gin.Context) {
 		return
 	}
 
-	bookings, err := h.studUC.GetMyBookedClasses(c.Request.Context(), userUUID.(string))
+	f := parsePaginationStudent(c)
+	bookings, err := h.studUC.GetMyBookedClasses(c.Request.Context(), userUUID.(string), f)
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "GetMyBookedClasses", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -391,7 +399,27 @@ func (h *StudentHandler) GetMyBookedClasses(c *gin.Context) {
 	}
 
 	utils.PrintLogInfo(&name, 200, "GetMyBookedClasses", nil)
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": bookings})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    bookings,
+		"page":    f.Page,
+		"limit":   f.Limit,
+		"total":   len(*bookings),
+	})
+}
+
+// parsePaginationStudent reads ?page=&limit= query params.
+// Defaults: page=1, limit=10. limit=0 means fetch all.
+func parsePaginationStudent(c *gin.Context) domain.PaginationFilter {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 0 {
+		limit = 10
+	}
+	return domain.PaginationFilter{Page: page, Limit: limit}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

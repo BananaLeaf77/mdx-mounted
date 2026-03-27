@@ -80,13 +80,14 @@ func (h *TeacherHandler) GetMyClassHistory(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"success": false,
 			"error":   "Tidak terotorisasi: konteks pengguna tidak ditemukan",
-			"message": "Gagal menyelesaikan kelas",
+			"message": "Gagal mengambil riwayat kelas",
 		})
 		return
 	}
 
+	f := parsePagination(c)
 	teacherUUID := userUUID.(string)
-	data, err := h.tc.GetMyClassHistory(c.Request.Context(), teacherUUID)
+	data, err := h.tc.GetMyClassHistory(c.Request.Context(), teacherUUID, f)
 	if err != nil {
 		utils.PrintLogInfo(&name, http.StatusInternalServerError, "GetMyClassHistory", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -98,8 +99,11 @@ func (h *TeacherHandler) GetMyClassHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    data,
+		"success":    true,
+		"data":       data,
+		"page":       f.Page,
+		"limit":      f.Limit,
+		"total":      len(*data),
 	})
 }
 
@@ -269,7 +273,8 @@ func (h *TeacherHandler) GetAllBookedClass(c *gin.Context) {
 		return
 	}
 
-	bookedClasses, err := h.tc.GetAllBookedClass(c.Request.Context(), uuid.(string))
+	f := parsePagination(c)
+	bookedClasses, err := h.tc.GetAllBookedClass(c.Request.Context(), uuid.(string), f)
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "GetAllBookedClass", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -284,7 +289,24 @@ func (h *TeacherHandler) GetAllBookedClass(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    bookedClasses,
+		"page":    f.Page,
+		"limit":   f.Limit,
+		"total":   len(*bookedClasses),
 	})
+}
+
+// parsePagination reads ?page=&limit= query params.
+// Defaults: page=1, limit=10. limit=0 means fetch all.
+func parsePagination(c *gin.Context) domain.PaginationFilter {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 0 {
+		limit = 10
+	}
+	return domain.PaginationFilter{Page: page, Limit: limit}
 }
 
 func (h *TeacherHandler) AddAvailability(c *gin.Context) {

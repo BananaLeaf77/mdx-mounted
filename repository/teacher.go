@@ -56,23 +56,25 @@ func (r *teacherRepository) DeleteAvailabilityBasedOnDay(ctx context.Context, te
 
 	return nil
 }
-func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID string) (*[]domain.ClassHistory, error) {
+func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
 	var histories []domain.ClassHistory
 
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Joins("JOIN bookings ON bookings.id = class_histories.booking_id").
 		Joins("JOIN teacher_schedules ON teacher_schedules.id = bookings.schedule_id").
-		Where("teacher_schedules.teacher_uuid = ?", teacherUUID). // Filter by teacher
+		Where("teacher_schedules.teacher_uuid = ?", teacherUUID).
 		Preload("Booking").
 		Preload("Booking.Schedule").
 		Preload("Booking.Student").
 		Preload("Booking.PackageUsed.Package.Instrument").
 		Preload("Documentations").
-		Order("class_histories.created_at DESC").
-		Limit(100). // Avoid fetching massive history in one go
-		Find(&histories).Error
+		Order("class_histories.created_at DESC")
 
-	if err != nil {
+	if !f.IsAll() {
+		q = q.Limit(f.SafeLimit()).Offset(f.Offset())
+	}
+
+	if err := q.Find(&histories).Error; err != nil {
 		return nil, fmt.Errorf("failed to fetch teacher class history: %w", err)
 	}
 
@@ -484,10 +486,10 @@ func (r *teacherRepository) DeleteAvailability(ctx context.Context, scheduleID i
 	return nil
 }
 
-func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID string) (*[]domain.Booking, error) {
+func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
 	var bookings []domain.Booking
 
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Preload("Student").
 		Preload("Student.StudentProfile").
 		Preload("PackageUsed").
@@ -496,10 +498,13 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 		Preload("Schedule").
 		Preload("Schedule.Teacher").
 		Where("schedule_id IN (SELECT id FROM teacher_schedules WHERE teacher_uuid = ? AND deleted_at IS NULL)", teacherUUID).
-		Where("status = ?", domain.StatusBooked).
-		Find(&bookings).Error
+		Where("status = ?", domain.StatusBooked)
 
-	if err != nil {
+	if !f.IsAll() {
+		q = q.Limit(f.SafeLimit()).Offset(f.Offset())
+	}
+
+	if err := q.Find(&bookings).Error; err != nil {
 		return nil, err
 	}
 

@@ -29,14 +29,14 @@ type StudentUseCase interface {
 	// BookClass auto-selects the best active non-trial package for the given instrument.
 	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
 	BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*Booking, error)
-	GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]Booking, error)
+	GetMyBookedClasses(ctx context.Context, studentUUID string, f PaginationFilter) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error
 
 	// GetAvailableSchedules returns all teacher schedules enriched with availability flags
 	// and teacher performance metrics. Trial packages show ALL schedules regardless of instrument/duration.
 	GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]ScheduleAvailabilityResult, error)
 
-	GetMyClassHistory(ctx context.Context, studentUUID string) (*[]ClassHistory, error)
+	GetMyClassHistory(ctx context.Context, studentUUID string, f PaginationFilter) (*[]ClassHistory, error)
 	GetTeacherDetails(ctx context.Context, teacherUUID string) (*User, error)
 }
 
@@ -50,13 +50,13 @@ type StudentRepository interface {
 	// BookClass auto-selects the best active non-trial package for the given instrument.
 	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
 	BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*Booking, error)
-	GetMyBookedClasses(ctx context.Context, studentUUID string) (*[]Booking, error)
+	GetMyBookedClasses(ctx context.Context, studentUUID string, f PaginationFilter) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) (*Booking, error)
 
 	// GetAvailableSchedules with packageID for trial-aware filtering.
 	GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]ScheduleAvailabilityResult, error)
 
-	GetMyClassHistory(ctx context.Context, studentUUID string) (*[]ClassHistory, error)
+	GetMyClassHistory(ctx context.Context, studentUUID string, f PaginationFilter) (*[]ClassHistory, error)
 
 	// GetTeacherSchedulesBasedOnInstrumentIDs kept for internal use.
 	GetTeacherSchedulesBasedOnInstrumentIDs(ctx context.Context, instrumentIDs []int) (*[]TeacherSchedule, error)
