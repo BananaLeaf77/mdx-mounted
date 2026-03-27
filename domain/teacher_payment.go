@@ -19,7 +19,8 @@ type TeacherPayment struct {
 	PeriodStart  time.Time `gorm:"not null" json:"period_start"`  // first day of the month
 	PeriodEnd    time.Time `gorm:"not null" json:"period_end"`    // last day of the month
 	ClassCount   int       `gorm:"not null;default:0" json:"class_count"`
-	TotalEarning float64   `gorm:"not null;default:0" json:"total_earning"`
+	TotalEarning float64   `gorm:"not null;default:0" json:"total_earning"` // gross earning (revenue × commission)
+	AmountDue    float64   `gorm:"not null;default:0" json:"amount_due"`    // actual amount manager must pay the teacher (= TotalEarning initially)
 	Status       string    `gorm:"size:20;default:'unpaid'" json:"status"` // unpaid | paid
 	ProofImageURL *string  `gorm:"type:text" json:"proof_image_url,omitempty"`
 	PaidAt       *time.Time `json:"paid_at,omitempty"`
@@ -33,13 +34,16 @@ type TeacherPayment struct {
 // TeacherPaymentDetail is a breakdown row used in the calculation response.
 // Not persisted — returned as part of the generate response so admin can verify before confirming.
 type TeacherPaymentDetail struct {
-	TeacherUUID   string  `json:"teacher_uuid"`
-	TeacherName   string  `json:"teacher_name"`
-	TeacherPhone  string  `json:"teacher_phone"`
-	ClassCount    int     `json:"class_count"`
-	TotalEarning  float64 `json:"total_earning"`
-	PeriodStart   string  `json:"period_start"`
-	PeriodEnd     string  `json:"period_end"`
+	TeacherUUID      string  `json:"teacher_uuid"`
+	TeacherName      string  `json:"teacher_name"`
+	TeacherPhone     string  `json:"teacher_phone"`
+	ClassCount       int     `json:"class_count"`
+	TotalPricePaid   float64 `json:"total_price_paid"`  // raw revenue from student packages
+	CommissionRate   float64 `json:"commission_rate"`   // rate applied (e.g. 0.4 = 40%)
+	TotalEarning     float64 `json:"total_earning"`     // TotalPricePaid × CommissionRate
+	AmountDue        float64 `json:"amount_due"`        // amount manager must pay the teacher
+	PeriodStart      string  `json:"period_start"`
+	PeriodEnd        string  `json:"period_end"`
 }
 
 // MarkPaidRequest is the payload for marking a teacher payment as paid.

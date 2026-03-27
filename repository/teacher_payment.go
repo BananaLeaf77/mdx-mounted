@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"gorm.io/gorm"
@@ -110,14 +111,23 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 		earning := row.TotalPricePaid * commissionRate
 		teacher := teacherMap[row.TeacherUUID]
 
+		// ── DEBUG: trace raw values so you can spot a zero ──────────────────
+		log.Printf(
+			"[TeacherPayment] teacher=%s classes=%d price_paid_sum=%.2f commission=%.4f => earning=%.2f",
+			row.TeacherUUID, row.ClassCount, row.TotalPricePaid, commissionRate, earning,
+		)
+
 		details = append(details, domain.TeacherPaymentDetail{
-			TeacherUUID:  row.TeacherUUID,
-			TeacherName:  teacher.Name,
-			TeacherPhone: teacher.Phone,
-			ClassCount:   row.ClassCount,
-			TotalEarning: earning,
-			PeriodStart:  periodStart.Format("2006-01-02"),
-			PeriodEnd:    periodEnd.Format("2006-01-02"),
+			TeacherUUID:    row.TeacherUUID,
+			TeacherName:    teacher.Name,
+			TeacherPhone:   teacher.Phone,
+			ClassCount:     row.ClassCount,
+			TotalPricePaid: row.TotalPricePaid,
+			CommissionRate: commissionRate,
+			TotalEarning:   earning,
+			AmountDue:      earning,
+			PeriodStart:    periodStart.Format("2006-01-02"),
+			PeriodEnd:      periodEnd.Format("2006-01-02"),
 		})
 
 		// Skip if already generated for this period
@@ -131,6 +141,7 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 			PeriodEnd:    periodEnd,
 			ClassCount:   row.ClassCount,
 			TotalEarning: earning,
+			AmountDue:    earning,
 			Status:       domain.TeacherPaymentStatusUnpaid,
 		}
 
