@@ -6,6 +6,7 @@ import (
 	"chronosphere/dto"
 	"chronosphere/middleware"
 	"chronosphere/utils"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -35,6 +36,14 @@ func NewStudentHandler(r *gin.Engine, studUC domain.StudentUseCase, jwtManager *
 		student.DELETE("/cancel/:booking_id", handler.CancelBookedClass)
 		student.GET("/class-history", handler.GetMyClassHistory)
 		student.GET("/teacher-details/:teacher_uuid", handler.GetTeacherDetails)
+
+		// Bulk-book flow:
+		// 1. See teacher schedules that match your package
+		// 2. Preview proposed class dates (dry-run)
+		// 3. Confirm and book all at once
+		student.GET("/teacher-schedules", handler.GetTeacherSchedulesForPackage)
+		student.POST("/bulk-book/preview", handler.BulkBookPreview)
+		student.POST("/bulk-book", handler.BulkBookClass)
 	}
 }
 
@@ -533,3 +542,106 @@ func (h *StudentHandler) UpdateStudentData(c *gin.Context) {
 	utils.PrintLogInfo(&name, 200, "UpdateStudentData", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Data siswa berhasil diperbarui"})
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk-Book Handlers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GetTeacherSchedulesForPackage GET /student/teacher-schedules?teacher_uuid=X&student_package_id=Y
+// Returns the given teacher's schedules whose duration matches the student's package.
+func (h *StudentHandler) GetTeacherSchedulesForPackage(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Tidak terotorisasi"})
+		return
+	}
+
+	teacherUUID := c.Query("teacher_uuid")
+	if teacherUUID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "teacher_uuid wajib diisi"})
+		return
+	}
+
+	packageIDStr := c.Query("student_package_id")
+	packageID, err := strconv.Atoi(packageIDStr)
+	if err != nil || packageID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "student_package_id tidak valid"})
+		return
+	}
+
+	schedules, err := h.studUC.GetTeacherSchedulesForPackage(c.Request.Context(), teacherUUID, packageID, userUUID.(string))
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "GetTeacherSchedulesForPackage", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetTeacherSchedulesForPackage", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": schedules, "total": len(*schedules)})
+}
+
+// BulkBookPreview POST /student/bulk-book/preview
+// Dry-run: shows which dates would be booked without writing to the database.
+func (h *StudentHandler) BulkBookPreview(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Tidak terotorisasi"})
+		return
+	}
+
+	var req dto.BulkBookRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkBookPreview - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": utils.TranslateValidationError(err)})
+		return
+	}
+
+	previews, err := h.studUC.BulkBookPreview(c.Request.Context(), userUUID.(string), req.StudentPackageID, req.ScheduleIDs)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkBookPreview - UseCase", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "BulkBookPreview", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"total_classes": len(previews),
+		"preview":       previews,
+	})
+}
+
+// BulkBookClass POST /student/bulk-book
+// Commits all sessions at once and deducts the full package quota.
+func (h *StudentHandler) BulkBookClass(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Tidak terotorisasi"})
+		return
+	}
+
+	var req dto.BulkBookRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkBookClass - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": utils.TranslateValidationError(err)})
+		return
+	}
+
+	result, err := h.studUC.BulkBookClass(c.Request.Context(), userUUID.(string), req.StudentPackageID, req.ScheduleIDs)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkBookClass - UseCase", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 201, "BulkBookClass", nil)
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("%d kelas berhasil dipesan", result.TotalBooked),
+		"data":    result,
+	})
+}
+

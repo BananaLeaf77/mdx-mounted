@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -161,6 +162,12 @@ func seedInitialData(db *gorm.DB) error {
 		// Continue - not critical
 	}
 
+	// Seed settings
+	if err := seedSettings(db); err != nil {
+		log.Printf("⚠️  Failed to seed settings: %v", err)
+		// Continue - not critical
+	}
+
 	return nil
 }
 
@@ -214,6 +221,50 @@ func seedAdminUser(db *gorm.DB) error {
 		}
 
 		log.Printf("✅ Seeded admin user: %s", adminEmail)
+	}
+
+	return nil
+}
+
+func seedSettings(db *gorm.DB) error {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("🔥 Settings seeding panic recovered: %v", r)
+		}
+	}()
+
+	defaultRegistrationFee := os.Getenv("DEFAULT_REGISTRATION_FEE")
+	defaultTeacherComFee := os.Getenv("TEACHER_DEFAULT_COMISSION")
+
+	// Convert string to float64 (if you need decimal support)
+	registrationFee, err := strconv.ParseFloat(defaultRegistrationFee, 64)
+	if err != nil {
+		return fmt.Errorf("invalid DEFAULT_REGISTRATION_FEE: %w", err)
+	}
+
+	teacherCommission, err := strconv.ParseFloat(defaultTeacherComFee, 64)
+	if err != nil {
+		return fmt.Errorf("invalid TEACHER_DEFAULT_COMISSION: %w", err)
+	}
+
+	var count int64
+	if err := db.Model(&domain.Setting{}).Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to count settings: %w", err)
+	}
+
+	now := time.Now()
+
+	if count == 0 {
+		err := db.Create(&domain.Setting{
+			RegistrationFee:   registrationFee,   // now float64
+			TeacherCommission: teacherCommission, // now float64
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}).Error
+		if err != nil {
+			return fmt.Errorf("failed to create settings: %w", err)
+		}
+		log.Printf("✅ Seeded settings: fee=%.2f, commission=%.2f", registrationFee, teacherCommission)
 	}
 
 	return nil

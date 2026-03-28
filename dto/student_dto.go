@@ -32,3 +32,11 @@ type BookClassTrialRequest struct {
     PackageID    int `json:"package_id"    binding:"required,min=1"` // student_packages.id
     InstrumentID int `json:"instrument_id" binding:"required,min=1"`
 }
+
+// BulkBookRequest is used to book all (or all remaining) quota sessions at once.
+// The system cycles through the given schedule IDs (earliest-date-first) until
+// the package's remaining_quota reaches zero.
+type BulkBookRequest struct {
+	StudentPackageID int   `json:"student_package_id" binding:"required,min=1"`
+	ScheduleIDs      []int `json:"schedule_ids"       binding:"required,min=1"`
+}

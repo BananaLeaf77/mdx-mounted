@@ -1011,7 +1011,10 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 	var setting domain.Setting
 
 	if err := r.db.WithContext(ctx).First(&setting).Error; err != nil {
-		return nil, nil, err
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, err
+		}
+		// No settings row yet (fresh DB) — proceed with zero-value setting.
 	}
 
 	// Hide teacher commission from public endpoint
@@ -1022,6 +1025,7 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 	excludeTrial := false
 
 	if studentUUID != nil {
+		fmt.Println("masuk sini coy")
 		// Count how many trial packages the student has ever purchased (paid).
 		var trialPurchaseCount int64
 		if err := r.db.WithContext(ctx).
@@ -1123,4 +1127,369 @@ func (r *studentRepository) UpdateStudentData(ctx context.Context, uuid string, 
 		return fmt.Errorf("gagal commit transaction: %w", err)
 	}
 	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GetTeacherSchedulesForPackage
+// Returns a teacher's schedules whose duration matches the given package.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *studentRepository) GetTeacherSchedulesForPackage(
+	ctx context.Context,
+	teacherUUID string,
+	studentPackageID int,
+	studentUUID string,
+) (*[]domain.TeacherSchedule, error) {
+	// Load the student package to get the session duration.
+	var sp domain.StudentPackage
+	if err := r.db.WithContext(ctx).
+		Joins("JOIN packages ON packages.id = student_packages.package_id").
+		Preload("Package").
+		Where("student_packages.id = ? AND student_packages.student_uuid = ?", studentPackageID, studentUUID).
+		First(&sp).Error; err != nil {
+		return nil, errors.New("paket tidak ditemukan atau bukan milik Anda")
+	}
+
+	var schedules []domain.TeacherSchedule
+	if err := r.db.WithContext(ctx).
+		Where("teacher_uuid = ? AND duration = ? AND deleted_at IS NULL", teacherUUID, sp.Package.Duration).
+		Preload("Teacher").
+		Order("day_of_week ASC, start_time ASC").
+		Find(&schedules).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil jadwal guru: %w", err)
+	}
+
+	return &schedules, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// generateBulkCandidates — shared engine for preview and actual booking.
+//
+// Algorithm (min-heap / earliest-first):
+//  1. For each selected schedule, compute its "next valid date" (H-6 aware).
+//  2. Always pick the schedule whose next date is earliest.
+//  3. Check room capacity (DB + already-pending slots).
+//  4. Check student self-conflict (DB + already-pending slots).
+//  5. If a slot is blocked, advance that schedule by +7 days and retry.
+//  6. If a slot is valid, record it and advance by +7 days.
+//  7. Repeat until quota filled or max-attempts exhausted.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type bulkCandidate struct {
+	ScheduleID int
+	DayOfWeek  string
+	StartTime  string
+	EndTime    string
+	ClassDate  time.Time
+}
+
+func (r *studentRepository) generateBulkCandidates(
+	ctx context.Context,
+	studentUUID string,
+	sp domain.StudentPackage,
+	schedules []domain.TeacherSchedule,
+	instrumentID int,
+	isDrum bool,
+) ([]bulkCandidate, error) {
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	now := time.Now().In(loc)
+	quota := sp.RemainingQuota
+
+	// Initialise one cursor per selected schedule.
+	type cursor struct {
+		sch  domain.TeacherSchedule
+		next time.Time
+	}
+	cursors := make([]cursor, len(schedules))
+	for i, sch := range schedules {
+		parsed, _ := time.Parse("15:04", sch.StartTime)
+		cursors[i] = cursor{sch: sch, next: utils.GetNextClassDate(sch.DayOfWeek, parsed)}
+	}
+
+	var candidates []bulkCandidate
+	maxAttempts := quota * 52 // up to ~1 year of weekly retries per slot
+
+	for len(candidates) < quota && maxAttempts > 0 {
+		maxAttempts--
+
+		// Pick the cursor whose next date is earliest.
+		minIdx := 0
+		for i := 1; i < len(cursors); i++ {
+			if cursors[i].next.Before(cursors[minIdx].next) {
+				minIdx = i
+			}
+		}
+		c := &cursors[minIdx]
+
+		// ── Guard: date must be before package expiry ──────────────────────
+		if c.next.After(sp.EndDate) {
+			return nil, fmt.Errorf(
+				"tidak dapat menjadwalkan semua %d sesi sebelum paket berakhir pada %s. "+
+					"Hanya %d sesi yang dapat dijadwalkan dalam periode tersebut",
+				quota, sp.EndDate.Format("02 Jan 2006"), len(candidates),
+			)
+		}
+
+		// ── Guard: H-6 rule — class must start ≥ 6 h from now ─────────────
+		startParsed, _ := time.Parse("15:04", c.sch.StartTime)
+		classStart := time.Date(
+			c.next.Year(), c.next.Month(), c.next.Day(),
+			startParsed.Hour(), startParsed.Minute(), 0, 0, loc,
+		)
+		if classStart.Sub(now) < 6*time.Hour {
+			c.next = c.next.AddDate(0, 0, 7)
+			continue
+		}
+
+		// ── Guard: room capacity (DB bookings + already pending) ───────────
+		var dbRoomCount int64
+		_ = r.countRoomUsage(r.db.WithContext(ctx), c.next, c.sch.StartTime, instrumentID, isDrum, &dbRoomCount)
+
+		var pendingRoomCount int64
+		for _, cand := range candidates {
+			if cand.ClassDate.Equal(c.next) && cand.StartTime == c.sch.StartTime {
+				pendingRoomCount++
+			}
+		}
+		roomLimit := domain.RegularRoomLimit
+		if isDrum {
+			roomLimit = domain.DrumRoomLimit
+		}
+		if dbRoomCount+pendingRoomCount >= roomLimit {
+			c.next = c.next.AddDate(0, 0, 7)
+			continue
+		}
+
+		// ── Guard: student self-conflict (DB) ──────────────────────────────
+		var dbConflict int64
+		r.db.WithContext(ctx).Model(&domain.Booking{}).
+			Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
+			Where("bookings.student_uuid = ?", studentUUID).
+			Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+			Where("bookings.class_date = ?", c.next).
+			Where("ts.start_time = ?", c.sch.StartTime).
+			Count(&dbConflict)
+
+		// ── Guard: student self-conflict (pending list) ────────────────────
+		var pendingConflict bool
+		for _, cand := range candidates {
+			if cand.ClassDate.Equal(c.next) && cand.StartTime == c.sch.StartTime {
+				pendingConflict = true
+				break
+			}
+		}
+
+		if dbConflict > 0 || pendingConflict {
+			c.next = c.next.AddDate(0, 0, 7)
+			continue
+		}
+
+		// ── Valid slot — record it and advance cursor ───────────────────────
+		candidates = append(candidates, bulkCandidate{
+			ScheduleID: c.sch.ID,
+			DayOfWeek:  c.sch.DayOfWeek,
+			StartTime:  c.sch.StartTime,
+			EndTime:    c.sch.EndTime,
+			ClassDate:  c.next,
+		})
+		c.next = c.next.AddDate(0, 0, 7)
+	}
+
+	if len(candidates) < quota {
+		return nil, fmt.Errorf(
+			"tidak dapat menemukan cukup sesi yang tersedia. "+
+				"Hanya %d dari %d sesi dapat dijadwalkan",
+			len(candidates), quota,
+		)
+	}
+
+	return candidates, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BulkBookPreview — dry-run: returns candidate dates without any DB writes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *studentRepository) BulkBookPreview(
+	ctx context.Context,
+	studentUUID string,
+	studentPackageID int,
+	scheduleIDs []int,
+) ([]domain.BulkBookPreview, error) {
+	sp, schedules, instrumentID, isDrum, err := r.validateBulkBookInputs(ctx, studentUUID, studentPackageID, scheduleIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates, err := r.generateBulkCandidates(ctx, studentUUID, sp, schedules, instrumentID, isDrum)
+	if err != nil {
+		return nil, err
+	}
+
+	previews := make([]domain.BulkBookPreview, len(candidates))
+	for i, c := range candidates {
+		previews[i] = domain.BulkBookPreview{
+			ScheduleID: c.ScheduleID,
+			DayOfWeek:  c.DayOfWeek,
+			StartTime:  c.StartTime,
+			EndTime:    c.EndTime,
+			ClassDate:  c.ClassDate,
+		}
+	}
+	return previews, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BulkBookClass — generate candidate dates then commit all in one transaction.
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *studentRepository) BulkBookClass(
+	ctx context.Context,
+	studentUUID string,
+	studentPackageID int,
+	scheduleIDs []int,
+) (*domain.BulkBookResult, error) {
+	sp, schedules, instrumentID, isDrum, err := r.validateBulkBookInputs(ctx, studentUUID, studentPackageID, scheduleIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates, err := r.generateBulkCandidates(ctx, studentUUID, sp, schedules, instrumentID, isDrum)
+	if err != nil {
+		return nil, err
+	}
+
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	now := time.Now().In(loc)
+	quota := sp.RemainingQuota
+
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var bookingIDs []int
+	for _, c := range candidates {
+		b := domain.Booking{
+			StudentUUID:      studentUUID,
+			ScheduleID:       c.ScheduleID,
+			StudentPackageID: sp.ID,
+			InstrumentID:     instrumentID,
+			ClassDate:        c.ClassDate,
+			Status:           domain.StatusBooked,
+			BookedAt:         now,
+		}
+		if err := tx.Create(&b).Error; err != nil {
+			tx.Rollback()
+			return nil, fmt.Errorf("gagal membuat booking untuk %s: %w", c.ClassDate.Format("02 Jan 2006"), err)
+		}
+		bookingIDs = append(bookingIDs, b.ID)
+	}
+
+	// Deduct the full quota atomically.
+	if err := tx.Model(&domain.StudentPackage{}).
+		Where("id = ?", sp.ID).
+		UpdateColumn("remaining_quota", gorm.Expr("remaining_quota - ?", quota)).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("gagal mengurangi kuota: %w", err)
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, fmt.Errorf("gagal menyimpan booking: %w", err)
+	}
+
+	// Reload created bookings with full relations for the response.
+	var bookings []domain.Booking
+	r.db.WithContext(ctx).
+		Where("id IN ?", bookingIDs).
+		Preload("Schedule").
+		Preload("Schedule.Teacher").
+		Preload("PackageUsed.Package.Instrument").
+		Order("class_date ASC").
+		Find(&bookings)
+
+	return &domain.BulkBookResult{
+		TotalBooked: len(bookings),
+		QuotaUsed:   quota,
+		Bookings:    bookings,
+	}, nil
+}
+
+// validateBulkBookInputs is a shared pre-flight check for both preview and commit.
+func (r *studentRepository) validateBulkBookInputs(
+	ctx context.Context,
+	studentUUID string,
+	studentPackageID int,
+	scheduleIDs []int,
+) (sp domain.StudentPackage, schedules []domain.TeacherSchedule, instrumentID int, isDrum bool, err error) {
+	// ── 1. Load & validate student package ────────────────────────────────
+	if err = r.db.WithContext(ctx).
+		Joins("JOIN packages ON packages.id = student_packages.package_id").
+		Preload("Package.Instrument").
+		Where("student_packages.id = ?", studentPackageID).
+		Where("student_packages.student_uuid = ?", studentUUID).
+		Where("packages.is_trial = false").
+		Where("student_packages.remaining_quota > 0").
+		Where("student_packages.end_date > NOW()").
+		First(&sp).Error; err != nil {
+		err = errors.New("paket tidak valid, kuota habis, atau paket sudah berakhir")
+		return
+	}
+
+	// ── 2. Load & validate selected schedules ────────────────────────────
+	if err = r.db.WithContext(ctx).
+		Where("id IN ? AND deleted_at IS NULL", scheduleIDs).
+		Preload("Teacher").
+		Preload("TeacherProfile.Instruments").
+		Find(&schedules).Error; err != nil {
+		return
+	}
+	if len(schedules) == 0 {
+		err = errors.New("tidak ada jadwal yang ditemukan")
+		return
+	}
+	if len(schedules) != len(scheduleIDs) {
+		err = errors.New("beberapa jadwal tidak ditemukan atau sudah tidak aktif")
+		return
+	}
+
+	// ── 3. All schedules must belong to the same teacher ─────────────────
+	teacherUUID := schedules[0].TeacherUUID
+	for _, sch := range schedules {
+		if sch.TeacherUUID != teacherUUID {
+			err = errors.New("semua jadwal harus berasal dari guru yang sama")
+			return
+		}
+		if sch.Duration != sp.Package.Duration {
+			err = fmt.Errorf(
+				"durasi jadwal (%d menit) tidak sesuai dengan paket (%d menit)",
+				sch.Duration, sp.Package.Duration,
+			)
+			return
+		}
+	}
+
+	// ── 4. Teacher must teach the instrument in the package ───────────────
+	if sp.Package.InstrumentID != nil {
+		instrumentID = *sp.Package.InstrumentID
+		teaches := false
+		for _, inst := range schedules[0].TeacherProfile.Instruments {
+			if inst.ID == instrumentID {
+				teaches = true
+				break
+			}
+		}
+		if !teaches {
+			err = errors.New("guru ini tidak mengajar instrumen dari paket yang dipilih")
+			return
+		}
+		if sp.Package.Instrument != nil {
+			isDrum = strings.EqualFold(sp.Package.Instrument.Name, "drum") ||
+				strings.EqualFold(sp.Package.Instrument.Name, "drums")
+		}
+	}
+
+	return sp, schedules, instrumentID, isDrum, nil
 }

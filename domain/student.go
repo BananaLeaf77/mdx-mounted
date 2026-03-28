@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"time"
 )
 
 // ScheduleAvailabilityResult enriches TeacherSchedule with availability flags
@@ -17,6 +18,23 @@ type ScheduleAvailabilityResult struct {
 
 	// Teacher performance (count of completed ClassHistory entries)
 	TeacherFinishedClassCount int `json:"teacher_finished_class_count"`
+}
+
+// BulkBookPreview is one candidate session returned by the preview endpoint.
+// Nothing is written to the database.
+type BulkBookPreview struct {
+	ScheduleID int       `json:"schedule_id"`
+	DayOfWeek  string    `json:"day_of_week"`
+	StartTime  string    `json:"start_time"`
+	EndTime    string    `json:"end_time"`
+	ClassDate  time.Time `json:"class_date"`
+}
+
+// BulkBookResult is returned after a successful bulk-book commit.
+type BulkBookResult struct {
+	TotalBooked int       `json:"total_booked"`
+	QuotaUsed   int       `json:"quota_used"`
+	Bookings    []Booking `json:"bookings"`
 }
 
 type StudentUseCase interface {
@@ -38,6 +56,11 @@ type StudentUseCase interface {
 
 	GetMyClassHistory(ctx context.Context, studentUUID string, f PaginationFilter) (*[]ClassHistory, error)
 	GetTeacherDetails(ctx context.Context, teacherUUID string) (*User, error)
+
+	// BulkBook: spend the full package quota in one action.
+	GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]TeacherSchedule, error)
+	BulkBookPreview(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) ([]BulkBookPreview, error)
+	BulkBookClass(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) (*BulkBookResult, error)
 }
 
 type StudentRepository interface {
@@ -62,4 +85,9 @@ type StudentRepository interface {
 	GetTeacherSchedulesBasedOnInstrumentIDs(ctx context.Context, instrumentIDs []int) (*[]TeacherSchedule, error)
 
 	GetTeacherDetails(ctx context.Context, teacherUUID string) (*User, error)
+
+	// BulkBook: spend the full package quota in one action.
+	GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]TeacherSchedule, error)
+	BulkBookPreview(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) ([]BulkBookPreview, error)
+	BulkBookClass(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) (*BulkBookResult, error)
 }

@@ -31,6 +31,21 @@ func (s *studentUseCase) GetMyClassHistory(ctx context.Context, studentUUID stri
 	return s.repo.GetMyClassHistory(ctx, studentUUID, f)
 }
 
+// ─── Bulk Book ────────────────────────────────────────────────────────────────
+
+func (s *studentUseCase) GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]domain.TeacherSchedule, error) {
+	return s.repo.GetTeacherSchedulesForPackage(ctx, teacherUUID, studentPackageID, studentUUID)
+}
+
+func (s *studentUseCase) BulkBookPreview(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) ([]domain.BulkBookPreview, error) {
+	return s.repo.BulkBookPreview(ctx, studentUUID, studentPackageID, scheduleIDs)
+}
+
+func (s *studentUseCase) BulkBookClass(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) (*domain.BulkBookResult, error) {
+	return s.repo.BulkBookClass(ctx, studentUUID, studentPackageID, scheduleIDs)
+}
+
+
 func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error {
 	if reason == nil {
 		defaultReason := "Alasan tidak diberikan"
