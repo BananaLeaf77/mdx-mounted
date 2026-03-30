@@ -115,7 +115,7 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		// 5c. IsRoomAvailable — we don't know the instrument yet (student picks at booking),
 		//     so we can't do a precise drum/non-drum room check here.
 		//     Mark as available; the actual check happens in BookClassTrial.
-		result.IsRoomAvailable = ptrBool(!sch.IsBooked)
+		result.IsRoomAvailable = ptrBool(true)
 
 		// 5d. IsBookedSameDayAndTime
 		var existingCount int64
@@ -345,11 +345,14 @@ func (r *studentRepository) BookClassTrial(
 		return nil, fmt.Errorf("gagal mengurangi kuota trial: %w", err)
 	}
 
-	// ── 11. Reload for notifications ──────────────────────────────────────────
+	// Step 11 - Reload for notifications
 	if err := tx.
 		Preload("Student").
 		Preload("Schedule.Teacher").
-		Preload("PackageUsed.Package.Instrument").
+		Preload("Schedule.TeacherProfile").
+		Preload("Schedule.TeacherProfile.Instruments"). // ← Add this to get teacher's instruments
+		Preload("PackageUsed").
+		Preload("PackageUsed.Package"). // ← Don't preload Instrument for trial packages
 		First(&newBooking, newBooking.ID).Error; err != nil {
 		tx.Rollback()
 		return nil, fmt.Errorf("gagal memuat data booking: %w", err)
@@ -358,6 +361,10 @@ func (r *studentRepository) BookClassTrial(
 	if err := tx.Commit().Error; err != nil {
 		return nil, fmt.Errorf("gagal menyimpan booking: %w", err)
 	}
+
+	newBooking.PackageUsed.Package.Instrument.Name = bookedInstrumentName
+	newBooking.PackageUsed.Package.TrialInstrument = bookedInstrumentName
+
 	return &newBooking, nil
 }
 
@@ -472,13 +479,11 @@ func (r *studentRepository) CancelBookedClass(
 	}
 
 	// Refund quota (skip for trial packages)
-	if !booking.PackageUsed.Package.IsTrial {
-		if err := tx.Model(&domain.StudentPackage{}).
-			Where("id = ?", booking.StudentPackageID).
-			Update("remaining_quota", gorm.Expr("remaining_quota + 1")).Error; err != nil {
-			tx.Rollback()
-			return nil, fmt.Errorf("gagal refund quota: %w", err)
-		}
+	if err := tx.Model(&domain.StudentPackage{}).
+		Where("id = ?", booking.StudentPackageID).
+		Update("remaining_quota", gorm.Expr("remaining_quota + 1")).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("gagal refund quota: %w", err)
 	}
 
 	if err := tx.Model(&domain.TeacherSchedule{}).
@@ -813,6 +818,12 @@ func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID 
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	now := time.Now().In(loc)
 	for i := range bookings {
+		if bookings[i].PackageUsed.Package.IsTrial {
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", bookings[i].InstrumentID).First(&instrument)
+			bookings[i].PackageUsed.Package.TrialInstrument = instrument.Name
+		}
+
 		startTimeStr := bookings[i].Schedule.StartTime
 		parsedStart, _ := time.Parse("15:04", startTimeStr)
 
