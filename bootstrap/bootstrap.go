@@ -16,8 +16,11 @@ import (
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
 )
+import (
+	"github.com/robfig/cron/v3"
+)
 
-func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB) {
+func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cron) {
 	// Load .env
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️  .env file not found, using system environment variables")
@@ -104,10 +107,12 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB) {
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 
-	return app, db
+	c := InitCron(teacherPaymentService)
+
+	return app, db, c
 }
 
-func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB) {
+func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB, *cron.Cron) {
 	// Load .env
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️  .env file not found, using system environment variables")
@@ -197,10 +202,12 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB) {
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 
-	return app, db
+	c := InitCron(teacherPaymentService)
+
+	return app, db, c
 }
 
-func InitializeFullApp() (*gin.Engine, *gorm.DB) {
+func InitializeFullApp() (*gin.Engine, *gorm.DB, *cron.Cron) {
 	// Load .env
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️  .env file not found, using system environment variables")
@@ -285,5 +292,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB) {
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 
-	return app, db
+	c := InitCron(teacherPaymentService)
+
+	return app, db, c
 }

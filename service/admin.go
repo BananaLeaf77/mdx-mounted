@@ -349,3 +349,87 @@ func (s *adminService) UpdateSetting(ctx context.Context, setting *domain.Settin
 	}
 	return s.adminRepo.UpdateSetting(ctx, setting)
 }
+
+// WhatsApp Management =========================================================
+
+func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interface{}, error) {
+	if s.messenger == nil {
+		return map[string]interface{}{"status": "not_initialized"}, nil
+	}
+	if s.messenger.IsConnected() {
+		return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
+	}
+	if s.messenger.Store.ID != nil {
+		return map[string]interface{}{"status": "disconnected_but_linked"}, nil
+	}
+	return map[string]interface{}{"status": "not_linked"}, nil
+}
+
+func (s *adminService) ConnectWhatsApp(ctx context.Context) (map[string]interface{}, error) {
+	if s.messenger == nil {
+		return nil, errors.New("whatsapp client is not initialized")
+	}
+
+	if s.messenger.IsConnected() {
+		return map[string]interface{}{"status": "already_connected"}, nil
+	}
+
+	if s.messenger.Store.ID != nil {
+		err := s.messenger.Connect()
+		if err != nil {
+			return nil, fmt.Errorf("gagal menyambungkan: %v", err)
+		}
+		return map[string]interface{}{"status": "connected"}, nil
+	}
+
+	// Device not linked. We must generate a QR code!
+	qrChan, _ := s.messenger.GetQRChannel(context.Background())
+	err := s.messenger.Connect()
+	if err != nil {
+		return nil, fmt.Errorf("gagal menyambungkan device baru: %w", err)
+	}
+
+	for evt := range qrChan {
+		if evt.Event == "code" {
+			return map[string]interface{}{
+				"status": "qr_code_generated",
+				"qr_code": evt.Code,
+			}, nil
+		} else if evt.Event == "success" {
+			return map[string]interface{}{"status": "connected"}, nil
+		} else if evt.Event == "timeout" {
+			break
+		}
+	}
+	
+	s.messenger.Disconnect()
+	return nil, errors.New("gagal mendapatkan qr code")
+}
+
+func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
+	if s.messenger == nil {
+		return errors.New("whatsapp client not initialized")
+	}
+	err := s.messenger.Logout(ctx)
+	s.messenger.Disconnect()
+	return err
+}
+
+func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {
+	if s.messenger == nil || !s.messenger.IsConnected() {
+		return errors.New("whatsapp is not connected")
+	}
+	phoneNormalized := utils.NormalizePhoneNumber(phone)
+	if phoneNormalized == "" {
+		return errors.New("nomor telepon tidak valid")
+	}
+	jid := types.NewJID(phoneNormalized, types.DefaultUserServer)
+	
+	msg := "Ping dari sistem MadEU. Tes koneksi berhasil."
+	waMessage := &waE2E.Message{
+		Conversation: &msg,
+	}
+
+	_, err := s.messenger.SendMessage(ctx, jid, waMessage)
+	return err
+}

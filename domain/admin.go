@@ -61,6 +61,12 @@ type AdminUseCase interface {
 	// Setting
 	GetSetting(ctx context.Context) (*Setting, error)
 	UpdateSetting(ctx context.Context, setting *Setting) error
+
+	// WhatsApp
+	GetWhatsAppStatus(ctx context.Context) (map[string]interface{}, error)
+	ConnectWhatsApp(ctx context.Context) (map[string]interface{}, error)
+	DisconnectWhatsApp(ctx context.Context) error
+	PingWhatsApp(ctx context.Context, phone string) error
 }
 
 type AdminRepository interface {

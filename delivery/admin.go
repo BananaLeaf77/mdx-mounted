@@ -72,6 +72,12 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 
 		// Class Histories
 		admin.GET("/class-histories", h.GetAllClassHistories)
+
+		// WhatsApp
+		admin.GET("/whatsapp/status", h.GetWhatsAppStatus)
+		admin.POST("/whatsapp/connect", h.ConnectWhatsApp)
+		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
+		admin.POST("/whatsapp/ping", h.PingWhatsApp)
 	}
 }
 
@@ -779,4 +785,65 @@ func (h *AdminHandler) UpdateSetting(c *gin.Context) {
 
 	utils.PrintLogInfo(&name, 200, "UpdateSetting", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Pengaturan berhasil diperbarui"})
+}
+
+// WHATSAPP MANAGEMENT =========================================================
+
+func (h *AdminHandler) GetWhatsAppStatus(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	status, err := h.uc.GetWhatsAppStatus(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetWhatsAppStatus - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "GetWhatsAppStatus", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
+}
+
+func (h *AdminHandler) ConnectWhatsApp(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	status, err := h.uc.ConnectWhatsApp(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "ConnectWhatsApp - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "ConnectWhatsApp", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
+}
+
+func (h *AdminHandler) DisconnectWhatsApp(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	err := h.uc.DisconnectWhatsApp(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "DisconnectWhatsApp - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "DisconnectWhatsApp", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "WhatsApp berhasil diputus"})
+}
+
+func (h *AdminHandler) PingWhatsApp(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	var req struct {
+		Phone string `json:"phone" binding:"required,max=14"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "PingWhatsApp - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": utils.TranslateValidationError(err)})
+		return
+	}
+
+	err := h.uc.PingWhatsApp(c.Request.Context(), req.Phone)
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "PingWhatsApp - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "PingWhatsApp", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Ping berhasil dikirim"})
 }

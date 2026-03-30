@@ -16,6 +16,11 @@ type ScheduleAvailabilityResult struct {
 	IsRoomAvailable        *bool `json:"is_room_available,omitempty"`
 	IsFullyAvailable       *bool `json:"is_fully_available,omitempty"`
 
+	// IsTeacherBusy is true when the teacher already has an active booking on this
+	// date whose time window overlaps this schedule slot (e.g. their 60-min slot is
+	// booked, so their simultaneous 30-min slot at the same start time is blocked too).
+	IsTeacherBusy *bool `json:"is_teacher_busy,omitempty"`
+
 	// Teacher performance (count of completed ClassHistory entries)
 	TeacherFinishedClassCount int `json:"teacher_finished_class_count"`
 }

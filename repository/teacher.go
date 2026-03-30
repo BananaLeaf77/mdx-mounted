@@ -106,25 +106,21 @@ func (r *teacherRepository) AddAvailability(ctx context.Context, schedules *[]do
 
 		err := tx.
 			Model(&domain.TeacherSchedule{}).
-			Where("teacher_uuid = ? AND day_of_week = ? AND deleted_at IS NULL",
-				schedule.TeacherUUID, schedule.DayOfWeek).
-			Where(`
-            (start_time::time, end_time::time) OVERLAPS (?::time, ?::time)
-        `, startTimeStr, endTimeStr).
+			Where("teacher_uuid = ? AND day_of_week = ? AND deleted_at IS NULL", schedule.TeacherUUID, schedule.DayOfWeek).
+			Where("(start_time::time, end_time::time) OVERLAPS (?::time, ?::time)", startTimeStr, endTimeStr).
 			Count(&count).Error
 
 		if err != nil {
 			tx.Rollback()
-			return fmt.Errorf("failed to check overlap: %w", err)
+			return fmt.Errorf("failed to check existing schedule: %w", err)
 		}
 		if count > 0 {
 			// Format times for display in WITA (UTC+8)
-			// loc, _ := time.LoadLocation("Asia/Makassar")
 			startWITA := schedule.StartTime
 			endWITA := schedule.EndTime
 
 			tx.Rollback()
-			return fmt.Errorf("slot waktu %s %s-%s konflik dengan jadwal yang sudah ada",
+			return fmt.Errorf("slot waktu %s %s-%s sudah ada",
 				schedule.DayOfWeek,
 				startWITA,
 				endWITA)

@@ -11,8 +11,8 @@ require (
 	github.com/jackc/pgconn v1.14.3
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/mdp/qrterminal v1.0.1
 	github.com/redis/go-redis/v9 v9.14.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/zerolog v1.34.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/xendit/xendit-go/v6 v6.4.0
@@ -71,5 +71,4 @@ require (
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	rsc.io/qr v0.2.0 // indirect
 )

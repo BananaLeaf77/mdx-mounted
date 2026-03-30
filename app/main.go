@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -25,17 +26,18 @@ func main() {
 	flag.Parse()
 
 	var app *gin.Engine
+	var cronJob *cron.Cron
 
 	switch *mode {
 	case "no-wa":
 		log.Println("🚀 Starting in NO-WA mode")
-		app, _ = bootstrap.InitializeAppWithoutWhatsappNotification()
+		app, _, cronJob = bootstrap.InitializeAppWithoutWhatsappNotification()
 	case "no-limiter":
 		log.Println("🚀 Starting in NO-LIMITER mode")
-		app, _ = bootstrap.InitializeAppWithoutRateLimiter()
+		app, _, cronJob = bootstrap.InitializeAppWithoutRateLimiter()
 	default:
 		log.Println("🚀 Starting in FULL mode")
-		app, _ = bootstrap.InitializeFullApp()
+		app, _, cronJob = bootstrap.InitializeFullApp()
 	}
 
 	// ========================================================================
@@ -79,6 +81,12 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("⚠️  Server forced to shutdown: %v", err)
+	}
+
+	if cronJob != nil {
+		log.Println("🛑 Stopping Cron Jobs...")
+		cronCtx := cronJob.Stop()
+		<-cronCtx.Done()
 	}
 
 	log.Println("✅ Server exited gracefully")
