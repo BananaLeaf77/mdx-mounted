@@ -6,8 +6,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq"
+	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types/events"
@@ -48,7 +50,35 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 			log.Print("✅ Connected to ", utils.ColorText("Whatsapp", utils.Green), " successfully")
 		}
 	} else {
-		log.Print("⚠️ Whatsapp not connected. Go to admin panel to link device.")
+		log.Print("⚠️ Whatsapp not connected. Generating QR code in terminal for testing...")
+		qrChan, _ := client.GetQRChannel(ctx)
+		if err := client.Connect(); err != nil {
+			log.Println("⚠️ Failed to start WhatsApp QR channel: ", err)
+		} else {
+			go func() {
+				for evt := range qrChan {
+					if evt.Event == "code" {
+						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+						
+						emailReceiver := os.Getenv("QR_CODE_EMAIL_RECEIVER")
+						if emailReceiver != "" {
+							errEmail := utils.SendQRCodeEmail(emailReceiver, "MadeU System - WhatsApp Authentication", "Harap scan QR code terlampir untuk mengautentikasi bot WhatsApp MadeU Anda. Kode ini kedaluwarsa dengan cepat.", evt.Code)
+							if errEmail != nil {
+								log.Println("⚠️ Failed to email QR code:", errEmail)
+							} else {
+								log.Println("✉️ Successfully emailed QR code attachment to:", emailReceiver)
+							}
+						}
+					} else if evt.Event == "success" {
+						log.Print("✅ Whatsapp authenticated successfully from terminal!")
+						break
+					} else if evt.Event == "timeout" {
+						log.Print("⚠️ Whatsapp QR code timeout. Use admin panel to re-generate.")
+						break
+					}
+				}
+			}()
+		}
 	}
 
 	return client, ctx, nil

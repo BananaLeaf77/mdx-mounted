@@ -90,7 +90,7 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cr
 
 	// Init Gin
 	app := gin.Default()
-	config.InitMiddleware(app)
+	config.InitMiddleware(app, authService.GetAccessTokenManager())
 
 	// ========================================================================
 	// INIT HANDLERS
@@ -185,7 +185,7 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB, *cron.Cron) {
 
 	// Init Gin
 	app := gin.Default()
-	config.InitMiddleware(app)
+	config.InitMiddleware(app, authService.GetAccessTokenManager())
 
 	// ========================================================================
 	// INIT HANDLERS
@@ -278,7 +278,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB, *cron.Cron) {
 
 	// Init Gin
 	app := gin.Default()
-	config.InitMiddleware(app)
+	config.InitMiddleware(app, authService.GetAccessTokenManager())
 
 	// ========================================================================
 	// INIT HANDLERS

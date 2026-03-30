@@ -5,10 +5,10 @@ import (
 	"chronosphere/domain"
 	"chronosphere/middleware"
 	"chronosphere/utils"
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -46,11 +46,16 @@ func setRefreshTokenCookie(c *gin.Context, value string, maxAge int) {
 func NewAuthHandler(r *gin.Engine, authUC domain.AuthUseCase, db *gorm.DB) {
 	handler := &AuthHandler{authUC: authUC}
 
-	// Ping Route (no rate limiting)
 	r.GET("/ping", func(c *gin.Context) {
-		fmt.Println("pong2")
 		c.JSON(http.StatusOK, gin.H{
-			"message": "pong2",
+			"message":     "pong",
+			"env":         os.Getenv("APP_ENV"),
+			"client_ip":   c.ClientIP(),
+			"user_agent":  c.Request.UserAgent(),
+			"method":      c.Request.Method,
+			"protocol":    c.Request.Proto,
+			"server_time": time.Now().Format(time.RFC3339),
+			"timestamp":   time.Now().Unix(),
 		})
 	})
 

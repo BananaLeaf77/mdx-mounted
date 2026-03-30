@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func InitMiddleware(app *gin.Engine) {
+func InitMiddleware(app *gin.Engine, jwtManager *utils.JWTManager) {
 	// ✅ Protect against panic in middleware setup
 	defer func() {
 		if r := recover(); r != nil {
@@ -49,8 +49,9 @@ func InitMiddleware(app *gin.Engine) {
 	app.Use(timeoutMiddleware(30 * time.Second))
 
 	// Rate limiter
-	app.Use(middleware.RateLimiter())
-
+	if jwtManager != nil {
+		app.Use(middleware.RateLimiter(jwtManager))
+	}
 }
 
 // ✅ Security headers middleware with error protection

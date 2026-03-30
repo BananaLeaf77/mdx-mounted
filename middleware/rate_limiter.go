@@ -3,6 +3,7 @@ package middleware
 
 import (
 	"chronosphere/domain"
+	"chronosphere/utils"
 	"context"
 	"fmt"
 	"net/http"
@@ -31,12 +32,12 @@ type RateLimitConfig struct {
 var rateLimitRules = map[string]RateLimitConfig{
 	// ==================== AUTHENTICATION ENDPOINTS ====================
 	// These are high-risk for brute force attacks
-	"ping": {
-		MaxRequests: 5,
-		Window:      time.Minute,
-		Algorithm:   "sliding_window",
-		Scope:       "ip",
-	},
+	// "ping": {
+	// 	MaxRequests: 2, // 🔴 Lowered to 2 purely so you can test it easily!
+	// 	Window:      time.Minute,
+	// 	Algorithm:   "sliding_window",
+	// 	Scope:       "ip",
+	// },
 	"auth_register": {
 		MaxRequests: 3, // 3 registrations per hour from same IP
 		Window:      time.Hour,
@@ -233,8 +234,8 @@ func getRateLimitRule(path, method string) RateLimitConfig {
 	// Authentication endpoints
 	case strings.Contains(path, "/auth/register"):
 		return rateLimitRules["auth_register"]
-	case strings.Contains(path, "/ping"):
-		return rateLimitRules["ping"]
+	// case strings.Contains(path, "/ping"):
+	// 	return rateLimitRules["ping"]
 	case strings.Contains(path, "/auth/login"):
 		return rateLimitRules["auth_login"]
 	case strings.Contains(path, "/auth/me"):
@@ -491,14 +492,29 @@ func tokenBucketRateLimit(key string, config RateLimitConfig) (bool, int, error)
 // Main Rate Limiter Middleware
 // Admin and manager roles are fully exempt — they typically operate from
 // the same office network and low request limits would disrupt daily operations.
-func RateLimiter() gin.HandlerFunc {
+func RateLimiter(jwtManager *utils.JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ── Bypass for admin and manager roles ───────────────────────────────
 		// Role is set by AuthMiddleware before this runs on protected routes.
 		// On public routes role will be empty — that's fine, they still get limited.
-		if role, exists := c.Get("role"); exists {
-			r, _ := role.(string)
-			if r == domain.RoleAdmin || r == domain.RoleManagement || r == domain.RoleFinance {
+		role, _ := c.Get("role")
+
+		if role == nil && jwtManager != nil {
+			authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+				id, r, _, err := jwtManager.VerifyToken(tokenStr)
+				if err == nil {
+					role = r
+					c.Set("role", r)
+					c.Set("userUUID", id)
+				}
+			}
+		}
+
+		if role != nil {
+			r, ok := role.(string)
+			if ok && (r == domain.RoleAdmin || r == domain.RoleManagement || r == domain.RoleFinance) {
 				c.Next()
 				return
 			}
