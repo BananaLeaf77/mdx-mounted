@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
 )
 
 type studentUseCase struct {
@@ -281,9 +279,8 @@ func sendWA(client *whatsmeow.Client, ctx context.Context, phone, msg string) {
 	if normalized == "" {
 		return
 	}
-	jid := types.NewJID(normalized, types.DefaultUserServer)
-	if _, err := client.SendMessage(ctx, jid, &waE2E.Message{Conversation: &msg}); err != nil {
-		log.Printf("🔕 Failed to send WhatsApp to %s: %v", phone, err)
+	if err := utils.SendWhatsAppMessage(client, normalized, msg); err != nil {
+		log.Printf("🔕 Failed to send WhatsApp: %v", err)
 	} else {
 		log.Printf("🔔 WhatsApp notification sent to: %s", phone)
 	}

@@ -12,8 +12,6 @@ import (
 	xendit "github.com/xendit/xendit-go/v6"
 	invoice "github.com/xendit/xendit-go/v6/invoice"
 	"go.mau.fi/whatsmeow"
-	waE2E "go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
 	"gorm.io/gorm"
 )
 
@@ -335,7 +333,6 @@ func (s *paymentService) GetPackageSummary(ctx context.Context) ([]domain.Packag
 func (s *paymentService) sendPaymentSuccessNotification(student *domain.User, pkg *domain.Package) {
 	// Normalize phone number
 	studentPhone := utils.NormalizePhoneNumber(student.Phone)
-	studentJID := types.NewJID(studentPhone, types.DefaultUserServer)
 
 	// Rich message with emojis
 	msgToStudent := fmt.Sprintf(
@@ -367,24 +364,15 @@ Terima kasih telah memilih MadEU! 🌟
 		pkg.ExpiredDuration,
 	)
 
-	// Create WhatsApp message
-	waMessage := &waE2E.Message{
-		Conversation: &msgToStudent,
-	}
-
-	// Send message asynchronously with proper context handling
+	// Send message asynchronously
 	go func() {
-		// Create new background context for async operation
-		asyncCtx := context.Background()
-
-		// Send message
-		_, err := s.messenger.SendMessage(asyncCtx, studentJID, waMessage)
+		err := utils.SendWhatsAppMessage(s.messenger, studentPhone, msgToStudent)
 		if err != nil {
 			log.Printf("🔕 Gagal mengirim notifikasi WhatsApp ke %s (%s): %v",
-				student.Name, student.Phone, err)
+				student.Name, studentPhone, err)
 		} else {
 			log.Printf("🔔 Notifikasi WhatsApp berhasil dikirim ke: %s (%s)",
-				student.Name, student.Phone)
+				student.Name, studentPhone)
 		}
 	}()
 }

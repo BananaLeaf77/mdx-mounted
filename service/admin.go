@@ -9,8 +9,6 @@ import (
 	"os"
 
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -164,13 +162,8 @@ Terima kasih,
 				os.Getenv("APP_NAME"),
 			)
 
-			jid := types.NewJID(phoneNormalized, types.DefaultUserServer)
-			waMessage := &waE2E.Message{
-				Conversation: &msgToStudent,
-			}
-
 			go func() {
-				s.messenger.SendMessage(context.Background(), jid, waMessage)
+				utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
 			}()
 		}
 	}
@@ -423,13 +416,6 @@ func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {
 	if phoneNormalized == "" {
 		return errors.New("nomor telepon tidak valid")
 	}
-	jid := types.NewJID(phoneNormalized, types.DefaultUserServer)
-	
 	msg := "Ping dari sistem MadEU. Tes koneksi berhasil."
-	waMessage := &waE2E.Message{
-		Conversation: &msg,
-	}
-
-	_, err := s.messenger.SendMessage(ctx, jid, waMessage)
-	return err
+	return utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msg)
 }

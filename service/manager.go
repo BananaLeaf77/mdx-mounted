@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -91,10 +89,8 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 
 		phone := utils.NormalizePhoneNumber(booking.Schedule.Teacher.Phone)
 		if phone != "" {
-			jid := types.NewJID(phone, types.DefaultUserServer)
-			waMsg := &waE2E.Message{Conversation: &msg}
 			go func() {
-				s.messenger.SendMessage(context.Background(), jid, waMsg)
+				utils.SendWhatsAppMessage(s.messenger, phone, msg)
 			}()
 		}
 	}
@@ -190,12 +186,9 @@ Terima kasih atas pengertiannya.
 			os.Getenv("APP_NAME"),
 		)
 
-		jid := types.NewJID(phoneNormalized, types.DefaultUserServer)
-		waMessage := &waE2E.Message{
-			Conversation: &msgToStudent,
-		}
-
-		go s.messenger.SendMessage(context.Background(), jid, waMessage)
+		go func() {
+			utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
+		}()
 	}
 
 	return nil

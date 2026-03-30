@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/proto/waE2E"
-	"go.mau.fi/whatsmeow/types"
 )
 
 type teacherService struct {
@@ -170,15 +168,9 @@ Terima kasih! 🎵
 		teacherPhone := utils.NormalizePhoneNumber(booking.Schedule.Teacher.Phone)
 		studentPhone := utils.NormalizePhoneNumber(booking.Student.Phone)
 
-		// Create JIDs for WhatsApp
-		teacherJID := types.NewJID(teacherPhone, types.DefaultUserServer)
-		studentJID := types.NewJID(studentPhone, types.DefaultUserServer)
-
 		// Send to teacher
 		if teacherPhone != "" {
-			_, err := s.messenger.SendMessage(context.Background(), teacherJID, &waE2E.Message{
-				Conversation: &teacherMessage,
-			})
+			err := utils.SendWhatsAppMessage(s.messenger, teacherPhone, teacherMessage)
 			if err != nil {
 				log.Printf("🔕 Failed to send WhatsApp to teacher %s: %v", teacherPhone, err)
 			} else {
@@ -188,9 +180,7 @@ Terima kasih! 🎵
 
 		// Send to student
 		if studentPhone != "" {
-			_, err := s.messenger.SendMessage(context.Background(), studentJID, &waE2E.Message{
-				Conversation: &studentMessage,
-			})
+			err := utils.SendWhatsAppMessage(s.messenger, studentPhone, studentMessage)
 			if err != nil {
 				log.Printf("🔕 Failed to send WhatsApp to student %s: %v", studentPhone, err)
 			} else {
