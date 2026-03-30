@@ -1301,12 +1301,16 @@ func (r *studentRepository) generateBulkCandidates(
 
 		// ── Guard: teacher conflict (DB + pending list) ───────────────
 		dbTeacherBusy, _ := r.checkTeacherConflict(r.db.WithContext(ctx), c.sch.TeacherUUID, c.sch.StartTime, c.sch.EndTime, c.next)
-		
+
+		cStart, _ := time.Parse("15:04", c.sch.StartTime)
+		cEnd, _ := time.Parse("15:04", c.sch.EndTime)
+
 		var pendingTeacherConflict bool
 		for _, cand := range candidates {
 			if cand.ClassDate.Format("2006-01-02") == c.next.Format("2006-01-02") {
-				// Time overlap condition for HH:MM strings
-				if c.sch.StartTime < cand.EndTime && c.sch.EndTime > cand.StartTime {
+				candStart, _ := time.Parse("15:04", cand.StartTime)
+				candEnd, _ := time.Parse("15:04", cand.EndTime)
+				if cStart.Before(candEnd) && cEnd.After(candStart) {
 					pendingTeacherConflict = true
 					break
 				}
@@ -1325,7 +1329,9 @@ func (r *studentRepository) generateBulkCandidates(
 		var pendingRoomCount int64
 		for _, cand := range candidates {
 			if cand.ClassDate.Format("2006-01-02") == c.next.Format("2006-01-02") {
-				if c.sch.StartTime < cand.EndTime && c.sch.EndTime > cand.StartTime {
+				candStart, _ := time.Parse("15:04", cand.StartTime)
+				candEnd, _ := time.Parse("15:04", cand.EndTime)
+				if cStart.Before(candEnd) && cEnd.After(candStart) {
 					pendingRoomCount++
 				}
 			}
@@ -1353,7 +1359,9 @@ func (r *studentRepository) generateBulkCandidates(
 		var pendingConflict bool
 		for _, cand := range candidates {
 			if cand.ClassDate.Format("2006-01-02") == c.next.Format("2006-01-02") {
-				if c.sch.StartTime < cand.EndTime && c.sch.EndTime > cand.StartTime {
+				candStart, _ := time.Parse("15:04", cand.StartTime)
+				candEnd, _ := time.Parse("15:04", cand.EndTime)
+				if cStart.Before(candEnd) && cEnd.After(candStart) {
 					pendingConflict = true
 					break
 				}
