@@ -66,12 +66,18 @@ type UpdateTeacherProfileRequestByTeacher struct {
 func MapCreateTeacherRequestToUserByTeacher(req *UpdateTeacherProfileRequestByTeacher) domain.User {
 	return domain.User{
 		Name: req.Name,
-		// Email: req.Email,
 		Phone:  req.Phone,
 		Image:  req.Image,
 		Gender: req.Gender,
 		TeacherProfile: &domain.TeacherProfile{
-			Bio: deref(req.Bio),
+			Bio:               deref(req.Bio),
+			Education:         deref(req.Education),
+			Certificates:      deref(req.Certificates),
+			YearsOfExperience: derefInt(req.YearsOfExperience),
+			Experience:        deref(req.Experience),
+			TeachingStyle:     deref(req.TeachingStyle),
+			Specialties:       deref(req.Specialties),
+			Languages:         deref(req.Languages),
 		},
 	}
 }
@@ -122,7 +128,15 @@ func MapFinishClassRequestToClassHistory(req *FinishClassRequest, bookingID int)
 func MapUpdateTeacherRequestToUser(req *UpdateTeacherProfileRequest) *domain.User {
 	return &domain.User{
 		TeacherProfile: &domain.TeacherProfile{
-			Instruments: mapInstrumentIDs(req.InstrumentIDs),
+			Instruments:       mapInstrumentIDs(req.InstrumentIDs),
+			Bio:               deref(req.Bio),
+			Education:         deref(req.Education),
+			Certificates:      deref(req.Certificates),
+			YearsOfExperience: derefInt(req.YearsOfExperience),
+			Experience:        deref(req.Experience),
+			TeachingStyle:     deref(req.TeachingStyle),
+			Specialties:       deref(req.Specialties),
+			Languages:         deref(req.Languages),
 		},
 	}
 }
@@ -141,4 +155,11 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func derefInt(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
 }

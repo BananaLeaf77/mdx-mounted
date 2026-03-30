@@ -14,10 +14,8 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
-	"gorm.io/gorm"
-)
-import (
 	"github.com/robfig/cron/v3"
+	"gorm.io/gorm"
 )
 
 func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cron) {
@@ -226,6 +224,9 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB, *cron.Cron) {
 
 	// init WA message
 	WhatsappClient, _, err := config.InitWA(*addr)
+	if WhatsappClient == nil {
+		log.Println("whatsup client is nil")
+	}
 	if err != nil {
 		log.Fatal("❌ Failed to connect to WhatsApp: ", err)
 	}

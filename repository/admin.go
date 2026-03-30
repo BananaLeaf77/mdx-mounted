@@ -812,6 +812,32 @@ func (r *adminRepo) UpdateTeacher(ctx context.Context, user *domain.User, instru
 				return fmt.Errorf("gagal menambahkan instrumen baru: %w", err)
 			}
 		}
+
+		var profileCount int64
+		err := tx.Model(&domain.TeacherProfile{}).Where("user_uuid = ?", user.UUID).Count(&profileCount).Error
+		if err == nil {
+			if profileCount > 0 {
+				err = tx.Model(&domain.TeacherProfile{}).
+					Where("user_uuid = ?", user.UUID).
+					Updates(map[string]interface{}{
+						"bio":                 user.TeacherProfile.Bio,
+						"education":           user.TeacherProfile.Education,
+						"certificates":        user.TeacherProfile.Certificates,
+						"years_of_experience": user.TeacherProfile.YearsOfExperience,
+						"experience":          user.TeacherProfile.Experience,
+						"teaching_style":      user.TeacherProfile.TeachingStyle,
+						"specialties":         user.TeacherProfile.Specialties,
+						"languages":           user.TeacherProfile.Languages,
+					}).Error
+			} else {
+				user.TeacherProfile.UserUUID = user.UUID
+				err = tx.Create(user.TeacherProfile).Error
+			}
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("gagal memperbarui detail profil: %w", err)
+			}
+		}
 	}
 
 	// Commit transaction jika semua berhasil

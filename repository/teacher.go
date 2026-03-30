@@ -404,13 +404,20 @@ func (r *teacherRepository) UpdateTeacherData(ctx context.Context, uuid string, 
 			// Update existing profile
 			err = tx.Model(&domain.TeacherProfile{}).
 				Where("user_uuid = ?", uuid).
-				Update("bio", payload.TeacherProfile.Bio).Error
+				Updates(map[string]interface{}{
+					"bio":                 payload.TeacherProfile.Bio,
+					"education":           payload.TeacherProfile.Education,
+					"certificates":        payload.TeacherProfile.Certificates,
+					"years_of_experience": payload.TeacherProfile.YearsOfExperience,
+					"experience":          payload.TeacherProfile.Experience,
+					"teaching_style":      payload.TeacherProfile.TeachingStyle,
+					"specialties":         payload.TeacherProfile.Specialties,
+					"languages":           payload.TeacherProfile.Languages,
+				}).Error
 		} else {
 			// Create new profile
-			err = tx.Create(&domain.TeacherProfile{
-				UserUUID: uuid,
-				Bio:      payload.TeacherProfile.Bio,
-			}).Error
+			payload.TeacherProfile.UserUUID = uuid
+			err = tx.Create(payload.TeacherProfile).Error
 		}
 
 		if err != nil {
