@@ -688,14 +688,11 @@ func (r *teacherRepository) CancelBookedClass(
 	}
 
 	// 🔁 Refund quota to the exact package used in this booking
-	// skip if the booking is using a trial package
-	if !booking.PackageUsed.Package.IsTrial {
-		if err := tx.Model(&domain.StudentPackage{}).
-			Where("id = ?", booking.StudentPackageID).
-			Update("remaining_quota", gorm.Expr("remaining_quota + 1")).Error; err != nil {
-			tx.Rollback()
-			return nil, fmt.Errorf("gagal refund quota: %w", err)
-		}
+	if err := tx.Model(&domain.StudentPackage{}).
+		Where("id = ?", booking.StudentPackageID).
+		Update("remaining_quota", gorm.Expr("remaining_quota + 1")).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("gagal refund quota: %w", err)
 	}
 
 	// 🔁 Update schedule availability
@@ -754,6 +751,14 @@ func (r *teacherRepository) CancelBookedClass(
 		First(&booking, booking.ID).Error; err != nil {
 		// Log error but don't fail the request since cancellation is done
 		fmt.Printf("⚠️ Failed to reload booking details: %v\n", err)
+	}
+
+	// Fix missing instrument for trial package notification
+	if booking.PackageUsed.Package != nil && booking.PackageUsed.Package.Instrument == nil && booking.InstrumentID > 0 {
+		var inst domain.Instrument
+		if err := r.db.WithContext(ctx).Where("id = ?", booking.InstrumentID).First(&inst).Error; err == nil {
+			booking.PackageUsed.Package.Instrument = &inst
+		}
 	}
 
 	return &booking, nil

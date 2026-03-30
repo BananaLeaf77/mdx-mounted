@@ -362,8 +362,13 @@ func (r *studentRepository) BookClassTrial(
 		return nil, fmt.Errorf("gagal menyimpan booking: %w", err)
 	}
 
-	newBooking.PackageUsed.Package.Instrument.Name = bookedInstrumentName
-	newBooking.PackageUsed.Package.TrialInstrument = bookedInstrumentName
+	if newBooking.PackageUsed.Package != nil {
+		if newBooking.PackageUsed.Package.Instrument == nil {
+			newBooking.PackageUsed.Package.Instrument = &domain.Instrument{}
+		}
+		newBooking.PackageUsed.Package.Instrument.Name = bookedInstrumentName
+		newBooking.PackageUsed.Package.TrialInstrument = bookedInstrumentName
+	}
 
 	return &newBooking, nil
 }
@@ -478,7 +483,6 @@ func (r *studentRepository) CancelBookedClass(
 		return nil, fmt.Errorf("gagal membatalkan booking: %w", err)
 	}
 
-	// Refund quota (skip for trial packages)
 	if err := tx.Model(&domain.StudentPackage{}).
 		Where("id = ?", booking.StudentPackageID).
 		Update("remaining_quota", gorm.Expr("remaining_quota + 1")).Error; err != nil {
@@ -516,6 +520,15 @@ func (r *studentRepository) CancelBookedClass(
 	if err := tx.Commit().Error; err != nil {
 		return nil, fmt.Errorf("gagal menyimpan pembatalan: %w", err)
 	}
+
+	// Fix missing instrument for trial package notification
+	if booking.PackageUsed.Package != nil && booking.PackageUsed.Package.Instrument == nil && booking.InstrumentID > 0 {
+		var inst domain.Instrument
+		if err := r.db.WithContext(ctx).Where("id = ?", booking.InstrumentID).First(&inst).Error; err == nil {
+			booking.PackageUsed.Package.Instrument = &inst
+		}
+	}
+
 	return &booking, nil
 }
 
