@@ -834,7 +834,10 @@ func (r *studentRepository) GetMyBookedClasses(ctx context.Context, studentUUID 
 		if bookings[i].PackageUsed.Package.IsTrial {
 			var instrument domain.Instrument
 			r.db.WithContext(ctx).Where("id = ?", bookings[i].InstrumentID).First(&instrument)
-			bookings[i].PackageUsed.Package.TrialInstrument = instrument.Name
+
+			packageCopy := *bookings[i].PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			bookings[i].PackageUsed.Package = &packageCopy
 		}
 
 		startTimeStr := bookings[i].Schedule.StartTime
