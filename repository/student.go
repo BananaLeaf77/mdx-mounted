@@ -416,6 +416,25 @@ func (r *studentRepository) GetMyClassHistory(ctx context.Context, studentUUID s
 	if err := q.Find(&histories).Error; err != nil {
 		return nil, fmt.Errorf("failed to fetch class history: %w", err)
 	}
+
+	// Fix trial instrument for each booking
+	for i := range histories {
+		// Check if Booking exists (not zero value) and PackageUsed exists
+		if histories[i].Booking.ID != 0 &&
+			histories[i].Booking.PackageUsed.ID != 0 &&
+			histories[i].Booking.PackageUsed.Package != nil &&
+			histories[i].Booking.PackageUsed.Package.IsTrial {
+
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", histories[i].Booking.InstrumentID).First(&instrument)
+
+			// Create a copy to avoid modifying the shared instance
+			packageCopy := *histories[i].Booking.PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			histories[i].Booking.PackageUsed.Package = &packageCopy
+		}
+	}
+
 	return &histories, nil
 }
 

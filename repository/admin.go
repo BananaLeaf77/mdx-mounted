@@ -132,12 +132,30 @@ func (r *adminRepo) GetAllClassHistories(ctx context.Context) (*[]domain.ClassHi
 		Preload("Booking.PackageUsed.Package").
 		Preload("Booking.PackageUsed.Package.Instrument").
 		Preload("Documentations").
-		Joins("LEFT JOIN bookings ON class_histories.booking_id = bookings.id"). // Join untuk akses class_date
-		Order("bookings.class_date DESC").                                       // Sort by actual class date
+		Joins("LEFT JOIN bookings ON class_histories.booking_id = bookings.id").
+		Order("bookings.class_date DESC").
 		Find(&histories).Error
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch class history: %w", err)
+	}
+
+	// Fix trial instrument for each booking
+	for i := range histories {
+		// Check if Booking exists and has PackageUsed with Package
+		if histories[i].Booking.ID != 0 &&
+			histories[i].Booking.PackageUsed.ID != 0 &&
+			histories[i].Booking.PackageUsed.Package != nil &&
+			histories[i].Booking.PackageUsed.Package.IsTrial {
+
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", histories[i].Booking.InstrumentID).First(&instrument)
+
+			// Create a copy to avoid modifying the shared instance
+			packageCopy := *histories[i].Booking.PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			histories[i].Booking.PackageUsed.Package = &packageCopy
+		}
 	}
 
 	return &histories, nil

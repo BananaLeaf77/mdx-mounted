@@ -56,6 +56,7 @@ func (r *teacherRepository) DeleteAvailabilityBasedOnDay(ctx context.Context, te
 
 	return nil
 }
+
 func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
 	var histories []domain.ClassHistory
 
@@ -66,6 +67,8 @@ func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID s
 		Preload("Booking").
 		Preload("Booking.Schedule").
 		Preload("Booking.Student").
+		Preload("Booking.PackageUsed").
+		Preload("Booking.PackageUsed.Package").
 		Preload("Booking.PackageUsed.Package.Instrument").
 		Preload("Documentations").
 		Order("class_histories.created_at DESC")
@@ -76,6 +79,24 @@ func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID s
 
 	if err := q.Find(&histories).Error; err != nil {
 		return nil, fmt.Errorf("failed to fetch teacher class history: %w", err)
+	}
+
+	// Fix trial instrument for each booking
+	for i := range histories {
+		// Check if Booking exists and has PackageUsed with Package
+		if histories[i].Booking.ID != 0 && 
+		   histories[i].Booking.PackageUsed.ID != 0 && 
+		   histories[i].Booking.PackageUsed.Package != nil && 
+		   histories[i].Booking.PackageUsed.Package.IsTrial {
+			
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", histories[i].Booking.InstrumentID).First(&instrument)
+			
+			// Create a copy to avoid modifying the shared instance
+			packageCopy := *histories[i].Booking.PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			histories[i].Booking.PackageUsed.Package = &packageCopy
+		}
 	}
 
 	return &histories, nil
