@@ -574,58 +574,96 @@ func (r *adminRepo) GetAllStudents(ctx context.Context) ([]domain.User, error) {
 }
 
 // GetFilteredStudents returns students filtered by activity status:
-//   - active:         has at least one active package (remaining_quota > 0 AND end_date >= now)
-//   - inactive_short: no active package, last package purchase was within the last 3 months
-//   - inactive_long:  no active package, last package purchase was more than 3 months ago (or never purchased)
+//   - active:         has active package OR has upcoming/ongoing classes OR has purchased within last 3 months
+//   - inactive_short: not active, but had activity (purchase or registration) within last 3 months
+//   - inactive_long:  not active, and no activity in last 3 months (or never had any activity)
 //   - all (default):  returns all students without filter
 func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.StudentActivityFilter) ([]domain.User, error) {
 	var students []domain.User
 	threeMonthsAgo := time.Now().AddDate(0, -3, 0)
+	now := time.Now()
+
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	nowLoc := now.In(loc)
+
 	baseQuery := r.db.WithContext(ctx).Where("role = ? AND deleted_at IS NULL", domain.RoleStudent)
 
 	switch filter {
 	case domain.StudentFilterActive:
-		// Has an active student_package
+		// Active if: has active package OR has upcoming/ongoing classes OR has purchased within last 3 months
 		err := baseQuery.
 			Where(`uuid IN (
 				SELECT DISTINCT sp.student_uuid
 				FROM student_packages sp
 				WHERE sp.remaining_quota > 0
 				  AND sp.end_date >= ?
-			)`, time.Now()).
+			) OR uuid IN (
+				SELECT DISTINCT b.student_uuid
+				FROM bookings b
+				WHERE b.status IN (?, ?, ?)
+				AND b.class_date >= ?
+			) OR uuid IN (
+				SELECT DISTINCT sp2.student_uuid
+				FROM student_packages sp2
+				WHERE sp2.start_date >= ?
+			)`, now, domain.StatusBooked, domain.StatusRescheduled, domain.StatusUpcoming, nowLoc, threeMonthsAgo).
 			Find(&students).Error
 		return students, err
 
 	case domain.StudentFilterInactiveShort:
-		// No active package AND (last purchase was < 3 months ago OR registered < 3 months ago)
+		// Not active (no active package, no upcoming classes, no purchase in last 3 months)
+		// BUT had purchase OR registration within last 3 months
 		err := baseQuery.
 			Where(`uuid NOT IN (
 				SELECT DISTINCT sp.student_uuid
 				FROM student_packages sp
 				WHERE sp.remaining_quota > 0
 				  AND sp.end_date >= ?
-			)`, time.Now()).
-			Where(`(uuid IN (
+			)`, now).
+			Where(`uuid NOT IN (
+				SELECT DISTINCT b.student_uuid
+				FROM bookings b
+				WHERE b.status IN (?, ?, ?)
+				AND b.class_date >= ?
+			)`, domain.StatusBooked, domain.StatusRescheduled, domain.StatusUpcoming, nowLoc).
+			Where(`uuid NOT IN (
 				SELECT DISTINCT sp2.student_uuid
 				FROM student_packages sp2
 				WHERE sp2.start_date >= ?
+			)`, threeMonthsAgo).
+			Where(`(uuid IN (
+				SELECT DISTINCT sp3.student_uuid
+				FROM student_packages sp3
+				WHERE sp3.start_date >= ?
 			) OR created_at >= ?)`, threeMonthsAgo, threeMonthsAgo).
 			Find(&students).Error
 		return students, err
 
 	case domain.StudentFilterInactiveLong:
-		// No active package AND (never purchased OR last purchase was > 3 months ago) AND registered > 3 months ago
+		// Not active (no active package, no upcoming classes, no purchase in last 3 months)
+		// AND no activity in last 3 months (no purchase AND registered > 3 months ago)
 		err := baseQuery.
 			Where(`uuid NOT IN (
 				SELECT DISTINCT sp.student_uuid
 				FROM student_packages sp
 				WHERE sp.remaining_quota > 0
 				  AND sp.end_date >= ?
-			)`, time.Now()).
+			)`, now).
+			Where(`uuid NOT IN (
+				SELECT DISTINCT b.student_uuid
+				FROM bookings b
+				WHERE b.status IN (?, ?, ?)
+				AND b.class_date >= ?
+			)`, domain.StatusBooked, domain.StatusRescheduled, domain.StatusUpcoming, nowLoc).
 			Where(`uuid NOT IN (
 				SELECT DISTINCT sp2.student_uuid
 				FROM student_packages sp2
 				WHERE sp2.start_date >= ?
+			)`, threeMonthsAgo).
+			Where(`uuid NOT IN (
+				SELECT DISTINCT sp3.student_uuid
+				FROM student_packages sp3
+				WHERE sp3.start_date >= ?
 			) AND created_at < ?`, threeMonthsAgo, threeMonthsAgo).
 			Find(&students).Error
 		return students, err
