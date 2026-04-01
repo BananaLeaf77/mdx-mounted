@@ -246,8 +246,6 @@ func (s *adminService) GetFilteredStudents(ctx context.Context, filter domain.St
 	return s.adminRepo.GetFilteredStudents(ctx, filter)
 }
 
-
-
 // GetAllUsers returns all users
 func (s *adminService) GetAllUsers(ctx context.Context) ([]domain.User, error) {
 	return s.adminRepo.GetAllUsers(ctx)
@@ -367,38 +365,55 @@ func (s *adminService) ConnectWhatsApp(ctx context.Context) (map[string]interfac
 		return map[string]interface{}{"status": "already_connected"}, nil
 	}
 
+	// Device already linked — just reconnect
 	if s.messenger.Store.ID != nil {
-		err := s.messenger.Connect()
-		if err != nil {
+		if err := s.messenger.Connect(); err != nil {
 			return nil, fmt.Errorf("gagal menyambungkan: %v", err)
 		}
 		return map[string]interface{}{"status": "connected"}, nil
 	}
 
-	// Device not linked. We must generate a QR code!
+	// Device not linked — generate QR code without blocking the request.
 	qrChan, _ := s.messenger.GetQRChannel(context.Background())
-	err := s.messenger.Connect()
-	if err != nil {
+	if err := s.messenger.Connect(); err != nil {
 		return nil, fmt.Errorf("gagal menyambungkan device baru: %w", err)
 	}
 
-	for evt := range qrChan {
-		if evt.Event == "code" {
-			return map[string]interface{}{
-				"status": "qr_code_generated",
-				"qr_code": evt.Code,
-			}, nil
-		} else if evt.Event == "success" {
-			return map[string]interface{}{"status": "connected"}, nil
-		} else if evt.Event == "timeout" {
-			break
-		}
+	type result struct {
+		data map[string]interface{}
+		err  error
 	}
-	
-	s.messenger.Disconnect()
-	return nil, errors.New("gagal mendapatkan qr code")
-}
+	ch := make(chan result, 1)
+	go func() {
+		for evt := range qrChan {
+			switch evt.Event {
+			case "code":
+				ch <- result{data: map[string]interface{}{
+					"status":  "qr_code_generated",
+					"qr_code": evt.Code,
+				}}
+				return
+			case "success":
+				ch <- result{data: map[string]interface{}{"status": "connected"}}
+				return
+			case "timeout":
+				ch <- result{err: errors.New("QR code timeout, silakan coba lagi")}
+				return
+			}
+		}
+		ch <- result{err: errors.New("gagal mendapatkan qr code")}
+	}()
 
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			return nil, r.err
+		}
+		return r.data, nil
+	case <-ctx.Done():
+		return nil, errors.New("request timeout menunggu QR code")
+	}
+}
 func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 	if s.messenger == nil {
 		return errors.New("whatsapp client not initialized")
