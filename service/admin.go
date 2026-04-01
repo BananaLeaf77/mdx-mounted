@@ -347,12 +347,18 @@ func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interf
 	if s.messenger == nil {
 		return map[string]interface{}{"status": "not_initialized"}, nil
 	}
+
 	if s.messenger.IsConnected() {
-		return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
+		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
+			return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
+		}
+		return map[string]interface{}{"status": "connected_transitioning"}, nil
 	}
-	if s.messenger.Store.ID != nil {
+
+	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
 		return map[string]interface{}{"status": "disconnected_but_linked"}, nil
 	}
+
 	return map[string]interface{}{"status": "not_linked"}, nil
 }
 
