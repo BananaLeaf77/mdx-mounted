@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 
 	"go.mau.fi/whatsmeow"
@@ -163,7 +164,12 @@ Terima kasih,
 			)
 
 			go func() {
-				utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
+				err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
+				if err != nil {
+					log.Printf("🔕 Failed to send WhatsApp to student %s: %v", phoneNormalized, err)
+				} else {
+					log.Printf("🔔 WhatsApp notification sent to student: %s", dataStudent.Name)
+				}
 			}()
 		}
 	}
@@ -451,5 +457,11 @@ func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {
 		return errors.New("nomor telepon tidak valid")
 	}
 	msg := "Ping dari sistem MadEU. Tes koneksi berhasil."
-	return utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msg)
+	err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msg)
+	if err != nil {
+		log.Printf("🔕 Failed to send WhatsApp to: %s: %v", phone, err)
+	} else {
+		log.Printf("🔔 Ping WhatsApp notification sent to: %s successfully", phone)
+	}
+	return nil
 }

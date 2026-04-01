@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -21,10 +22,10 @@ func NewManagerService(managerRepo domain.ManagerRepository, meow *whatsmeow.Cli
 }
 
 func (s *managerService) GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]domain.TeacherSchedule, error) {
-    if teacherUUID == "" {
-        return nil, errors.New("UUID guru tidak boleh kosong")
-    }
-    return s.managerRepo.GetTeacherSchedules(ctx, teacherUUID)
+	if teacherUUID == "" {
+		return nil, errors.New("UUID guru tidak boleh kosong")
+	}
+	return s.managerRepo.GetTeacherSchedules(ctx, teacherUUID)
 }
 
 func (s *managerService) GetAllTeachers(ctx context.Context, exceptTeacherUUID string) ([]domain.User, error) {
@@ -90,7 +91,12 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 		phone := utils.NormalizePhoneNumber(booking.Schedule.Teacher.Phone)
 		if phone != "" {
 			go func() {
-				utils.SendWhatsAppMessage(s.messenger, phone, msg)
+				err := utils.SendWhatsAppMessage(s.messenger, phone, msg)
+				if err != nil {
+					log.Printf("🔕 Failed to send WhatsApp to teacher %s: %v", phone, err)
+				} else {
+					log.Printf("🔔 WhatsApp notification sent to teacher: %s", booking.Schedule.Teacher.Name)
+				}
 			}()
 		}
 	}
@@ -187,7 +193,12 @@ Terima kasih atas pengertiannya.
 		)
 
 		go func() {
-			utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
+			err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
+			if err != nil {
+				log.Printf("🔕 Failed to send WhatsApp to student %s: %v", phoneNormalized, err)
+			} else {
+				log.Printf("🔔 WhatsApp notification sent to student: %s", data.Name)
+			}
 		}()
 	}
 
