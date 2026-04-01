@@ -11,10 +11,27 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
-// SendWhatsAppMessage safely sends a WhatsApp message by first checking if the user is on WhatsApp
-// and forcing a device sync to ensure they actually receive it (fixes the 1-checkmark iOS issue).
 func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string) error {
-	if client == nil || !client.IsConnected() {
+	if client == nil {
+		return fmt.Errorf("whatsapp client is not initialized")
+	}
+
+	// 🔥 RESILIENCE FIX: If disconnected but session exists, try to reconnect before failing.
+	if !client.IsConnected() && client.Store.ID != nil {
+		log.Printf("🔌 WhatsApp disconnected; attempting to reconnect before sending message to %s...", phone)
+		_ = client.Connect() // Fire reconnection attempt
+
+		// Wait briefly for connection (max 5 seconds)
+		for i := 0; i < 25; i++ {
+			time.Sleep(200 * time.Millisecond)
+			if client.IsConnected() {
+				log.Println("✅ WhatsApp reconnected successfully!")
+				break
+			}
+		}
+	}
+
+	if !client.IsConnected() {
 		return fmt.Errorf("whatsapp client is not connected")
 	}
 

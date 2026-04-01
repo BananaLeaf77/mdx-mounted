@@ -50,8 +50,8 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 	_, err = c.AddFunc("0 9 * * 1", func() {
 		log.Println("🔔 [CRON] Starting weekly student booking reminder...")
 
-		if waClient == nil || !waClient.IsConnected() {
-			log.Println("⚠️  [CRON] WhatsApp client not connected, skipping student reminder")
+		if waClient == nil {
+			log.Println("⚠️  [CRON] WhatsApp client not initialized, skipping student reminder")
 			return
 		}
 

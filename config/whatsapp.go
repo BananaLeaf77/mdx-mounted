@@ -20,6 +20,12 @@ func eventHandler(evt interface{}) {
 	switch v := evt.(type) {
 	case *events.Message:
 		fmt.Println("Received a message!", v.Message.GetConversation())
+	case *events.Connected:
+		log.Println("✅ WhatsApp Client Connected")
+	case *events.Disconnected:
+		log.Println("❌ WhatsApp Client Disconnected")
+	case *events.LoggedOut:
+		log.Println("⚠️ WhatsApp Client Logged Out - Session Invalidated")
 	}
 }
 
