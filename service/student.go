@@ -71,7 +71,6 @@ func (s *studentUseCase) BookClass(
 		return nil, err
 	}
 	if s.messenger != nil {
-		utils.PrintPretty(data)
 		s.sendBookClassNotif(data)
 	}
 	return data, nil
