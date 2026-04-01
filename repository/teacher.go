@@ -435,6 +435,18 @@ func (r *teacherRepository) UpdateTeacherData(ctx context.Context, uuid string, 
 					"specialties":         payload.TeacherProfile.Specialties,
 					"languages":           payload.TeacherProfile.Languages,
 				}).Error
+
+			if err == nil && len(payload.TeacherProfile.Album) > 0 {
+				// Hapus album lama (hard delete untuk sinkronisasi list baru)
+				// Menggunakan UserUUID (uuid) sebagai TeacherUUID di tabel TeacherAlbum
+				tx.Unscoped().Where("teacher_uuid = ?", uuid).Delete(&domain.TeacherAlbum{})
+
+				// Insert album baru
+				for i := range payload.TeacherProfile.Album {
+					payload.TeacherProfile.Album[i].TeacherUUID = uuid
+					tx.Create(&payload.TeacherProfile.Album[i])
+				}
+			}
 		} else {
 			// Create new profile
 			payload.TeacherProfile.UserUUID = uuid

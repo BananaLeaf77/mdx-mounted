@@ -14,7 +14,7 @@ type SlotsAvailability struct {
 	StartTime    string   `json:"start_time" binding:"required,timeformat"`
 	EndTime      string   `json:"end_time" binding:"required,timeformat"`
 }
-	
+
 // Request untuk Create Teacher
 type CreateTeacherRequest struct {
 	Name              string  `json:"name" binding:"required,min=3,max=50"`
@@ -49,23 +49,24 @@ type UpdateTeacherProfileRequest struct {
 
 // Request untuk Update Teacher Profile (by Teacher themselves)
 type UpdateTeacherProfileRequestByTeacher struct {
-	Name              string  `json:"name" binding:"required,min=3,max=50"`
-	Phone             string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Image             *string `json:"image" binding:"omitempty,url"`
-	Gender            string  `json:"gender" binding:"required,oneof=male female"`
-	Bio               *string `json:"bio" binding:"omitempty,max=1000"`
-	Education         *string `json:"education" binding:"omitempty,max=500"`
-	Certificates      *string `json:"certificates" binding:"omitempty,max=500"`
-	YearsOfExperience *int    `json:"years_of_experience" binding:"omitempty,min=0"`
-	Experience        *string `json:"experience" binding:"omitempty,max=1000"`
-	TeachingStyle     *string `json:"teaching_style" binding:"omitempty,max=500"`
-	Specialties       *string `json:"specialties" binding:"omitempty,max=500"`
-	Languages         *string `json:"languages" binding:"omitempty,max=200"`
+	Name              string   `json:"name" binding:"required,min=3,max=50"`
+	Phone             string   `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Image             *string  `json:"image" binding:"omitempty,url"`
+	Gender            string   `json:"gender" binding:"required,oneof=male female"`
+	Bio               *string  `json:"bio" binding:"omitempty,max=1000"`
+	Education         *string  `json:"education" binding:"omitempty,max=500"`
+	Certificates      *string  `json:"certificates" binding:"omitempty,max=500"`
+	YearsOfExperience *int     `json:"years_of_experience" binding:"omitempty,min=0"`
+	Experience        *string  `json:"experience" binding:"omitempty,max=1000"`
+	TeachingStyle     *string  `json:"teaching_style" binding:"omitempty,max=500"`
+	Specialties       *string  `json:"specialties" binding:"omitempty,max=500"`
+	Languages         *string  `json:"languages" binding:"omitempty,max=200"`
+	AlbumURLs         []string `json:"album_urls" binding:"omitempty,dive,url"`
 }
 
 func MapCreateTeacherRequestToUserByTeacher(req *UpdateTeacherProfileRequestByTeacher) domain.User {
-	return domain.User{
-		Name: req.Name,
+	user := domain.User{
+		Name:   req.Name,
 		Phone:  req.Phone,
 		Image:  req.Image,
 		Gender: req.Gender,
@@ -80,6 +81,18 @@ func MapCreateTeacherRequestToUserByTeacher(req *UpdateTeacherProfileRequestByTe
 			Languages:         deref(req.Languages),
 		},
 	}
+
+	// Add Album URLs if provided
+	if len(req.AlbumURLs) > 0 {
+		for i, url := range req.AlbumURLs {
+			user.TeacherProfile.Album = append(user.TeacherProfile.Album, domain.TeacherAlbum{
+				URL:   url,
+				Order: i + 1,
+			})
+		}
+	}
+
+	return user
 }
 
 // Mapper: Convert DTO → Domain
@@ -101,9 +114,9 @@ func MapCreateTeacherRequestToUser(req *CreateTeacherRequest) *domain.User {
 
 // Simplified request - teacher only needs to provide notes and optional photos
 type FinishClassRequest struct {
-    BookingID    int      `json:"booking_id" binding:"required,gt=0"`
-    Notes        string   `json:"notes" binding:"omitempty,max=2000"`
-    DocumentURLs []string `json:"documentations,omitempty" binding:"omitempty,dive,url"`
+	BookingID    int      `json:"booking_id" binding:"required,gt=0"`
+	Notes        string   `json:"notes" binding:"omitempty,max=2000"`
+	DocumentURLs []string `json:"documentations,omitempty" binding:"omitempty,dive,url"`
 }
 
 // ✅ Update mapper to handle string time conversion
