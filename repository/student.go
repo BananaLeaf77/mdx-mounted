@@ -180,7 +180,8 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			*result.IsRoomAvailable &&
 				*result.IsDurationCompatible &&
 				!*result.IsBookedSameDayAndTime &&
-				!teacherBusy,
+				!teacherBusy &&
+				!sch.IsBooked,
 		)
 
 		results = append(results, result)
@@ -235,6 +236,11 @@ func (r *studentRepository) BookClassTrial(
 			return nil, errors.New("jadwal tidak ditemukan")
 		}
 		return nil, fmt.Errorf("gagal mengambil jadwal: %w", err)
+	}
+
+	if schedule.IsBooked {
+		tx.Rollback()
+		return nil, errors.New("jadwal sudah dibooking")
 	}
 
 	// ── 2b. Compute next class date early so we can check teacher conflict ────
@@ -629,6 +635,11 @@ func (r *studentRepository) BookClass(
 			return nil, errors.New("jadwal tidak ditemukan")
 		}
 		return nil, fmt.Errorf("gagal mengambil jadwal: %w", err)
+	}
+
+	if schedule.IsBooked {
+		tx.Rollback()
+		return nil, errors.New("jadwal sudah dibooking")
 	}
 
 	// ── 1b. Check if the teacher is already occupied at this time (including
@@ -1074,7 +1085,8 @@ func (r *studentRepository) GetAvailableSchedules(
 			*result.IsRoomAvailable &&
 				*result.IsDurationCompatible &&
 				!*result.IsBookedSameDayAndTime &&
-				!teacherBusy,
+				!teacherBusy &&
+				!sch.IsBooked,
 		)
 
 		results = append(results, result)
