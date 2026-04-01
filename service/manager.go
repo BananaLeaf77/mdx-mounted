@@ -27,8 +27,8 @@ func (s *managerService) GetTeacherSchedules(ctx context.Context, teacherUUID st
     return s.managerRepo.GetTeacherSchedules(ctx, teacherUUID)
 }
 
-func (s *managerService) GetAllTeachers(ctx context.Context) ([]domain.User, error) {
-	return s.managerRepo.GetAllTeachers(ctx)
+func (s *managerService) GetAllTeachers(ctx context.Context, exceptTeacherUUID string) ([]domain.User, error) {
+	return s.managerRepo.GetAllTeachers(ctx, exceptTeacherUUID)
 }
 
 type managerService struct {

@@ -20,25 +20,31 @@ func NewManagerRepository(db *gorm.DB) domain.ManagerRepository {
 }
 
 func (r *managerRepo) GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]domain.TeacherSchedule, error) {
-    var schedules []domain.TeacherSchedule
-    if err := r.db.WithContext(ctx).
-        Where("teacher_uuid = ? AND deleted_at IS NULL", teacherUUID).
-        Order("day_of_week, start_time").
-        Find(&schedules).Error; err != nil {
-        return nil, err
-    }
-    return schedules, nil
+	var schedules []domain.TeacherSchedule
+	if err := r.db.WithContext(ctx).
+		Where("teacher_uuid = ? AND deleted_at IS NULL", teacherUUID).
+		Order("day_of_week, start_time").
+		Find(&schedules).Error; err != nil {
+		return nil, err
+	}
+	return schedules, nil
 }
 
-func (r *managerRepo) GetAllTeachers(ctx context.Context) ([]domain.User, error) {
-    var teachers []domain.User
-    if err := r.db.WithContext(ctx).
-        Where("role = ? AND deleted_at IS NULL", domain.RoleTeacher).
-        Preload("TeacherProfile.Instruments").
-        Find(&teachers).Error; err != nil {
-        return nil, err
-    }
-    return teachers, nil
+func (r *managerRepo) GetAllTeachers(ctx context.Context, exceptTeacherUUID string) ([]domain.User, error) {
+	var teachers []domain.User
+
+	query := r.db.WithContext(ctx).
+		Where("role = ? AND deleted_at IS NULL", domain.RoleTeacher).
+		Preload("TeacherProfile.Instruments")
+
+	if exceptTeacherUUID != "" {
+		query = query.Where("uuid != ?", exceptTeacherUUID)
+	}
+
+	if err := query.Find(&teachers).Error; err != nil {
+		return nil, err
+	}
+	return teachers, nil
 }
 
 func (r *managerRepo) GetCancelledClassHistories(ctx context.Context) (*[]domain.ClassHistory, error) {
@@ -111,6 +117,7 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		ScheduleID:       req.SubScheduleID,
 		StudentPackageID: original.StudentPackageID,
 		ClassDate:        req.ClassDate,
+		InstrumentID:     original.InstrumentID, // Keep original instrument
 		Status:           domain.StatusBooked,
 		BookedAt:         time.Now(),
 		IsManual:         true, // ← this
@@ -121,8 +128,7 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		return nil, fmt.Errorf("gagal membuat booking baru: %w", err)
 	}
 
-	//  5. Deduct quota back — it was refunded when the original teacher cancelled,
-	//     now the student is actually attending with a substitute so it gets consumed again
+	// 5. Deduct quota back — it was refunded when the original teacher cancelled,
 	if err := tx.Model(&domain.StudentPackage{}).
 		Where("id = ?", original.StudentPackageID).
 		UpdateColumn("remaining_quota", gorm.Expr("remaining_quota - 1")).Error; err != nil {
@@ -130,7 +136,7 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		return nil, fmt.Errorf("gagal mengurangi kuota paket: %w", err)
 	}
 
-	// 6. Guard against quota going negative (edge case: manager tampered quota manually)
+	// 6. Guard against quota going negative
 	var pkg domain.StudentPackage
 	if err := tx.Where("id = ?", original.StudentPackageID).First(&pkg).Error; err == nil {
 		if pkg.RemainingQuota < 0 {
@@ -151,6 +157,22 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		Preload("PackageUsed.Package.Instrument").
 		First(&newBooking, newBooking.ID).Error; err != nil {
 		return nil, fmt.Errorf("gagal memuat data booking: %w", err)
+	}
+
+	if newBooking.PackageUsed.Package != nil && newBooking.PackageUsed.Package.IsTrial {
+		var instrument domain.Instrument
+		if err := r.db.WithContext(ctx).Where("id = ?", newBooking.InstrumentID).First(&instrument).Error; err == nil {
+			packageCopy := *newBooking.PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+
+			// For consistency with other parts of the system, we might also want to set the instrument itself
+			if packageCopy.Instrument == nil {
+				packageCopy.Instrument = &domain.Instrument{}
+			}
+			packageCopy.Instrument.Name = instrument.Name
+
+			newBooking.PackageUsed.Package = &packageCopy
+		}
 	}
 
 	return &newBooking, nil

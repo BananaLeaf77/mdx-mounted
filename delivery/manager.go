@@ -66,7 +66,8 @@ func (h *ManagerHandler) GetTeacherSchedules(c *gin.Context) {
 
 func (h *ManagerHandler) GetAllTeachers(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
-	teachers, err := h.uc.GetAllTeachers(c.Request.Context())
+	teacherUUID := c.Query("teacherUUID")
+	teachers, err := h.uc.GetAllTeachers(c.Request.Context(), teacherUUID)
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "GetAllTeachers - UseCase", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{
