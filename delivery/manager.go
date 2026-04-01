@@ -119,15 +119,9 @@ func (h *ManagerHandler) RebookWithSubstitute(c *gin.Context) {
 		return
 	}
 
-	classDate, err := time.Parse("2006-01-02", req.ClassDate)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "Format tanggal tidak valid, gunakan YYYY-MM-DD",
-			"message": "Gagal membuat ulang pemesanan",
-		})
-		return
-	}
+	// asia makassar timezone
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	classDate := time.Now().In(loc)
 
 	input := domain.RebookInput{
 		OriginalBookingID: req.OriginalBookingID,
