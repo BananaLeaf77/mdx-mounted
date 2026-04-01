@@ -40,6 +40,10 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 
 	clientLog := waLog.Stdout("Client", "INFO", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
+	// Improve E2EE recovery on linked devices (notably iOS) when session keys rotate.
+	client.AutomaticMessageRerequestFromPhone = true
+	client.AutoTrustIdentity = true
+	client.UseRetryMessageStore = true
 	client.AddEventHandler(eventHandler)
 
 	if client.Store.ID != nil {

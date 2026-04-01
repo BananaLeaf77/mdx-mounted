@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -17,12 +18,15 @@ func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string)
 		return fmt.Errorf("whatsapp client is not connected")
 	}
 
+	sendCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
 	jid := types.NewJID(phone, types.DefaultUserServer)
 
 	// 🔥 CRITICAL FIX: Always query the server for their latest devices BEFORE sending.
 	// This forces whatsmeow to download their current encryption keys, which fixes
 	// the issue where iOS devices drop the message and it gets stuck on 1 checkmark.
-	res, err := client.IsOnWhatsApp(context.Background(), []string{phone})
+	res, err := client.IsOnWhatsApp(sendCtx, []string{phone})
 	if err != nil {
 		log.Println("⚠️ Failed to check IsOnWhatsApp for", phone, ":", err)
 		// Try to send anyway as a fallback using the constructed JID
@@ -34,6 +38,11 @@ func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string)
 		jid = res[0].JID
 	}
 
+	// Force device list/session refresh before encrypting outgoing payload.
+	if _, err := client.GetUserDevicesContext(sendCtx, []types.JID{jid}); err != nil {
+		log.Println("⚠️ Failed to refresh user devices for", jid.String(), ":", err)
+	}
+
 	// It's safer to use ExtendedTextMessage instead of basic Conversation for modern iOS clients
 	waMessage := &waE2E.Message{
 		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
@@ -41,9 +50,16 @@ func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string)
 		},
 	}
 
-	_, err = client.SendMessage(context.Background(), jid, waMessage)
+	_, err = client.SendMessage(sendCtx, jid, waMessage)
 	if err != nil {
-		return fmt.Errorf("failed to send whatsapp message to %s: %w", phone, err)
+		// Retry once after a fresh device sync; helps when iOS sessions rotate.
+		if _, refreshErr := client.GetUserDevicesContext(sendCtx, []types.JID{jid}); refreshErr != nil {
+			log.Println("⚠️ Retry device refresh failed for", jid.String(), ":", refreshErr)
+		}
+		_, retryErr := client.SendMessage(sendCtx, jid, waMessage)
+		if retryErr != nil {
+			return fmt.Errorf("failed to send whatsapp message to %s: %w", phone, retryErr)
+		}
 	}
 
 	return nil
