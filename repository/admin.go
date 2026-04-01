@@ -1046,13 +1046,9 @@ func (r *adminRepo) CleanupWhatsAppData(ctx context.Context, deviceJID string) e
 		"DELETE FROM whatsmeow_sender_keys WHERE our_jid = ?",
 		"DELETE FROM whatsmeow_sessions WHERE our_jid = ?",
 		"DELETE FROM whatsmeow_message_secrets WHERE our_jid = ?",
-		"DELETE FROM whatsmeow_mutual_tses WHERE our_jid = ?",
 		"DELETE FROM whatsmeow_privacy_tokens WHERE our_jid = ?",
-		"DELETE FROM whatsmeow_appdata_sync_keys WHERE our_jid = ?",
 		"DELETE FROM whatsmeow_contacts WHERE our_jid = ?",
 		"DELETE FROM whatsmeow_chat_settings WHERE our_jid = ?",
-		"DELETE FROM whatsmeow_chat_archives WHERE our_jid = ?",
-		"DELETE FROM whatsmeow_settings WHERE our_jid = ?",
 		"DELETE FROM whatsmeow_device WHERE jid = ?",
 	}
 
