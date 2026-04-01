@@ -84,14 +84,14 @@ func (r *teacherRepository) GetMyClassHistory(ctx context.Context, teacherUUID s
 	// Fix trial instrument for each booking
 	for i := range histories {
 		// Check if Booking exists and has PackageUsed with Package
-		if histories[i].Booking.ID != 0 && 
-		   histories[i].Booking.PackageUsed.ID != 0 && 
-		   histories[i].Booking.PackageUsed.Package != nil && 
-		   histories[i].Booking.PackageUsed.Package.IsTrial {
-			
+		if histories[i].Booking.ID != 0 &&
+			histories[i].Booking.PackageUsed.ID != 0 &&
+			histories[i].Booking.PackageUsed.Package != nil &&
+			histories[i].Booking.PackageUsed.Package.IsTrial {
+
 			var instrument domain.Instrument
 			r.db.WithContext(ctx).Where("id = ?", histories[i].Booking.InstrumentID).First(&instrument)
-			
+
 			// Create a copy to avoid modifying the shared instance
 			packageCopy := *histories[i].Booking.PackageUsed.Package
 			packageCopy.TrialInstrument = instrument.Name
@@ -536,6 +536,16 @@ func (r *teacherRepository) GetAllBookedClass(ctx context.Context, teacherUUID s
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	now := time.Now().In(loc)
 	for i := range bookings {
+		// ✅ Handle trial instrument - similar to student repository
+		if bookings[i].PackageUsed.Package.IsTrial {
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", bookings[i].InstrumentID).First(&instrument)
+
+			packageCopy := *bookings[i].PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			bookings[i].PackageUsed.Package = &packageCopy
+		}
+
 		// Combine ClassDate with Schedule time components
 		startTimeStr := bookings[i].Schedule.StartTime
 		endTimeStr := bookings[i].Schedule.EndTime
