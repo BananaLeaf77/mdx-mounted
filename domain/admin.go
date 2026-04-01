@@ -114,4 +114,7 @@ type AdminRepository interface {
 	// Setting
 	GetSetting(ctx context.Context) (*Setting, error)
 	UpdateSetting(ctx context.Context, setting *Setting) error
+
+	// WhatsApp Cleanup
+	CleanupWhatsAppData(ctx context.Context, deviceJID string) error
 }

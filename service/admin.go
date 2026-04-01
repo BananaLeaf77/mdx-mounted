@@ -433,19 +433,32 @@ func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 		return errors.New("whatsapp client not initialized")
 	}
 
-	// Never auto-connect here. Disconnect should be idempotent and only tear down state.
-	var logoutErr error
-	if s.messenger.IsConnected() {
-		logoutErr = s.messenger.Logout(ctx)
-	} else {
-		// If not connected but still linked locally, clear the local link state.
-		if s.messenger.Store != nil {
-			logoutErr = s.messenger.Store.Delete(ctx)
+	// Get the JID before disconnecting
+	var deviceJID string
+	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
+		deviceJID = s.messenger.Store.ID.String()
+	}
+
+	// 🔥 FIX: Just disconnect, don't call Logout() which generates prekeys
+	s.messenger.Disconnect()
+
+	// 🔥 CRITICAL: Cleanup database records after disconnect
+	if deviceJID != "" {
+		log.Printf("🧹 Cleaning up WhatsApp database for %s...", deviceJID)
+		if err := s.adminRepo.CleanupWhatsAppData(ctx, deviceJID); err != nil {
+			log.Printf("⚠️ Failed to cleanup WhatsApp database: %v", err)
+		} else {
+			log.Printf("✅ WhatsApp database cleaned up successfully")
 		}
 	}
 
-	s.messenger.Disconnect()
-	return logoutErr
+	// 🔥 CRITICAL: Clear device ID from store to allow fresh pairing
+	if s.messenger.Store != nil {
+		s.messenger.Store.ID = nil
+		log.Printf("✅ Device ID cleared from store")
+	}
+
+	return nil
 }
 
 func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {

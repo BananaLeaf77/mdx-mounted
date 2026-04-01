@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -1030,5 +1031,37 @@ func (r *adminRepo) UpdateSetting(ctx context.Context, setting *domain.Setting) 
 	if err := r.db.WithContext(ctx).Save(setting).Error; err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
+	return nil
+}
+
+// CleanupWhatsAppData removes all whatsmeow related records for a clean reconnect
+func (r *adminRepo) CleanupWhatsAppData(ctx context.Context, deviceJID string) error {
+	if r.db == nil {
+		return errors.New("database connection not initialized")
+	}
+
+	queries := []string{
+		"DELETE FROM whatsmeow_identity_keys WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_pre_keys WHERE jid = ?",
+		"DELETE FROM whatsmeow_sender_keys WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_sessions WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_message_secrets WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_mutual_tses WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_privacy_tokens WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_appdata_sync_keys WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_contacts WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_chat_settings WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_chat_archives WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_settings WHERE our_jid = ?",
+		"DELETE FROM whatsmeow_device WHERE jid = ?",
+	}
+
+	for _, query := range queries {
+		if err := r.db.WithContext(ctx).Exec(query, deviceJID).Error; err != nil {
+			log.Printf("⚠️ Cleanup query failed (%s): %v", query, err)
+		}
+	}
+
+	log.Printf("✅ Cleaned up WhatsApp database records for %s", deviceJID)
 	return nil
 }
