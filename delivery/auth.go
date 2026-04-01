@@ -48,7 +48,7 @@ func NewAuthHandler(r *gin.Engine, authUC domain.AuthUseCase, db *gorm.DB) {
 
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"message":     "pong4",
+			"message":     "pong5",
 			"env":         os.Getenv("APP_ENV"),
 			"client_ip":   c.ClientIP(),
 			"user_agent":  c.Request.UserAgent(),
