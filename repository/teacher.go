@@ -117,7 +117,7 @@ func (r *teacherRepository) AddAvailability(ctx context.Context, schedules *[]do
 		}
 	}()
 
-	// ✅ Check for overlaps BEFORE inserting within the transaction
+	// ✅ Check for exact duplicates BEFORE inserting within the transaction
 	for _, schedule := range *schedules {
 		var count int64
 
@@ -128,7 +128,7 @@ func (r *teacherRepository) AddAvailability(ctx context.Context, schedules *[]do
 		err := tx.
 			Model(&domain.TeacherSchedule{}).
 			Where("teacher_uuid = ? AND day_of_week = ? AND deleted_at IS NULL", schedule.TeacherUUID, schedule.DayOfWeek).
-			Where("(start_time::time, end_time::time) OVERLAPS (?::time, ?::time)", startTimeStr, endTimeStr).
+			Where("start_time = ? AND end_time = ?", startTimeStr, endTimeStr).
 			Count(&count).Error
 
 		if err != nil {
@@ -346,7 +346,11 @@ func (r *teacherRepository) FinishClass(ctx context.Context, bookingID int, teac
 
 func (r *teacherRepository) GetMyProfile(ctx context.Context, userUUID string) (*domain.User, error) {
 	var teacher domain.User
-	if err := r.db.WithContext(ctx).Preload("TeacherProfile.Instruments").Where("uuid = ? AND role = ?", userUUID, "teacher").First(&teacher).Error; err != nil {
+	if err := r.db.WithContext(ctx).
+		Preload("TeacherProfile.Instruments").
+		Preload("TeacherProfile.Album").
+		Where("uuid = ? AND role = ?", userUUID, "teacher").
+		First(&teacher).Error; err != nil {
 		return nil, err
 	}
 	return &teacher, nil
