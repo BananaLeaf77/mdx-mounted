@@ -349,10 +349,12 @@ func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interf
 	}
 
 	if s.messenger.IsConnected() {
+		// A healthy connected state must have a linked device ID.
+		// During logout/disconnect transitions IsConnected can briefly be true.
 		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
 			return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
 		}
-		return map[string]interface{}{"status": "connected_transitioning"}, nil
+		return map[string]interface{}{"status": "disconnecting"}, nil
 	}
 
 	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
@@ -425,25 +427,19 @@ func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 		return errors.New("whatsapp client not initialized")
 	}
 
-	// Try to connect first before logging out if not connected
-	if !s.messenger.IsConnected() {
-		// Ignore error since we just want to ensure it connects if it can
-		_ = s.messenger.Connect()
-	}
-
-	var err error
+	// Never auto-connect here. Disconnect should be idempotent and only tear down state.
+	var logoutErr error
 	if s.messenger.IsConnected() {
-		err = s.messenger.Logout(ctx)
+		logoutErr = s.messenger.Logout(ctx)
 	} else {
-		// If it's still not connected, force delete the device from local store
-		// to make sure it's untethered locally.
+		// If not connected but still linked locally, clear the local link state.
 		if s.messenger.Store != nil {
-			err = s.messenger.Store.Delete(ctx)
+			logoutErr = s.messenger.Store.Delete(ctx)
 		}
 	}
 
 	s.messenger.Disconnect()
-	return err
+	return logoutErr
 }
 
 func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {
