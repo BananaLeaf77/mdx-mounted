@@ -403,7 +403,24 @@ func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 	if s.messenger == nil {
 		return errors.New("whatsapp client not initialized")
 	}
-	err := s.messenger.Logout(ctx)
+
+	// Try to connect first before logging out if not connected
+	if !s.messenger.IsConnected() {
+		// Ignore error since we just want to ensure it connects if it can
+		_ = s.messenger.Connect()
+	}
+
+	var err error
+	if s.messenger.IsConnected() {
+		err = s.messenger.Logout(ctx)
+	} else {
+		// If it's still not connected, force delete the device from local store
+		// to make sure it's untethered locally.
+		if s.messenger.Store != nil {
+			err = s.messenger.Store.Delete(ctx)
+		}
+	}
+
 	s.messenger.Disconnect()
 	return err
 }
