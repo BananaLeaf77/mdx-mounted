@@ -42,56 +42,40 @@ type BulkBookResult struct {
 	Bookings    []Booking `json:"bookings"`
 }
 
+// domain/student.go  — replace the two interface blocks
+
 type StudentUseCase interface {
-	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int) (*[]ScheduleAvailabilityResult, error)
+	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int, instrumentID int) (*[]ScheduleAvailabilityResult, error)
 	BookClassTrial(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID int) (*Booking, error)
+	GetAllInstruments(ctx context.Context) ([]Instrument, error)
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
 	GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]Package, *Setting, error)
-
-	// BookClass auto-selects the best active non-trial package for the given instrument.
-	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
 	BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*Booking, error)
 	GetMyBookedClasses(ctx context.Context, studentUUID string, f PaginationFilter) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error
-
-	// GetAvailableSchedules returns all teacher schedules enriched with availability flags
-	// and teacher performance metrics. Trial packages show ALL schedules regardless of instrument/duration.
 	GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]ScheduleAvailabilityResult, error)
-
 	GetMyClassHistory(ctx context.Context, studentUUID string, f PaginationFilter) (*[]ClassHistory, error)
 	GetTeacherDetails(ctx context.Context, teacherUUID string) (*User, error)
-
-	// BulkBook: spend the full package quota in one action.
 	GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]TeacherSchedule, error)
 	BulkBookPreview(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) ([]BulkBookPreview, error)
 	BulkBookClass(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) (*BulkBookResult, error)
 }
 
 type StudentRepository interface {
-	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int) (*[]ScheduleAvailabilityResult, error)
+	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int, instrumentID int) (*[]ScheduleAvailabilityResult, error)
 	BookClassTrial(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID int) (*Booking, error)
+	GetAllInstruments(ctx context.Context) ([]Instrument, error)
 	GetMyProfile(ctx context.Context, userUUID string) (*User, error)
 	UpdateStudentData(ctx context.Context, userUUID string, user User) error
 	GetAllAvailablePackages(ctx context.Context, studentUUID *string) (*[]Package, *Setting, error)
-
-	// BookClass auto-selects the best active non-trial package for the given instrument.
-	// Returns the saved booking for downstream use (e.g. WhatsApp notification).
 	BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*Booking, error)
 	GetMyBookedClasses(ctx context.Context, studentUUID string, f PaginationFilter) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) (*Booking, error)
-
-	// GetAvailableSchedules with packageID for trial-aware filtering.
 	GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]ScheduleAvailabilityResult, error)
-
 	GetMyClassHistory(ctx context.Context, studentUUID string, f PaginationFilter) (*[]ClassHistory, error)
-
-	// GetTeacherSchedulesBasedOnInstrumentIDs kept for internal use.
 	GetTeacherSchedulesBasedOnInstrumentIDs(ctx context.Context, instrumentIDs []int) (*[]TeacherSchedule, error)
-
 	GetTeacherDetails(ctx context.Context, teacherUUID string) (*User, error)
-
-	// BulkBook: spend the full package quota in one action.
 	GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]TeacherSchedule, error)
 	BulkBookPreview(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) ([]BulkBookPreview, error)
 	BulkBookClass(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) (*BulkBookResult, error)

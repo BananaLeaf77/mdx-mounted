@@ -20,6 +20,17 @@ func NewStudentRepository(db *gorm.DB) domain.StudentRepository {
 	return &studentRepository{db: db}
 }
 
+func (r *studentRepository) GetAllInstruments(ctx context.Context) ([]domain.Instrument, error) {
+	var instruments []domain.Instrument
+	if err := r.db.WithContext(ctx).
+		Where("deleted_at IS NULL").
+		Order("name ASC").
+		Find(&instruments).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil daftar instrumen: %w", err)
+	}
+	return instruments, nil
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GetTeacherDetails
 // ─────────────────────────────────────────────────────────────────────────────
@@ -33,8 +44,8 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 	ctx context.Context,
 	studentUUID string,
 	packageID int,
+	instrumentID int,
 ) (*[]domain.ScheduleAvailabilityResult, error) {
-
 	// ── 1. Validate: package must belong to student, be trial, have quota ─────
 	var studentPkg domain.StudentPackage
 	if err := r.db.WithContext(ctx).
@@ -55,8 +66,12 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 	// ── 2. Fetch ALL active teacher schedules (no instrument filter) ──────────
 	var schedules []domain.TeacherSchedule
 	if err := r.db.WithContext(ctx).
+		Distinct("teacher_schedules.*").
 		Table("teacher_schedules").
+		Joins("JOIN teacher_profiles ON teacher_profiles.user_uuid = teacher_schedules.teacher_uuid").
+		Joins("JOIN teacher_instruments ON teacher_instruments.teacher_profile_user_uuid = teacher_profiles.user_uuid").
 		Joins("JOIN users ON users.uuid = teacher_schedules.teacher_uuid").
+		Where("teacher_instruments.instrument_id = ?", instrumentID).
 		Where("teacher_schedules.deleted_at IS NULL").
 		Where("users.deleted_at IS NULL").
 		Preload("Teacher").
@@ -113,9 +128,34 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		}
 
 		// 5c. IsRoomAvailable — we don't know the instrument yet (student picks at booking),
-		//     so we can't do a precise drum/non-drum room check here.
-		//     Mark as available; the actual check happens in BookClassTrial.
-		result.IsRoomAvailable = ptrBool(true)
+		// 5c. IsRoomAvailable — now we know the instrument, do a real room check
+		isDrum := false
+		var instName string
+		// look up instrument name for drum check
+		for _, inst := range sch.TeacherProfile.Instruments {
+			if inst.ID == instrumentID {
+				isDrum = strings.EqualFold(inst.Name, "drum") || strings.EqualFold(inst.Name, "drums")
+				instName = inst.Name
+				_ = instName
+				break
+			}
+		}
+		roomLimit := domain.RegularRoomLimit
+		if isDrum {
+			roomLimit = domain.DrumRoomLimit
+		}
+		var roomCount int64
+		roomCountErr := r.countRoomUsage(
+			r.db.WithContext(ctx),
+			next, sch.StartTime, sch.EndTime,
+			instrumentID, isDrum,
+			&roomCount,
+		)
+		if roomCountErr != nil {
+			result.IsRoomAvailable = ptrBool(false)
+		} else {
+			result.IsRoomAvailable = ptrBool(roomCount < roomLimit)
+		}
 
 		// 5d. IsBookedSameDayAndTime
 		var existingCount int64

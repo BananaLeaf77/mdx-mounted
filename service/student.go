@@ -43,7 +43,6 @@ func (s *studentUseCase) BulkBookClass(ctx context.Context, studentUUID string, 
 	return s.repo.BulkBookClass(ctx, studentUUID, studentPackageID, scheduleIDs)
 }
 
-
 func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error {
 	if reason == nil {
 		defaultReason := "Alasan tidak diberikan"
@@ -87,12 +86,19 @@ func (s *studentUseCase) GetAvailableSchedules(
 	return s.repo.GetAvailableSchedules(ctx, studentUUID, instrumentID)
 }
 
+// Replace existing GetAvailableSchedulesTrial
 func (s *studentUseCase) GetAvailableSchedulesTrial(
 	ctx context.Context,
 	studentUUID string,
 	packageID int,
+	instrumentID int,
 ) (*[]domain.ScheduleAvailabilityResult, error) {
-	return s.repo.GetAvailableSchedulesTrial(ctx, studentUUID, packageID)
+	return s.repo.GetAvailableSchedulesTrial(ctx, studentUUID, packageID, instrumentID)
+}
+
+// Add new method
+func (s *studentUseCase) GetAllInstruments(ctx context.Context) ([]domain.Instrument, error) {
+	return s.repo.GetAllInstruments(ctx)
 }
 
 func (s *studentUseCase) BookClassTrial(

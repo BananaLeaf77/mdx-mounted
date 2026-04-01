@@ -44,101 +44,145 @@ func NewStudentHandler(r *gin.Engine, studUC domain.StudentUseCase, jwtManager *
 		student.GET("/teacher-schedules", handler.GetTeacherSchedulesForPackage)
 		student.POST("/bulk-book/preview", handler.BulkBookPreview)
 		student.POST("/bulk-book", handler.BulkBookClass)
+
+		// new
+		// Inside NewStudentHandler, add inside the student group:
+		student.GET("/instruments", handler.GetAllInstruments)
 	}
 }
 
 func (h *StudentHandler) BookClassTrial(c *gin.Context) {
-    name := utils.GetAPIHitter(c)
-    userUUID, exists := c.Get("userUUID")
-    if !exists {
-        utils.PrintLogInfo(&name, 401, "BookClassTrial", nil)
-        c.JSON(http.StatusUnauthorized, gin.H{
-            "success": false,
-            "error":   "Tidak terotorisasi: konteks pengguna tidak ditemukan",
-            "message": "Gagal memesan kelas trial",
-        })
-        return
-    }
+	name := utils.GetAPIHitter(c)
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		utils.PrintLogInfo(&name, 401, "BookClassTrial", nil)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tidak terotorisasi: konteks pengguna tidak ditemukan",
+			"message": "Gagal memesan kelas trial",
+		})
+		return
+	}
 
-    var payload dto.BookClassTrialRequest
-    if err := c.ShouldBindJSON(&payload); err != nil {
-        utils.PrintLogInfo(&name, 400, "BookClassTrial", &err)
-        c.JSON(http.StatusBadRequest, gin.H{
-            "success": false,
-            "error":   utils.TranslateValidationError(err),
-            "message": "Gagal memesan kelas trial",
-        })
-        return
-    }
+	var payload dto.BookClassTrialRequest
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		utils.PrintLogInfo(&name, 400, "BookClassTrial", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   utils.TranslateValidationError(err),
+			"message": "Gagal memesan kelas trial",
+		})
+		return
+	}
 
-    if _, err := h.studUC.BookClassTrial(
-        c.Request.Context(),
-        userUUID.(string),
-        payload.ScheduleID,
-        payload.PackageID,
-        payload.InstrumentID,
-    ); err != nil {
-        utils.PrintLogInfo(&name, 400, "BookClassTrial", &err)
-        c.JSON(http.StatusBadRequest, gin.H{
-            "success": false,
-            "error":   err.Error(),
-            "message": "Gagal memesan kelas trial",
-        })
-        return
-    }
+	if _, err := h.studUC.BookClassTrial(
+		c.Request.Context(),
+		userUUID.(string),
+		payload.ScheduleID,
+		payload.PackageID,
+		payload.InstrumentID,
+	); err != nil {
+		utils.PrintLogInfo(&name, 400, "BookClassTrial", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal memesan kelas trial",
+		})
+		return
+	}
 
-    utils.PrintLogInfo(&name, 200, "BookClassTrial", nil)
-    c.JSON(http.StatusOK, gin.H{"success": true, "message": "Kelas trial berhasil dipesan"})
+	utils.PrintLogInfo(&name, 200, "BookClassTrial", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Kelas trial berhasil dipesan"})
+}
+
+func (h *StudentHandler) GetAllInstruments(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	instruments, err := h.studUC.GetAllInstruments(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetAllInstruments", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil daftar instrumen",
+		})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "GetAllInstruments", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    instruments,
+		"total":   len(instruments),
+	})
 }
 
 // GetAvailableSchedulesTrial returns all active teacher schedules for trial package browsing.
 // Query param: package_id (required) — must be a trial student_packages.id owned by the student.
 func (h *StudentHandler) GetAvailableSchedulesTrial(c *gin.Context) {
-    name := utils.GetAPIHitter(c)
-    userUUID, exists := c.Get("userUUID")
-    if !exists {
-        utils.PrintLogInfo(&name, 401, "GetAvailableSchedulesTrial", nil)
-        c.JSON(http.StatusUnauthorized, gin.H{
-            "success": false,
-            "error":   "Tidak terotorisasi: konteks pengguna tidak ditemukan",
-            "message": "Gagal mengambil jadwal trial",
-        })
-        return
-    }
+	name := utils.GetAPIHitter(c)
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		utils.PrintLogInfo(&name, 401, "GetAvailableSchedulesTrial", nil)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Tidak terotorisasi: konteks pengguna tidak ditemukan",
+			"message": "Gagal mengambil jadwal trial",
+		})
+		return
+	}
 
-    packageIDStr := c.Query("package_id")
-    if packageIDStr == "" {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "success": false,
-            "error":   "package_id wajib diisi",
-            "message": "Gagal mengambil jadwal trial",
-        })
-        return
-    }
+	packageIDStr := c.Query("package_id")
+	if packageIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "package_id wajib diisi",
+			"message": "Gagal mengambil jadwal trial",
+		})
+		return
+	}
 
-    packageID, err := strconv.Atoi(packageIDStr)
-    if err != nil || packageID <= 0 {
-        c.JSON(http.StatusBadRequest, gin.H{
-            "success": false,
-            "error":   "package_id tidak valid",
-            "message": "Gagal mengambil jadwal trial",
-        })
-        return
-    }
+	packageID, err := strconv.Atoi(packageIDStr)
+	if err != nil || packageID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "package_id tidak valid",
+			"message": "Gagal mengambil jadwal trial",
+		})
+		return
+	}
 
-    schedules, err := h.studUC.GetAvailableSchedulesTrial(c.Request.Context(), userUUID.(string), packageID)
-    if err != nil {
-        utils.PrintLogInfo(&name, 500, "GetAvailableSchedulesTrial", &err)
-        c.JSON(http.StatusInternalServerError, gin.H{
-            "success": false,
-            "error":   err.Error(),
-            "message": "Gagal mengambil jadwal trial",
-        })
-        return
-    }
+	instrumentIDStr := c.Query("instrument_id")
+	if instrumentIDStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "instrument_id wajib diisi",
+			"message": "Gagal mengambil jadwal trial",
+		})
+		return
+	}
 
-    utils.PrintLogInfo(&name, 200, "GetAvailableSchedulesTrial", nil)
-    c.JSON(http.StatusOK, gin.H{"success": true, "data": schedules})
+	instrumentID, err := strconv.Atoi(instrumentIDStr)
+	if err != nil || instrumentID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "instrument_id tidak valid",
+			"message": "Gagal mengambil jadwal trial",
+		})
+		return
+	}
+
+	schedules, err := h.studUC.GetAvailableSchedulesTrial(c.Request.Context(), userUUID.(string), packageID, instrumentID)
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetAvailableSchedulesTrial", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil jadwal trial",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetAvailableSchedulesTrial", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": schedules})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -644,4 +688,3 @@ func (h *StudentHandler) BulkBookClass(c *gin.Context) {
 		"data":    result,
 	})
 }
-

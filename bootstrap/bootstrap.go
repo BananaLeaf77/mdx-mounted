@@ -106,7 +106,7 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cr
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
 
-	c := InitCron(teacherPaymentService)
+	c := InitCron(teacherPaymentService, db, nil)
 
 	return app, db, c
 }
@@ -202,7 +202,7 @@ func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB, *cron.Cron) {
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
 
-	c := InitCron(teacherPaymentService)
+	c := InitCron(teacherPaymentService, db, WhatsappClient)
 
 	return app, db, c
 }
@@ -296,7 +296,7 @@ func InitializeFullApp() (*gin.Engine, *gorm.DB, *cron.Cron) {
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
 
-	c := InitCron(teacherPaymentService)
+	c := InitCron(teacherPaymentService, db, WhatsappClient)
 
 	return app, db, c
 }
