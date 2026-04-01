@@ -919,6 +919,7 @@ func (r *adminRepo) GetTeacherByUUID(ctx context.Context, uuid string) (*domain.
 	var teacher domain.User
 	if err := r.db.WithContext(ctx).
 		Preload("TeacherProfile.Instruments").
+		Preload("TeacherProfile.Album").
 		Where("uuid = ? AND role = ?", uuid, domain.RoleTeacher).
 		First(&teacher).Error; err != nil {
 		return nil, errors.New(utils.TranslateDBError(err))
