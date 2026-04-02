@@ -273,19 +273,17 @@ func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.Xendi
 
 		// Send WhatsApp notification to student
 		if s.messenger != nil {
-			go func() {
-				student, err := s.adminRepo.GetStudentByUUID(context.Background(), payment.StudentUUID)
-				if err != nil {
-					log.Printf("⚠️ Failed to fetch student for WA notification: %v", err)
-					return
-				}
-				pkg, err := s.adminRepo.GetPackagesByID(context.Background(), payment.PackageID)
-				if err != nil {
-					log.Printf("⚠️ Failed to fetch package for WA notification: %v", err)
-					return
-				}
-				s.sendPaymentSuccessNotification(student, pkg)
-			}()
+			student, err := s.adminRepo.GetStudentByUUID(context.Background(), payment.StudentUUID)
+			if err != nil {
+				log.Printf("⚠️ Failed to fetch student for WA notification: %v", err)
+			}
+			pkg, err := s.adminRepo.GetPackagesByID(context.Background(), payment.PackageID)
+			if err != nil {
+				log.Printf("⚠️ Failed to fetch package for WA notification: %v", err)
+			}
+
+			s.sendPaymentSuccessNotification(student, pkg)
+			
 		}
 
 	case "EXPIRED":
