@@ -449,7 +449,7 @@ func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 	}
 
 	// 🔥 FIX: Just disconnect, don't call Logout() which generates prekeys
-	s.messenger.Disconnect()
+	s.messenger.Logout(ctx)
 
 	// 🔥 CRITICAL: Cleanup database records after disconnect
 	if deviceJID != "" {
