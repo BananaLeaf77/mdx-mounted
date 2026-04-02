@@ -76,9 +76,7 @@ func (s *teacherService) sendCancelClassByTeacherNotif(booking *domain.Booking, 
 	// Gender check
 	var teacherMessage string
 	if booking.Schedule.Teacher.Gender == "male" {
-		teacherMessage = fmt.Sprintf(`https://www.madeu.app/ 
-
-*PEMBATALAN KELAS* 
+		teacherMessage = fmt.Sprintf(`*PEMBATALAN KELAS* 
 
 Halo Bapak %s, 
 
@@ -93,8 +91,7 @@ Pembatalan kelas berhasil:
 
 Terima kasih! 🎵
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 			booking.Schedule.Teacher.Name,
 			booking.Student.Name,
@@ -104,12 +101,10 @@ Terima kasih! 🎵
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			"https://www.madeu.app/ ",
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	} else {
-		teacherMessage = fmt.Sprintf(`https://www.madeu.app/ 
-
-*PEMBATALAN KELAS* 
+		teacherMessage = fmt.Sprintf(`*PEMBATALAN KELAS* 
 
 Halo Ibu %s, 
 
@@ -122,8 +117,7 @@ Pembatalan kelas berhasil:
 
 *Alasan:* %s
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 			booking.Schedule.Teacher.Name,
 			booking.Student.Name,
@@ -133,14 +127,12 @@ Pembatalan kelas berhasil:
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			"https://www.madeu.app/ ",
+			"https://www.madeu.app",
 			os.Getenv("APP_NAME"))
 	}
 
 	// Message for student
-	studentMessage := fmt.Sprintf(`https://www.madeu.app/ 
-
-*PEMBATALAN KELAS* 
+	studentMessage := fmt.Sprintf(`*PEMBATALAN KELAS* 
 
 Halo %s, 
 
@@ -157,8 +149,7 @@ Halo %s,
 
 Terima kasih! 🎵
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 		booking.Student.Name,
 		booking.Schedule.Teacher.Name,
@@ -168,7 +159,7 @@ Terima kasih! 🎵
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app/ ",
+		"https://www.madeu.app",
 		os.Getenv("APP_NAME"))
 
 	// Send messages asynchronously (don't block the booking)

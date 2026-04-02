@@ -146,9 +146,7 @@ func (s *studentUseCase) sendCancelClassNotif(booking *domain.Booking, reason *s
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
-	teacherMessage := fmt.Sprintf(`https://www.madeu.app/ 
-
-*PEMBATALAN KELAS*
+	teacherMessage := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s %s,
 
@@ -160,8 +158,7 @@ Halo %s %s,
 
 *Alasan:* %s
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 		salutation, booking.Schedule.Teacher.Name,
 		booking.Student.Name,
@@ -169,12 +166,10 @@ Halo %s %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app/ ", os.Getenv("APP_NAME"),
+		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
-	studentMessage := fmt.Sprintf(`https://www.madeu.app/ 
-
-*PEMBATALAN KELAS*
+	studentMessage := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s,
 
@@ -189,8 +184,7 @@ Halo %s,
 
 *Alasan:* %s
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 		booking.Student.Name,
 		booking.Schedule.Teacher.Name,
@@ -198,7 +192,7 @@ Halo %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app/ ", os.Getenv("APP_NAME"),
+		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
 	tPhone, sPhone, tMsg, sMsg :=
@@ -220,9 +214,7 @@ func (s *studentUseCase) sendBookClassNotif(booking *domain.Booking) {
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
-	teacherMessage := fmt.Sprintf(`https://www.madeu.app/ 
-
-*PEMBERITAHUAN KELAS BARU*
+	teacherMessage := fmt.Sprintf(`*PEMBERITAHUAN KELAS BARU*
 
 Halo %s %s,
 
@@ -234,20 +226,17 @@ Siswa *%s* telah memesan kelas dengan detail:
 
 _Silakan persiapkan materi. Jangan lupa mencatat hasil kelas setelah selesai._
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 		salutation, booking.Schedule.Teacher.Name,
 		booking.Student.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		"https://www.madeu.app/ ", os.Getenv("APP_NAME"),
+		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
-	studentMessage := fmt.Sprintf(`https://www.madeu.app/ 
-
-*KONFIRMASI PEMESANAN KELAS*
+	studentMessage := fmt.Sprintf(`*KONFIRMASI PEMESANAN KELAS*
 
 Halo %s,
 
@@ -266,15 +255,14 @@ Halo %s,
 
 _Selamat belajar! 🎶_
 
-
-%s
+🌐 Website: %s
 🔔 %s Notification System`,
 		booking.Student.Name,
 		booking.Schedule.Teacher.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		"https://www.madeu.app/ ", os.Getenv("APP_NAME"),
+		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
 	tPhone, sPhone, tMsg, sMsg :=
