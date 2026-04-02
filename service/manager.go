@@ -84,7 +84,7 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 			booking.Schedule.StartTime,
 			booking.Schedule.EndTime,
 			booking.PackageUsed.Package.Instrument.Name,
-			"https://www.madeu.app/",
+			"https://www.madeu.app/ ",
 			os.Getenv("APP_NAME"),
 		)
 
@@ -183,13 +183,13 @@ Kuota yang telah dikembalikan dapat segera digunakan untuk penjadwalan sesi beri
 
 Terima kasih atas pengertiannya.
 
-🌐 Website:
+
 %s
 🔔 %s Notification System
 `,
 			data.Name,
 			incomingQuota,
-			"https://www.madeu.app/",
+			"https://www.madeu.app/ ",
 			os.Getenv("APP_NAME"),
 		)
 

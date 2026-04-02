@@ -334,7 +334,9 @@ func (s *paymentService) sendPaymentSuccessNotification(student *domain.User, pk
 
 	// Rich message with emojis
 	msgToStudent := fmt.Sprintf(
-		`🎉 *Halo %s!*
+		`https://www.madeu.app/ 
+
+🎉 *Halo %s!*
 
 ✅ *Pembayaran Berhasil!*
 Paket *"%s"* kamu sudah aktif dan siap digunakan.
@@ -351,7 +353,6 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 
 🚀 *Mulai belajar sekarang:*
 🔗
-https://madeu.app/
 
 Terima kasih telah memilih MadEU! 🌟
 
