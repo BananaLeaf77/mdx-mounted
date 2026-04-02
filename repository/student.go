@@ -862,7 +862,6 @@ func (r *studentRepository) countRoomUsage(
 	return query.Count(count).Error
 }
 
-// Add this helper function to check if a schedule is actually booked/active
 func (r *studentRepository) checkTeacherConflict(
 	tx *gorm.DB,
 	teacherUUID string,
@@ -870,24 +869,27 @@ func (r *studentRepository) checkTeacherConflict(
 	endTime string,
 	classDate time.Time,
 ) (bool, error) {
-	var count int64
-
-	// Convert to Asia/Makassar timezone for accurate date comparison
 	loc, _ := time.LoadLocation("Asia/Makassar")
-	targetDate := classDate.In(loc).Format("2006-01-02")
-
+ 
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(
+		dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(),
+		0, 0, 0, 0, loc,
+	).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+ 
+	var count int64
 	err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("ts.teacher_uuid = ?", teacherUUID).
 		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-		Where("DATE(bookings.class_date AT TIME ZONE 'Asia/Makassar') = ?", targetDate).
+		Where("bookings.class_date >= ? AND bookings.class_date < ?", dayStart, dayEnd).
 		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
 		Count(&count).Error
-
+ 
 	if err != nil {
 		return false, err
 	}
-
 	return count > 0, nil
 }
 
@@ -1113,7 +1115,6 @@ func (r *studentRepository) GetAvailableSchedules(
 	return &results, nil
 }
 
-// NEW helper function that properly checks teacher conflicts
 func (r *studentRepository) checkTeacherConflictForSchedule(
 	tx *gorm.DB,
 	teacherUUID string,
@@ -1122,27 +1123,35 @@ func (r *studentRepository) checkTeacherConflictForSchedule(
 	classDate time.Time,
 	currentScheduleID int,
 ) (bool, error) {
-	var count int64
-
-	// IMPORTANT: Convert classDate to Asia/Makassar for proper date comparison
 	loc, _ := time.LoadLocation("Asia/Makassar")
-	classDateInLoc := classDate.In(loc)
-	targetDate := classDateInLoc.Format("2006-01-02")
-
-	// Query using the date string directly to avoid timezone issues
+ 
+	// Build [dayStart, dayEnd) as UTC timestamps.
+	// We deliberately derive the calendar day from the WITA representation of
+	// classDate so that "Tuesday 07:00 WITA" always maps to the correct UTC range
+	// regardless of the server's local timezone.
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(
+		dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(),
+		0, 0, 0, 0, loc,
+	).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+ 
+	var count int64
 	err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("ts.teacher_uuid = ?", teacherUUID).
 		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-		Where("DATE(bookings.class_date AT TIME ZONE 'Asia/Makassar') = ?", targetDate).
+		// Timestamp range — no server-side timezone cast; works correctly in UTC prod.
+		Where("bookings.class_date >= ? AND bookings.class_date < ?", dayStart, dayEnd).
+		// Time-of-day overlap using stored HH:MM strings.
 		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
+		// Don't count a booking on the schedule being evaluated as a "conflict".
 		Where("ts.id != ?", currentScheduleID).
 		Count(&count).Error
-
+ 
 	if err != nil {
 		return false, err
 	}
-
 	return count > 0, nil
 }
 
