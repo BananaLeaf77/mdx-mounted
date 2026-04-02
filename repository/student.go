@@ -112,9 +112,17 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			TeacherFinishedClassCount: teacherFinishedCounts[sch.TeacherUUID],
 		}
 
-		// 5a. Next class date
+		// 5a. Next class date - ensure it's in Asia/Makassar
 		startTimeParsed, _ := time.Parse("15:04", sch.StartTime)
 		next := utils.GetNextClassDate(sch.DayOfWeek, startTimeParsed)
+
+		// CRITICAL: Ensure next date is in Asia/Makassar timezone
+		loc, _ := time.LoadLocation("Asia/Makassar")
+		next = time.Date(
+			next.Year(), next.Month(), next.Day(),
+			next.Hour(), next.Minute(), next.Second(), next.Nanosecond(),
+			loc,
+		)
 		result.NextClassDate = &next
 
 		// 5b. IsDurationCompatible — trial rule: 30min slot ok if 30min quota not used, same for 60
@@ -157,14 +165,16 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			result.IsRoomAvailable = ptrBool(roomCount < roomLimit)
 		}
 
-		// 5d. IsBookedSameDayAndTime
+		// 5d. IsBookedSameDayAndTime - with proper timezone
 		var existingCount int64
+		targetDate := next.Format("2006-01-02")
+
 		if err := r.db.WithContext(ctx).
 			Model(&domain.Booking{}).
 			Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 			Where("bookings.student_uuid = ?", studentUUID).
 			Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-			Where("bookings.class_date::DATE = ?::DATE", next).
+			Where("DATE(bookings.class_date AT TIME ZONE 'Asia/Makassar') = ?", targetDate).
 			Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", sch.StartTime, sch.EndTime).
 			Count(&existingCount).Error; err == nil {
 			result.IsBookedSameDayAndTime = ptrBool(existingCount > 0)
@@ -826,36 +836,30 @@ func (r *studentRepository) BookClass(
 	return &newBooking, nil
 }
 
-// countRoomUsage counts active bookings for a given date/time slot by instrument category.
-// This unified helper works correctly for both trial and regular package bookings because
-// it counts by the actual *booked instrument* stored in bookings.instrument_id.
 func (r *studentRepository) countRoomUsage(
-	db *gorm.DB,
+	tx *gorm.DB,
 	classDate time.Time,
 	startTime string,
 	endTime string,
 	instrumentID int,
 	isDrum bool,
-	out *int64,
+	count *int64,
 ) error {
-	// Determine instrument category via a subquery so we do not rely on package instrument.
-	// bookings.instrument_id is the source of truth post-refactor.
-	subquery := `
-		SELECT COUNT(b.id)
-		FROM bookings b
-		JOIN teacher_schedules ts ON ts.id = b.schedule_id
-		JOIN instruments i ON i.id = b.instrument_id
-		WHERE b.status IN ('booked', 'rescheduled')
-		  AND b.class_date::DATE = ?::DATE
-		  AND (ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)
-	`
-	if isDrum {
-		subquery += " AND i.name ILIKE 'Drum%'"
-	} else {
-		subquery += " AND NOT (i.name ILIKE 'Drum%')"
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	targetDate := classDate.In(loc).Format("2006-01-02")
+
+	query := tx.Model(&domain.Booking{}).
+		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
+		Where("DATE(bookings.class_date AT TIME ZONE 'Asia/Makassar') = ?", targetDate).
+		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled})
+
+	// Add instrument filter if needed
+	if instrumentID > 0 {
+		query = query.Where("bookings.instrument_id = ?", instrumentID)
 	}
 
-	return db.Raw(subquery, classDate, startTime, endTime).Scan(out).Error
+	return query.Count(count).Error
 }
 
 // Add this helper function to check if a schedule is actually booked/active
@@ -868,12 +872,15 @@ func (r *studentRepository) checkTeacherConflict(
 ) (bool, error) {
 	var count int64
 
-	// Query to check if teacher has ANY active booking on this date that overlaps with the requested time
+	// Convert to Asia/Makassar timezone for accurate date comparison
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	targetDate := classDate.In(loc).Format("2006-01-02")
+
 	err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("ts.teacher_uuid = ?", teacherUUID).
 		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-		Where("bookings.class_date::DATE = ?::DATE", classDate).
+		Where("DATE(bookings.class_date AT TIME ZONE 'Asia/Makassar') = ?", targetDate).
 		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
 		Count(&count).Error
 
@@ -1113,19 +1120,23 @@ func (r *studentRepository) checkTeacherConflictForSchedule(
 	startTime string,
 	endTime string,
 	classDate time.Time,
-	currentScheduleID int, // Pass current schedule ID to exclude it from conflict check
+	currentScheduleID int,
 ) (bool, error) {
 	var count int64
 
-	// Query to check if teacher has any ACTIVE booking on this date that overlaps with the requested time
-	// EXCLUDING the current schedule if it's already booked (to avoid self-conflict)
+	// IMPORTANT: Convert classDate to Asia/Makassar for proper date comparison
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	classDateInLoc := classDate.In(loc)
+	targetDate := classDateInLoc.Format("2006-01-02")
+
+	// Query using the date string directly to avoid timezone issues
 	err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("ts.teacher_uuid = ?", teacherUUID).
 		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-		Where("bookings.class_date::DATE = ?::DATE", classDate).
+		Where("DATE(bookings.class_date AT TIME ZONE 'Asia/Makassar') = ?", targetDate).
 		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
-		Where("ts.id != ?", currentScheduleID). // Exclude current schedule to avoid false positives
+		Where("ts.id != ?", currentScheduleID).
 		Count(&count).Error
 
 	if err != nil {
