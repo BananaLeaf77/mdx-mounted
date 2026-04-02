@@ -359,13 +359,12 @@ func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interf
 		return map[string]interface{}{"status": "not_initialized"}, nil
 	}
 
+	if s.messenger.IsLoggedIn() {
+		return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
+	}
+
 	if s.messenger.IsConnected() {
-		// A healthy connected state must have a linked device ID.
-		// During logout/disconnect transitions IsConnected can briefly be true.
-		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
-			return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
-		}
-		return map[string]interface{}{"status": "disconnecting"}, nil
+		return map[string]interface{}{"status": "initializing_connection"}, nil
 	}
 
 	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
@@ -380,8 +379,8 @@ func (s *adminService) ConnectWhatsApp(ctx context.Context) (map[string]interfac
 		return nil, errors.New("whatsapp client is not initialized")
 	}
 
-	if s.messenger.IsConnected() {
-		return map[string]interface{}{"status": "already_connected"}, nil
+	if s.messenger.IsLoggedIn() {
+		return map[string]interface{}{"status": "already_connected", "jid": s.messenger.Store.ID.String()}, nil
 	}
 
 	// Device already linked — just reconnect

@@ -12,18 +12,18 @@ import (
 )
 
 func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string) error {
-	phoneJID := types.NewJID(phone, types.DefaultUserServer)
-
-	var listPhoneJID []types.JID
-	listPhoneJID = append(listPhoneJID, phoneJID)
-
-	PrintPretty(listPhoneJID)
-
-	client.GetUserInfo(context.Background(), listPhoneJID)
-
 	if client == nil {
 		return fmt.Errorf("whatsapp client is not initialized")
 	}
+
+	phoneJID := types.NewJID(phone, types.DefaultUserServer)
+	var listPhoneJID []types.JID
+	listPhoneJID = append(listPhoneJID, phoneJID)
+
+	// User-added debug info (ensuring safe call after nil check)
+	PrintPretty(listPhoneJID)
+	// Fetching user info can help stabilize session, though not strictly required for sending.
+	_, _ = client.GetUserInfo(context.Background(), listPhoneJID)
 
 	// 🔥 RESILIENCE FIX: If disconnected but session exists, try to reconnect before failing.
 	if !client.IsConnected() && client.Store.ID != nil {
