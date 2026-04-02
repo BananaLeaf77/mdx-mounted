@@ -44,7 +44,7 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 		return nil, nil, fmt.Errorf("failed to get device: %w", err)
 	}
 
-	clientLog := waLog.Stdout("Client", "INFO", true)
+	clientLog := waLog.Stdout("Client", "WARN", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
 	// Improve E2EE recovery on linked devices (notably iOS) when session keys rotate.
 	client.AutomaticMessageRerequestFromPhone = true
