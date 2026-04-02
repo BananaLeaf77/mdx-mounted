@@ -91,7 +91,8 @@ Pembatalan kelas berhasil:
 
 Terima kasih! 🎵
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 			booking.Schedule.Teacher.Name,
 			booking.Student.Name,
@@ -101,7 +102,7 @@ Terima kasih! 🎵
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			"https://www.madeu.app",
+			"https://www.madeu.app/",
 			os.Getenv("APP_NAME"))
 	} else {
 		teacherMessage = fmt.Sprintf(`*PEMBATALAN KELAS* 
@@ -117,7 +118,8 @@ Pembatalan kelas berhasil:
 
 *Alasan:* %s
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 			booking.Schedule.Teacher.Name,
 			booking.Student.Name,
@@ -127,7 +129,7 @@ Pembatalan kelas berhasil:
 			booking.Schedule.Duration,
 			booking.PackageUsed.Package.Instrument.Name,
 			*reason,
-			"https://www.madeu.app",
+			"https://www.madeu.app/",
 			os.Getenv("APP_NAME"))
 	}
 
@@ -149,7 +151,8 @@ Halo %s,
 
 Terima kasih! 🎵
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 		booking.Student.Name,
 		booking.Schedule.Teacher.Name,
@@ -159,7 +162,7 @@ Terima kasih! 🎵
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app",
+		"https://www.madeu.app/",
 		os.Getenv("APP_NAME"))
 
 	// Send messages asynchronously (don't block the booking)

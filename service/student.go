@@ -158,7 +158,8 @@ Halo %s %s,
 
 *Alasan:* %s
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 		salutation, booking.Schedule.Teacher.Name,
 		booking.Student.Name,
@@ -166,7 +167,7 @@ Halo %s %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.madeu.app/", os.Getenv("APP_NAME"),
 	)
 
 	studentMessage := fmt.Sprintf(`*PEMBATALAN KELAS*
@@ -184,7 +185,8 @@ Halo %s,
 
 *Alasan:* %s
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 		booking.Student.Name,
 		booking.Schedule.Teacher.Name,
@@ -192,7 +194,7 @@ Halo %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.madeu.app/", os.Getenv("APP_NAME"),
 	)
 
 	tPhone, sPhone, tMsg, sMsg :=
@@ -226,14 +228,15 @@ Siswa *%s* telah memesan kelas dengan detail:
 
 _Silakan persiapkan materi. Jangan lupa mencatat hasil kelas setelah selesai._
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 		salutation, booking.Schedule.Teacher.Name,
 		booking.Student.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.madeu.app/", os.Getenv("APP_NAME"),
 	)
 
 	studentMessage := fmt.Sprintf(`*KONFIRMASI PEMESANAN KELAS*
@@ -255,14 +258,15 @@ Halo %s,
 
 _Selamat belajar! 🎶_
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System`,
 		booking.Student.Name,
 		booking.Schedule.Teacher.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.madeu.app/", os.Getenv("APP_NAME"),
 	)
 
 	tPhone, sPhone, tMsg, sMsg :=

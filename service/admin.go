@@ -151,7 +151,8 @@ Silakan login ke aplikasi untuk mulai booking sesi.
 
 Terima kasih,
 
-🌐 Website: %s
+🌐 Website:
+%s
 🔔 %s Notification System
 `,
 				dataStudent.Name,
@@ -159,7 +160,7 @@ Terima kasih,
 				dataPackage.Description,
 				dataPackage.Instrument.Name,
 				dataPackage.Quota,
-				"https://www.madeu.app",
+				"https://www.madeu.app/",
 				os.Getenv("APP_NAME"),
 			)
 

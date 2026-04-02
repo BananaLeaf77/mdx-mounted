@@ -60,11 +60,10 @@ func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string)
 		log.Println("⚠️ Failed to refresh user devices for", jid.String(), ":", err)
 	}
 
-	// It's safer to use ExtendedTextMessage instead of basic Conversation for modern iOS clients
+	// For best compatibility with iOS link-parsing, use the simplest text message type (Conversation)
+	// when sending basic text with links. Basic formatting (*bold*, _italics_) still works.
 	waMessage := &waE2E.Message{
-		ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: &msgText,
-		},
+		Conversation: &msgText,
 	}
 
 	_, err = client.SendMessage(sendCtx, jid, waMessage)

@@ -350,7 +350,8 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 • 🏆 Pantau progress belajarmu
 
 🚀 *Mulai belajar sekarang:*
-🔗 https://madeu.app
+🔗
+https://madeu.app/
 
 Terima kasih telah memilih MadEU! 🌟
 
