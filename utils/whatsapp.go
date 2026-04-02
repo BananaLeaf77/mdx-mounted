@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 	"time"
 
 	"go.mau.fi/whatsmeow"
@@ -60,10 +62,32 @@ func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string)
 		log.Println("⚠️ Failed to refresh user devices for", jid.String(), ":", err)
 	}
 
-	// For best compatibility with iOS link-parsing, use the simplest text message type (Conversation)
-	// when sending basic text with links. Basic formatting (*bold*, _italics_) still works.
-	waMessage := &waE2E.Message{
-		Conversation: &msgText,
+	// Smart Message Construction:
+	// Use ExtendedTextMessage if a URL is present, as it allows us to explicitly "flag" 
+	// the link for iOS clients using MatchedText. This is the most 
+	// reliable way to trigger clickability on modern iOS WhatsApp clients.
+	waMessage := &waE2E.Message{}
+	urlPattern := `https?://[^\s\n]+`
+	re := regexp.MustCompile(urlPattern)
+	foundURL := re.FindString(msgText)
+
+	if foundURL != "" {
+		title := "MadEU"
+		description := "Learning made easy"
+		if strings.Contains(foundURL, "madeu.app") {
+			title = "MadEU App"
+			description = "Sistem Manajemen Kursus MadEU"
+		}
+
+		waMessage.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
+			Text:        &msgText,
+			MatchedText: &foundURL,
+			Title:       &title,
+			Description: &description,
+		}
+	} else {
+		// Fallback to simple conversation for non-link messages
+		waMessage.Conversation = &msgText
 	}
 
 	_, err = client.SendMessage(sendCtx, jid, waMessage)
