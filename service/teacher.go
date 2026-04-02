@@ -45,10 +45,13 @@ func (s *teacherService) CancelBookedClass(ctx context.Context, bookingID int, t
 		return err
 	}
 
-	// Send WhatsApp messages to teacher and student
-	if s.messenger != nil {
-		s.sendCancelClassByTeacherNotif(data, reason)
+	if !s.messenger.IsLoggedIn() {
+		log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+		return nil
 	}
+
+	// Send WhatsApp messages to teacher and student
+	s.sendCancelClassByTeacherNotif(data, reason)
 
 	return nil
 }

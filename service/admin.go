@@ -163,6 +163,11 @@ Terima kasih,
 				os.Getenv("APP_NAME"),
 			)
 
+			if !s.messenger.IsLoggedIn() {
+				log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+				return nil
+			}
+
 			go func() {
 				err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
 				if err != nil {
@@ -462,7 +467,7 @@ func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 }
 
 func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {
-	if s.messenger == nil || !s.messenger.IsConnected() {
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
 		return errors.New("whatsapp is not connected")
 	}
 	phoneNormalized := utils.NormalizePhoneNumber(phone)

@@ -362,6 +362,11 @@ Terima kasih telah memilih MadEU! 🌟
 		pkg.ExpiredDuration,
 	)
 
+	if !s.messenger.IsLoggedIn() {
+		log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+		return
+	}
+
 	// Send message asynchronously
 	go func() {
 		err := utils.SendWhatsAppMessage(s.messenger, studentPhone, msgToStudent)

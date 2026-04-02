@@ -89,6 +89,12 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 		)
 
 		phone := utils.NormalizePhoneNumber(booking.Schedule.Teacher.Phone)
+
+		if !s.messenger.IsLoggedIn() {
+			log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+			return booking, nil
+		}
+
 		if phone != "" {
 			go func() {
 				err := utils.SendWhatsAppMessage(s.messenger, phone, msg)
@@ -191,6 +197,11 @@ Terima kasih atas pengertiannya.
 			"https://www.madeu.app",
 			os.Getenv("APP_NAME"),
 		)
+
+		if !s.messenger.IsLoggedIn() {
+			log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+			return nil
+		}
 
 		go func() {
 			err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
