@@ -664,9 +664,7 @@ func (r *studentRepository) BookClass(
 		return nil, errors.New("jadwal sudah dibooking")
 	}
 
-	// ── 1b. Check if the teacher is already occupied at this time (including
-	//      overlapping durations, e.g. 60-min booked → 30-min at same start blocked)
-	// We need classDate first — compute it here, reused below in step 4.
+	// ── 1b. Check if the teacher is already occupied at this time
 	startTimeParsedEarly, _ := time.Parse("15:04", schedule.StartTime)
 	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsedEarly)
 
@@ -723,13 +721,12 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal mencari paket: %w", err)
 	}
 
-	// ── 4. Compute next class date (already computed in step 1b as classDate) ─
+	// ── 4. Timezone setup ─────────────────────────────────────────────────────
 	loc, err := time.LoadLocation("Asia/Makassar")
 	if err != nil {
 		loc = time.Local
 	}
 	now := time.Now().In(loc)
-	// classDate is already set above in step 1b (startTimeParsedEarly / GetNextClassDate).
 
 	// ── 5. H-6 enforcement ────────────────────────────────────────────────────
 	classStartFull := time.Date(
@@ -763,13 +760,18 @@ func (r *studentRepository) BookClass(
 		return nil, errors.New("ruangan penuh untuk jam ini")
 	}
 
-	// ── 7. Student conflict check ─────────────────────────────────────────────
+	// ── 7. Student conflict check - FIXED with proper timezone handling ───────
+	// Convert classDate to UTC range for database query
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+
 	var existingBookingCount int64
 	if err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("bookings.student_uuid = ?", studentUUID).
 		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-		Where("bookings.class_date::DATE = ?::DATE", classDate).
+		Where("bookings.class_date >= ? AND bookings.class_date < ?", dayStart, dayEnd).
 		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", schedule.StartTime, schedule.EndTime).
 		Count(&existingBookingCount).Error; err != nil {
 		tx.Rollback()
