@@ -43,8 +43,8 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 		return nil, nil, fmt.Errorf("failed to get device: %w", err)
 	}
 
-	clientLog := waLog.Stdout("Client", "WARN", true)
-	client := whatsmeow.NewClient(deviceStore, clientLog)
+	// clientLog := waLog.Stdout("Client", "WARN", true)
+	client := whatsmeow.NewClient(deviceStore, nil)
 
 	// Set the companion platform to macOS to improve reputation and link clickability on iOS recipients.
 	// This helps WhatsApp treat the bot as a "Desktop" client rather than a suspicious generic web client.
