@@ -858,34 +858,29 @@ func (r *studentRepository) countRoomUsage(
 	return db.Raw(subquery, classDate, startTime, endTime).Scan(out).Error
 }
 
-// checkTeacherConflict returns true if the teacher already has an active booking
-// on `classDate` whose booked schedule time window overlaps with [startTime, endTime).
-//
-// This prevents booking a 30-min slot when the teacher's 60-min slot at the same
-// start time is already taken (and vice-versa), since a teacher can only teach one
-// student at a time regardless of the schedule duration.
-//
-// Uses PostgreSQL's OVERLAPS: (s1, e1) OVERLAPS (s2, e2) → intervals share any moment.
+// Add this helper function to check if a schedule is actually booked/active
 func (r *studentRepository) checkTeacherConflict(
-	db *gorm.DB,
+	tx *gorm.DB,
 	teacherUUID string,
 	startTime string,
 	endTime string,
 	classDate time.Time,
 ) (bool, error) {
 	var count int64
-	err := db.Raw(`
-		SELECT COUNT(b.id)
-		FROM bookings b
-		JOIN teacher_schedules ts ON ts.id = b.schedule_id
-		WHERE b.status IN ('booked', 'rescheduled')
-		  AND b.class_date::DATE = ?::DATE
-		  AND ts.teacher_uuid = ?
-		  AND (ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)
-	`, classDate, teacherUUID, startTime, endTime).Scan(&count).Error
+
+	// Query to check if teacher has ANY active booking on this date that overlaps with the requested time
+	err := tx.Model(&domain.Booking{}).
+		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
+		Where("ts.teacher_uuid = ?", teacherUUID).
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+		Where("bookings.class_date::DATE = ?::DATE", classDate).
+		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
+		Count(&count).Error
+
 	if err != nil {
 		return false, err
 	}
+
 	return count > 0, nil
 }
 
@@ -1089,9 +1084,9 @@ func (r *studentRepository) GetAvailableSchedules(
 			result.IsBookedSameDayAndTime = ptrBool(false)
 		}
 
-		// 5e. IsTeacherBusy — true if the teacher already has an overlapping booking
-		//     on this date (handles 60-min ↔ 30-min sibling blocking).
-		teacherBusy, _ := r.checkTeacherConflict(r.db.WithContext(ctx), sch.TeacherUUID, sch.StartTime, sch.EndTime, next)
+		// 5e. IsTeacherBusy - FIXED: Check if there are ACTIVE bookings for this teacher
+		// on this specific date that overlap with this schedule time
+		teacherBusy, _ := r.checkTeacherConflictForSchedule(r.db.WithContext(ctx), sch.TeacherUUID, sch.StartTime, sch.EndTime, next, sch.ID)
 		result.IsTeacherBusy = ptrBool(teacherBusy)
 
 		// 6d. iscancelablefromnow
@@ -1109,6 +1104,35 @@ func (r *studentRepository) GetAvailableSchedules(
 	}
 
 	return &results, nil
+}
+
+// NEW helper function that properly checks teacher conflicts
+func (r *studentRepository) checkTeacherConflictForSchedule(
+	tx *gorm.DB,
+	teacherUUID string,
+	startTime string,
+	endTime string,
+	classDate time.Time,
+	currentScheduleID int, // Pass current schedule ID to exclude it from conflict check
+) (bool, error) {
+	var count int64
+
+	// Query to check if teacher has any ACTIVE booking on this date that overlaps with the requested time
+	// EXCLUDING the current schedule if it's already booked (to avoid self-conflict)
+	err := tx.Model(&domain.Booking{}).
+		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
+		Where("ts.teacher_uuid = ?", teacherUUID).
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+		Where("bookings.class_date::DATE = ?::DATE", classDate).
+		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", startTime, endTime).
+		Where("ts.id != ?", currentScheduleID). // Exclude current schedule to avoid false positives
+		Count(&count).Error
+
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
 }
 
 // fetchTeacherFinishedClassCounts returns a map of teacherUUID → number of completed classes.
