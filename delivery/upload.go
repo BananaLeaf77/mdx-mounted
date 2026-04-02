@@ -36,11 +36,16 @@ func (h *UploadHandler) GenerateSignature(c *gin.Context) {
 		return
 	}
 
+	// Get folder from query parameter, default to album_teacher
+	folder := c.Query("folder")
+	if folder == "" {
+		folder = "album_teacher"
+	}
+
 	// Format string yang diminta Cloudinary sebelum di-hash
-	// We include folder=album_teacher because frontend needs it for Teacher Album
-	// Note: All params must be sorted alphabetically by Cloudinary rules,
-	// but since we only have 'folder' and 'timestamp', 'folder' (f) comes before 'timestamp' (t).
-	dataToSign := fmt.Sprintf("folder=album_teacher&timestamp=%d%s", timestamp, apiSecret)
+	// All params must be sorted alphabetically by Cloudinary rules,
+	// 'folder' (f) comes before 'timestamp' (t).
+	dataToSign := fmt.Sprintf("folder=%s&timestamp=%d%s", folder, timestamp, apiSecret)
 
 	// Hasilkan hash SHA-1
 	hash := sha1.New()
@@ -52,5 +57,6 @@ func (h *UploadHandler) GenerateSignature(c *gin.Context) {
 		"success":   true,
 		"timestamp": timestamp,
 		"signature": signature,
+		"folder":    folder,
 	})
 }
