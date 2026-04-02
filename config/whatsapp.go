@@ -26,6 +26,8 @@ func eventHandler(evt interface{}) {
 		log.Println("❌ WhatsApp Client Disconnected")
 	case *events.LoggedOut:
 		log.Println("⚠️ WhatsApp Client Logged Out - Session Invalidated")
+	case *events.IdentityChange:
+		log.Printf("👤 WhatsApp Identity Change for %s (Implicit: %v). Store will be updated automatically.", v.JID.String(), v.Implicit)
 	}
 }
 
@@ -46,11 +48,11 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 
 	clientLog := waLog.Stdout("Client", "WARN", true)
 	client := whatsmeow.NewClient(deviceStore, clientLog)
-	
+
 	// Set the companion platform to macOS to improve reputation and link clickability on iOS recipients.
 	// This helps WhatsApp treat the bot as a "Desktop" client rather than a suspicious generic web client.
 	client.Store.Platform = "macos"
-	
+
 	// Improve E2EE recovery on linked devices (notably iOS) when session keys rotate.
 	client.AutomaticMessageRerequestFromPhone = true
 	client.AutoTrustIdentity = true
@@ -74,7 +76,7 @@ func InitWA(dbAddress string) (*whatsmeow.Client, context.Context, error) {
 				for evt := range qrChan {
 					if evt.Event == "code" {
 						qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-						
+
 						emailReceiver := os.Getenv("QR_CODE_EMAIL_RECEIVER")
 						if emailReceiver != "" {
 							errEmail := utils.SendQRCodeEmail(emailReceiver, "MadeU System - WhatsApp Authentication", "Harap scan QR code terlampir untuk mengautentikasi bot WhatsApp MadeU Anda. Kode ini kedaluwarsa dengan cepat.", evt.Code)
