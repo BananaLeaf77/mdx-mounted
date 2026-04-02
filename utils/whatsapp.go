@@ -62,44 +62,46 @@ func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string)
 		log.Println("⚠️ Failed to refresh user devices for", jid.String(), ":", err)
 	}
 
-	// Smart Message Construction:
-	// Use ExtendedTextMessage if a URL is present, as it allows us to explicitly "flag" 
-	// the link for iOS clients using MatchedText. This is the most 
-	// reliable way to trigger clickability on modern iOS WhatsApp clients.
-	waMessage := &waE2E.Message{}
+	// Multi-Message Split Strategy for iOS:
+	// iOS often disables links embedded in long messages from unknown senders.
+	// Sending the link as a separate, subsequent message triggers the "Link Preview" 
+	// or "Hyperlink Bubble" UI, which is much more consistently clickable.
+	
 	urlPattern := `https?://[^\s\n]+`
 	re := regexp.MustCompile(urlPattern)
-	foundURL := re.FindString(msgText)
-
-	if foundURL != "" {
-		title := "MadEU"
-		description := "Learning made easy"
-		if strings.Contains(foundURL, "madeu.app") {
-			title = "MadEU App"
-			description = "Sistem Manajemen Kursus MadEU"
+	urls := re.FindAllString(msgText, -1)
+	
+	// Create clean text with URLs removed for the primary bubble
+	cleanText := strings.TrimSpace(re.ReplaceAllString(msgText, ""))
+	
+	// Message 1: The info text
+	if cleanText != "" {
+		waMsg := &waE2E.Message{Conversation: &cleanText}
+		if _, err := client.SendMessage(sendCtx, jid, waMsg); err != nil {
+			return fmt.Errorf("failed to send text part: %w", err)
 		}
-
-		waMessage.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
-			Text:        &msgText,
-			MatchedText: &foundURL,
-			Title:       &title,
-			Description: &description,
-		}
-	} else {
-		// Fallback to simple conversation for non-link messages
-		waMessage.Conversation = &msgText
+		// Brief pause for natural bubble delivery order
+		time.Sleep(500 * time.Millisecond)
 	}
-
-	_, err = client.SendMessage(sendCtx, jid, waMessage)
-	if err != nil {
-		// Retry once after a fresh device sync; helps when iOS sessions rotate.
-		if _, refreshErr := client.GetUserDevicesContext(sendCtx, []types.JID{jid}); refreshErr != nil {
-			log.Println("⚠️ Retry device refresh failed for", jid.String(), ":", refreshErr)
+	
+	// Subsequent Messages: The URLs
+	for _, rawURL := range urls {
+		trimmedURL := strings.TrimSpace(rawURL)
+		if trimmedURL == "" {
+			continue
 		}
-		_, retryErr := client.SendMessage(sendCtx, jid, waMessage)
-		if retryErr != nil {
-			return fmt.Errorf("failed to send whatsapp message to %s: %w", phone, retryErr)
+		
+		// For the link bubble, use ExtendedTextMessage with MatchedText for "promotion"
+		linkMsg := &waE2E.Message{
+			ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+				Text:        &trimmedURL,
+				MatchedText: &trimmedURL,
+			},
 		}
+		if _, err := client.SendMessage(sendCtx, jid, linkMsg); err != nil {
+			log.Println("⚠️ Failed to send URL part", trimmedURL, ":", err)
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
 
 	return nil
