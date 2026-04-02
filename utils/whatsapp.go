@@ -12,6 +12,15 @@ import (
 )
 
 func SendWhatsAppMessage(client *whatsmeow.Client, phone string, msgText string) error {
+	phoneJID := types.NewJID(phone, types.DefaultUserServer)
+
+	var listPhoneJID []types.JID
+	listPhoneJID = append(listPhoneJID, phoneJID)
+
+	PrintPretty(listPhoneJID)
+
+	client.GetUserInfo(context.Background(), listPhoneJID)
+
 	if client == nil {
 		return fmt.Errorf("whatsapp client is not initialized")
 	}
