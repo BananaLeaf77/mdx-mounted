@@ -375,10 +375,12 @@ func (r *studentRepository) BookClassTrial(
 		return nil, fmt.Errorf("gagal membuat booking: %w", err)
 	}
 
-	// ── 9. Mark schedule as booked ────────────────────────────────────────────
-	if err := tx.Model(&domain.TeacherSchedule{}).
-		Where("id = ?", schedule.ID).
-		Update("is_booked", true).Error; err != nil {
+	// ── 9. Mark all overlapping schedules as booked ──────────────────────────
+	if err := tx.Exec(`
+		UPDATE teacher_schedules SET is_booked = true
+		WHERE teacher_uuid = ? AND day_of_week = ?
+		  AND (start_time::time, end_time::time) OVERLAPS (?::time, ?::time)
+	`, schedule.TeacherUUID, schedule.DayOfWeek, schedule.StartTime, schedule.EndTime).Error; err != nil {
 		tx.Rollback()
 		return nil, fmt.Errorf("gagal memperbarui status jadwal: %w", err)
 	}
@@ -555,11 +557,23 @@ func (r *studentRepository) CancelBookedClass(
 		return nil, fmt.Errorf("gagal refund quota: %w", err)
 	}
 
-	if err := tx.Model(&domain.TeacherSchedule{}).
-		Where("id = ?", booking.ScheduleID).
-		Update("is_booked", false).Error; err != nil {
+	// ── 8. Release overlapping schedules if no other active bookings exist ───
+	if err := tx.Exec(`
+		UPDATE teacher_schedules ts
+		SET is_booked = false
+		WHERE ts.teacher_uuid = ? AND ts.day_of_week = ?
+		  AND (ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)
+		  AND NOT EXISTS (
+		      SELECT 1 FROM bookings b
+		      JOIN teacher_schedules ts2 ON ts2.id = b.schedule_id
+		      WHERE b.status IN ('booked', 'rescheduled')
+		        AND ts2.teacher_uuid = ts.teacher_uuid
+		        AND ts2.day_of_week = ts.day_of_week
+		        AND (ts2.start_time::time, ts2.end_time::time) OVERLAPS (ts.start_time::time, ts.end_time::time)
+		  )
+	`, booking.Schedule.TeacherUUID, booking.Schedule.DayOfWeek, booking.Schedule.StartTime, booking.Schedule.EndTime).Error; err != nil {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal memperbarui jadwal pengajar: %w", err)
+		return nil, fmt.Errorf("gagal memperbarui status jadwal: %w", err)
 	}
 
 	// Upsert class history
@@ -778,10 +792,12 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal membuat booking: %w", err)
 	}
 
-	// ── 9. Mark schedule as booked ────────────────────────────────────────────
-	if err := tx.Model(&domain.TeacherSchedule{}).
-		Where("id = ?", schedule.ID).
-		Update("is_booked", true).Error; err != nil {
+	// ── 9. Mark all overlapping schedules as booked ──────────────────────────
+	if err := tx.Exec(`
+		UPDATE teacher_schedules SET is_booked = true
+		WHERE teacher_uuid = ? AND day_of_week = ?
+		  AND (start_time::time, end_time::time) OVERLAPS (?::time, ?::time)
+	`, schedule.TeacherUUID, schedule.DayOfWeek, schedule.StartTime, schedule.EndTime).Error; err != nil {
 		tx.Rollback()
 		return nil, fmt.Errorf("gagal memperbarui status jadwal: %w", err)
 	}
@@ -1181,7 +1197,6 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 	excludeTrial := false
 
 	if studentUUID != nil {
-		fmt.Println("masuk sini coy")
 		// Count how many trial packages the student has ever purchased (paid).
 		var trialPurchaseCount int64
 		if err := r.db.WithContext(ctx).
@@ -1209,10 +1224,6 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 			Count(&priorPaidCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 		}
-
-		// Temporary debug — remove after confirming
-		fmt.Printf("[DEBUG] studentUUID=%s trialPurchaseCount=%d priorPaidCount=%d\n",
-			*studentUUID, trialPurchaseCount, priorPaidCount)
 
 		if priorPaidCount > 0 {
 			setting.RegistrationFee = 0
@@ -1573,6 +1584,18 @@ func (r *studentRepository) BulkBookClass(
 			return nil, fmt.Errorf("gagal membuat booking untuk %s: %w", c.ClassDate.Format("02 Jan 2006"), err)
 		}
 		bookingIDs = append(bookingIDs, b.ID)
+	}
+
+	// Update all overlapping schedules for all slots booked in this bulk action.
+	for _, sch := range schedules {
+		if err := tx.Exec(`
+			UPDATE teacher_schedules SET is_booked = true
+			WHERE teacher_uuid = ? AND day_of_week = ?
+			  AND (start_time::time, end_time::time) OVERLAPS (?::time, ?::time)
+		`, sch.TeacherUUID, sch.DayOfWeek, sch.StartTime, sch.EndTime).Error; err != nil {
+			tx.Rollback()
+			return nil, fmt.Errorf("gagal memperbarui status jadwal: %w", err)
+		}
 	}
 
 	// Deduct the full quota atomically.
