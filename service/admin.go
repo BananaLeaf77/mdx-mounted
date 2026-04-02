@@ -356,21 +356,26 @@ func (s *adminService) UpdateSetting(ctx context.Context, setting *domain.Settin
 
 func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interface{}, error) {
 	if s.messenger == nil {
+		fmt.Println("debug 1")
 		return map[string]interface{}{"status": "not_initialized"}, nil
 	}
 
 	if s.messenger.IsLoggedIn() {
+		fmt.Println("debug 2")
 		return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
 	}
 
 	if s.messenger.IsConnected() {
+		fmt.Println("debug 3")
 		return map[string]interface{}{"status": "initializing_connection"}, nil
 	}
 
 	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
+		fmt.Println("debug 4")
 		return map[string]interface{}{"status": "disconnected_but_linked"}, nil
 	}
 
+	fmt.Println("debug 5")
 	return map[string]interface{}{"status": "not_linked"}, nil
 }
 
