@@ -868,12 +868,8 @@ func (r *studentRepository) checkTeacherConflict(
 	classDate time.Time,
 ) (bool, error) {
 	loc, _ := time.LoadLocation("Asia/Makassar")
-
 	dayInLoc := classDate.In(loc)
-	dayStart := time.Date(
-		dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(),
-		0, 0, 0, 0, loc,
-	).UTC()
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
 	dayEnd := dayStart.Add(24 * time.Hour)
 
 	var count int64
@@ -1076,14 +1072,19 @@ func (r *studentRepository) GetAvailableSchedules(
 			result.IsRoomAvailable = ptrBool(bookingCount < roomLimit)
 		}
 
-		// 5d. IsBookedSameDayAndTime
+		// 5d. IsBookedSameDayAndTime — UTC range, no AT TIME ZONE string cast
+		loc, _ := time.LoadLocation("Asia/Makassar")
+		dayInLoc := next.In(loc)
+		dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+		dayEnd := dayStart.Add(24 * time.Hour)
+
 		var existingCount int64
 		if err := r.db.WithContext(ctx).
 			Model(&domain.Booking{}).
 			Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 			Where("bookings.student_uuid = ?", studentUUID).
 			Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-			Where("bookings.class_date::DATE = ?::DATE", next).
+			Where("bookings.class_date >= ? AND bookings.class_date < ?", dayStart, dayEnd).
 			Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", sch.StartTime, sch.EndTime).
 			Count(&existingCount).Error; err == nil {
 			result.IsBookedSameDayAndTime = ptrBool(existingCount > 0)
@@ -1091,26 +1092,57 @@ func (r *studentRepository) GetAvailableSchedules(
 			result.IsBookedSameDayAndTime = ptrBool(false)
 		}
 
-		// 5e. IsTeacherBusy - FIXED: Check if there are ACTIVE bookings for this teacher
-		// on this specific date that overlap with this schedule time
-		teacherBusy, _ := r.checkTeacherConflictForSchedule(r.db.WithContext(ctx), sch.TeacherUUID, sch.StartTime, sch.EndTime, next, sch.ID, studentUUID)
+		// 5e. IsTeacherBusy — only true when a DIFFERENT student blocks this teacher
+		teacherBusy, _ := r.checkTeacherConflictForSchedule(
+			r.db.WithContext(ctx),
+			sch.TeacherUUID, sch.StartTime, sch.EndTime,
+			next, sch.ID, studentUUID,
+		)
 		result.IsTeacherBusy = ptrBool(teacherBusy)
 
-		// 6d. iscancelablefromnow
+		// 5f. IsCancelAbleFromNow
 		result.IsCancelAbleFromNow = ptrBool(utils.CheckCancelAbleFromNow(next))
+
+		// 5g. IsFullyAvailable
+		// KEY FIX: do NOT use sch.IsBooked here. That flag is set on ALL overlapping
+		// sibling schedules when any one of them is booked (e.g. booking schedule 14
+		// also sets is_booked=true on schedule 15 which overlaps it). Instead, check
+		// whether an actual booking exists for THIS schedule on THIS specific date.
+		thisScheduleBooked := r.hasActiveBookingOnDate(
+			r.db.WithContext(ctx), sch.ID, next,
+		)
 
 		result.IsFullyAvailable = ptrBool(
 			*result.IsRoomAvailable &&
 				*result.IsDurationCompatible &&
 				!*result.IsBookedSameDayAndTime &&
-				!teacherBusy &&
-				!sch.IsBooked,
+				!*result.IsTeacherBusy &&
+				!thisScheduleBooked,
 		)
 
 		results = append(results, result)
 	}
 
 	return &results, nil
+}
+
+func (r *studentRepository) hasActiveBookingOnDate(
+	db *gorm.DB,
+	scheduleID int,
+	classDate time.Time,
+) bool {
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	var count int64
+	db.Model(&domain.Booking{}).
+		Where("schedule_id = ?", scheduleID).
+		Where("status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+		Where("class_date >= ? AND class_date < ?", dayStart, dayEnd).
+		Count(&count)
+	return count > 0
 }
 
 func (r *studentRepository) checkTeacherConflictForSchedule(
@@ -1120,15 +1152,11 @@ func (r *studentRepository) checkTeacherConflictForSchedule(
 	endTime string,
 	classDate time.Time,
 	currentScheduleID int,
-	studentUUID string,
+	studentUUID string, // excludes this student's own bookings from the busy check
 ) (bool, error) {
 	loc, _ := time.LoadLocation("Asia/Makassar")
-
 	dayInLoc := classDate.In(loc)
-	dayStart := time.Date(
-		dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(),
-		0, 0, 0, 0, loc,
-	).UTC()
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
 	dayEnd := dayStart.Add(24 * time.Hour)
 
 	var count int64
