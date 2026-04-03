@@ -112,7 +112,7 @@ func (m *WAManager) Connect() error {
 
 		// CRITICAL: Use cancellable context for QR channel
 		qrCtx, qrCancel := context.WithTimeout(context.Background(), waQRTimeout)
-		
+
 		m.mu.Lock()
 		m.qrCancel = qrCancel // Store for cleanup on Disconnect/Logout
 		m.mu.Unlock()
@@ -244,7 +244,7 @@ func (m *WAManager) EnsureConnected() error {
 		m.mu.RLock()
 		client := m.client
 		m.mu.RUnlock()
-		
+
 		if client != nil && client.IsConnected() && client.IsLoggedIn() {
 			return nil
 		}
@@ -261,30 +261,32 @@ func (m *WAManager) Disconnect() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	log.Println("🔌 WhatsApp disconnecting...")
-
-	// Cancel any ongoing operations first (locked version since we hold the lock)
+	// Cancel any ongoing operations
 	if m.reconnectCancel != nil {
 		m.reconnectCancel()
 		m.reconnectCancel = nil
 	}
 
 	if m.qrCancel != nil {
-		m.qrCancel() // This stops the QR channel goroutine immediately
+		m.qrCancel()
 		m.qrCancel = nil
 	}
 
-	// Cleanup client
+	// Cleanup client and CLEAR SESSION
 	if m.client != nil {
-		// Remove event handler first to prevent events during cleanup
 		if m.eventHandlerID != 0 {
 			m.client.RemoveEventHandler(m.eventHandlerID)
 			m.eventHandlerID = 0
 		}
 
-		// Disconnect if connected
+		// Disconnect first
 		if m.client.IsConnected() {
 			m.client.Disconnect()
+		}
+
+		// IMPORTANT: Clear the device ID to force new QR on next connect
+		if m.client.Store != nil {
+			m.client.Store.ID = nil
 		}
 
 		m.client = nil
@@ -293,7 +295,7 @@ func (m *WAManager) Disconnect() {
 	m.status = WAStatusDisconnected
 	m.qrCode = ""
 	m.reconnectCount = 0
-	log.Println("🔌 WhatsApp disconnected")
+	log.Println("🔌 WhatsApp disconnected and session cleared")
 }
 
 // cancelOngoingOperationsLocked must be called with m.mu held
@@ -310,6 +312,9 @@ func (m *WAManager) cancelOngoingOperationsLocked() {
 }
 
 func (m *WAManager) Logout(ctx context.Context) error {
+	// Cancel ongoing operations first (without holding lock to avoid deadlock)
+	m.cancelOngoingOperations()
+
 	m.mu.Lock()
 	client := m.client
 	m.mu.Unlock()
@@ -318,23 +323,19 @@ func (m *WAManager) Logout(ctx context.Context) error {
 		return errors.New("whatsapp client not initialised")
 	}
 
-	// Cancel all ongoing operations BEFORE acquiring lock again
-	// Use the unlocked version to avoid deadlock
-	m.cancelOngoingOperations()
-
-	// Perform logout
+	// Perform logout - this clears session from database
 	err := client.Logout(ctx)
 
-	// Cleanup regardless of logout error
+	// Cleanup
 	m.mu.Lock()
 	if m.eventHandlerID != 0 {
 		client.RemoveEventHandler(m.eventHandlerID)
 	}
+	m.eventHandlerID = 0
 	m.status = WAStatusDisconnected
 	m.qrCode = ""
 	m.reconnectCount = 0
-	m.eventHandlerID = 0
-	m.client = nil // Clear client reference
+	m.client = nil
 	m.mu.Unlock()
 
 	if err != nil {
@@ -426,9 +427,9 @@ func (m *WAManager) IsLoggedIn() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	// CRITICAL: Check both IsLoggedIn() and IsConnected()
-	return m.client != nil && 
-		m.client.IsLoggedIn() && 
-		m.client.IsConnected() && 
+	return m.client != nil &&
+		m.client.IsLoggedIn() &&
+		m.client.IsConnected() &&
 		m.status == WAStatusConnected
 }
 
@@ -466,7 +467,7 @@ func (m *WAManager) handleEvent(evt interface{}, connID uint64) {
 			m.mu.RLock()
 			hasSession := m.client != nil && m.client.Store.ID != nil
 			m.mu.RUnlock()
-			
+
 			if hasSession {
 				m.scheduleReconnect()
 			}

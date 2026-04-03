@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -332,29 +331,19 @@ func (s *adminService) ConnectWhatsApp(_ context.Context) (map[string]interface{
 
 // DisconnectWhatsApp clears the session (full logout) then immediately
 // starts a fresh connect so a new QR is ready without a second API call.
+// admin.go - DisconnectWhatsApp
 func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 	if s.messenger == nil {
 		return errors.New("whatsapp manager tidak diinisialisasi")
 	}
 
-	// First disconnect to stop any ongoing operations
-	s.messenger.Disconnect()
-
-	// Then logout to clear session
+	// Call Logout which properly clears the session from database
 	if err := s.messenger.Logout(ctx); err != nil {
-		log.Printf("⚠️  WhatsApp logout warning: %v", err)
-		// Continue even if logout fails - we want to force a new connection
+		log.Printf("⚠️ WhatsApp logout warning: %v", err)
+		// Continue even if logout fails - we want to force disconnect
 	}
 
-	// Small delay to ensure cleanup completes
-	time.Sleep(500 * time.Millisecond)
-
-	// Now start fresh connection
-	go func() {
-		if err := s.messenger.Connect(); err != nil {
-			log.Printf("⚠️  WhatsApp reconnect after logout failed: %v", err)
-		}
-	}()
+	// Don't auto-reconnect! Let user manually connect when ready
 	return nil
 }
 
