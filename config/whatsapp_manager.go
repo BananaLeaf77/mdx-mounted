@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -29,6 +30,7 @@ const (
 	waQRTimeout            = 3 * time.Minute
 	waReconnectDelay       = 5 * time.Second
 	waMaxReconnectAttempts = 3
+	waDBTimeout            = 10 * time.Second
 )
 
 type WAManager struct {
@@ -39,9 +41,11 @@ type WAManager struct {
 	dbAddress       string
 	status          WAStatus
 	qrCode          string
+	qrCancel        context.CancelFunc // Track QR context for cleanup
 	reconnectCancel context.CancelFunc
 	reconnectCount  int
 	eventHandlerID  uint32
+	connectionID    uint64 // Monotonic ID to track connection attempts
 }
 
 func NewWAManager(dbAddress string) *WAManager {
@@ -51,42 +55,39 @@ func NewWAManager(dbAddress string) *WAManager {
 	}
 }
 
+func (m *WAManager) getNextConnectionID() uint64 {
+	return atomic.AddUint64(&m.connectionID, 1)
+}
+
 func (m *WAManager) Connect() error {
 	m.connectMu.Lock()
 	defer m.connectMu.Unlock()
 
-	// Cancel any pending reconnect
-	if m.reconnectCancel != nil {
-		m.reconnectCancel()
-		m.reconnectCancel = nil
-	}
+	connID := m.getNextConnectionID()
+	log.Printf("📱 WhatsApp Connect() started [connID: %d]", connID)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Cancel any pending reconnect and QR channels
+	m.cancelOngoingOperations()
+
+	// Create new database context - separate from QR context
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), waDBTimeout)
+	defer dbCancel()
 
 	dbLog := waLog.Stdout("Database", "WARN", true)
 
-	container, err := sqlstore.New(ctx, "pgx", m.dbAddress, dbLog)
+	container, err := sqlstore.New(dbCtx, "pgx", m.dbAddress, dbLog)
 	if err != nil {
 		return fmt.Errorf("whatsapp sqlstore: %w", err)
 	}
 
-	deviceStore, err := container.GetFirstDevice(ctx)
+	deviceStore, err := container.GetFirstDevice(dbCtx)
 	if err != nil {
 		return fmt.Errorf("whatsapp get device: %w", err)
 	}
 
 	m.mu.Lock()
-	// Clean up existing client
-	if m.client != nil {
-		if m.client.IsConnected() {
-			m.client.Disconnect()
-		}
-		// Remove event handler if it was added
-		if m.eventHandlerID != 0 {
-			m.client.RemoveEventHandler(m.eventHandlerID)
-		}
-	}
+	// Clean up existing client properly
+	m.cleanupClientLocked()
 
 	m.client = whatsmeow.NewClient(deviceStore, nil)
 	m.client.AutomaticMessageRerequestFromPhone = true
@@ -94,8 +95,10 @@ func (m *WAManager) Connect() error {
 	m.client.UseRetryMessageStore = true
 	m.client.Store.Platform = "macos"
 
-	// Add event handler and store the ID
-	m.eventHandlerID = m.client.AddEventHandler(m.handleEvent)
+	// Add event handler with connection ID tracking
+	m.eventHandlerID = m.client.AddEventHandler(func(evt interface{}) {
+		m.handleEvent(evt, connID)
+	})
 
 	client := m.client
 	hasSession := client.Store.ID != nil
@@ -107,58 +110,129 @@ func (m *WAManager) Connect() error {
 		// No existing session - need QR pairing
 		m.setStatus(WAStatusWaitingQR)
 
+		// CRITICAL: Use cancellable context for QR channel
 		qrCtx, qrCancel := context.WithTimeout(context.Background(), waQRTimeout)
-		defer qrCancel()
+		
+		m.mu.Lock()
+		m.qrCancel = qrCancel // Store for cleanup on Disconnect/Logout
+		m.mu.Unlock()
 
 		qrChan, err := client.GetQRChannel(qrCtx)
 		if err != nil {
+			qrCancel()
 			m.setStatus(WAStatusDisconnected)
 			return fmt.Errorf("failed to get QR channel: %w", err)
 		}
 
 		if err := client.Connect(); err != nil {
+			qrCancel()
 			m.setStatus(WAStatusDisconnected)
 			return fmt.Errorf("whatsapp connect: %w", err)
 		}
 
-		// Handle QR events in goroutine
-		go m.handleQRChannel(qrChan, qrCancel)
+		// Handle QR events in goroutine with connection ID tracking
+		go m.handleQRChannel(qrChan, qrCancel, connID)
 	} else {
 		// Existing session - try to connect directly
 		if err := client.Connect(); err != nil {
 			m.setStatus(WAStatusDisconnected)
 			return fmt.Errorf("whatsapp reconnect: %w", err)
 		}
-		// Connection status will be updated via Connected event
 	}
 
 	return nil
 }
 
-func (m *WAManager) handleQRChannel(qrChan <-chan whatsmeow.QRChannelItem, cancel context.CancelFunc) {
+// cancelOngoingOperations stops any pending QR channels and reconnect attempts
+func (m *WAManager) cancelOngoingOperations() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.reconnectCancel != nil {
+		m.reconnectCancel()
+		m.reconnectCancel = nil
+	}
+
+	if m.qrCancel != nil {
+		m.qrCancel()
+		m.qrCancel = nil
+	}
+}
+
+// cleanupClientLocked properly cleans up the existing client
+// Must be called with m.mu held
+func (m *WAManager) cleanupClientLocked() {
+	if m.client == nil {
+		return
+	}
+
+	// Remove event handler first to prevent events during cleanup
+	if m.eventHandlerID != 0 {
+		m.client.RemoveEventHandler(m.eventHandlerID)
+		m.eventHandlerID = 0
+	}
+
+	// Disconnect if connected
+	if m.client.IsConnected() {
+		m.client.Disconnect()
+	}
+
+	m.client = nil
+}
+
+func (m *WAManager) handleQRChannel(qrChan <-chan whatsmeow.QRChannelItem, cancel context.CancelFunc, connID uint64) {
 	defer cancel()
 
 	for evt := range qrChan {
+		// Check if this is still the current connection
+		currentConnID := atomic.LoadUint64(&m.connectionID)
+		if currentConnID != connID {
+			log.Printf("🔄 QR channel [connID: %d] superseded by newer connection [connID: %d], exiting", connID, currentConnID)
+			return
+		}
+
 		switch evt.Event {
 		case "code":
 			m.mu.Lock()
-			m.qrCode = evt.Code
-			m.status = WAStatusWaitingQR
+			// Only update if still waiting for QR
+			if m.status == WAStatusWaitingQR {
+				m.qrCode = evt.Code
+			}
 			m.mu.Unlock()
-			log.Println("📱 WhatsApp QR code generated and ready")
+			log.Printf("📱 WhatsApp QR code generated [connID: %d]", connID)
 
 		case "success":
 			m.mu.Lock()
 			m.qrCode = ""
-			m.status = WAStatusConnected
+			m.qrCancel = nil // Clear the cancel func on success
+			// Status will be set by Connected event, but we can pre-set it
+			if m.status == WAStatusWaitingQR {
+				m.status = WAStatusConnected
+			}
 			m.mu.Unlock()
-			log.Println("✅ WhatsApp QR scanned — pairing successful")
+			log.Printf("✅ WhatsApp QR scanned — pairing successful [connID: %d]", connID)
 			return
 
 		case "timeout":
-			log.Println("⏰ WhatsApp QR code timed out")
+			log.Printf("⏰ WhatsApp QR code timed out [connID: %d]", connID)
 			m.setStatus(WAStatusDisconnected)
 			return
+
+		case "err-client-outdated":
+			log.Printf("❌ WhatsApp client outdated [connID: %d]", connID)
+			m.setStatus(WAStatusDisconnected)
+			return
+
+		case "err-unexpected-state":
+			log.Printf("❌ WhatsApp unexpected state error [connID: %d]", connID)
+			m.setStatus(WAStatusDisconnected)
+			return
+
+		default:
+			log.Printf("⚠️ WhatsApp QR channel event [connID: %d]: %s", connID, evt.Event)
+			if evt.Error != nil {
+				log.Printf("⚠️ WhatsApp QR channel error [connID: %d]: %v", connID, evt.Error)
+			}
 		}
 	}
 }
@@ -166,7 +240,16 @@ func (m *WAManager) handleQRChannel(qrChan <-chan whatsmeow.QRChannelItem, cance
 func (m *WAManager) EnsureConnected() error {
 	st := m.GetStatus()
 	if st == WAStatusConnected {
-		return nil
+		// Additional health check
+		m.mu.RLock()
+		client := m.client
+		m.mu.RUnlock()
+		
+		if client != nil && client.IsConnected() && client.IsLoggedIn() {
+			return nil
+		}
+		// Status says connected but client is not healthy, force reconnect
+		log.Println("⚠️ Status connected but client unhealthy, forcing reconnect")
 	}
 	if st == WAStatusWaitingQR || st == WAStatusConnecting {
 		return errors.New("connection already in progress")
@@ -178,18 +261,52 @@ func (m *WAManager) Disconnect() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Cancel any reconnect attempts
+	log.Println("🔌 WhatsApp disconnecting...")
+
+	// Cancel any ongoing operations first (locked version since we hold the lock)
 	if m.reconnectCancel != nil {
 		m.reconnectCancel()
 		m.reconnectCancel = nil
 	}
 
-	if m.client != nil && m.client.IsConnected() {
-		m.client.Disconnect()
+	if m.qrCancel != nil {
+		m.qrCancel() // This stops the QR channel goroutine immediately
+		m.qrCancel = nil
 	}
+
+	// Cleanup client
+	if m.client != nil {
+		// Remove event handler first to prevent events during cleanup
+		if m.eventHandlerID != 0 {
+			m.client.RemoveEventHandler(m.eventHandlerID)
+			m.eventHandlerID = 0
+		}
+
+		// Disconnect if connected
+		if m.client.IsConnected() {
+			m.client.Disconnect()
+		}
+
+		m.client = nil
+	}
+
 	m.status = WAStatusDisconnected
+	m.qrCode = ""
 	m.reconnectCount = 0
 	log.Println("🔌 WhatsApp disconnected")
+}
+
+// cancelOngoingOperationsLocked must be called with m.mu held
+func (m *WAManager) cancelOngoingOperationsLocked() {
+	if m.reconnectCancel != nil {
+		m.reconnectCancel()
+		m.reconnectCancel = nil
+	}
+
+	if m.qrCancel != nil {
+		m.qrCancel() // This stops the QR channel goroutine immediately
+		m.qrCancel = nil
+	}
 }
 
 func (m *WAManager) Logout(ctx context.Context) error {
@@ -201,18 +318,23 @@ func (m *WAManager) Logout(ctx context.Context) error {
 		return errors.New("whatsapp client not initialised")
 	}
 
-	// Cancel reconnect attempts
-	if m.reconnectCancel != nil {
-		m.reconnectCancel()
-		m.reconnectCancel = nil
-	}
+	// Cancel all ongoing operations BEFORE acquiring lock again
+	// Use the unlocked version to avoid deadlock
+	m.cancelOngoingOperations()
 
+	// Perform logout
 	err := client.Logout(ctx)
 
+	// Cleanup regardless of logout error
 	m.mu.Lock()
+	if m.eventHandlerID != 0 {
+		client.RemoveEventHandler(m.eventHandlerID)
+	}
 	m.status = WAStatusDisconnected
 	m.qrCode = ""
 	m.reconnectCount = 0
+	m.eventHandlerID = 0
+	m.client = nil // Clear client reference
 	m.mu.Unlock()
 
 	if err != nil {
@@ -303,7 +425,11 @@ func (m *WAManager) GetJID() string {
 func (m *WAManager) IsLoggedIn() bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.client != nil && m.client.IsLoggedIn() && m.status == WAStatusConnected
+	// CRITICAL: Check both IsLoggedIn() and IsConnected()
+	return m.client != nil && 
+		m.client.IsLoggedIn() && 
+		m.client.IsConnected() && 
+		m.status == WAStatusConnected
 }
 
 func (m *WAManager) RawClient() *whatsmeow.Client {
@@ -312,8 +438,15 @@ func (m *WAManager) RawClient() *whatsmeow.Client {
 	return m.client
 }
 
-// handleEvent processes WhatsApp events
-func (m *WAManager) handleEvent(evt interface{}) {
+// handleEvent processes WhatsApp events with connection tracking
+func (m *WAManager) handleEvent(evt interface{}, connID uint64) {
+	// Verify this event is for the current connection
+	currentConnID := atomic.LoadUint64(&m.connectionID)
+	if currentConnID != connID {
+		// Old connection event, ignore
+		return
+	}
+
 	switch v := evt.(type) {
 	case *events.Connected:
 		m.mu.Lock()
@@ -321,16 +454,22 @@ func (m *WAManager) handleEvent(evt interface{}) {
 		m.qrCode = ""
 		m.reconnectCount = 0
 		m.mu.Unlock()
-		log.Printf("✅ WhatsApp connected")
+		log.Printf("✅ WhatsApp connected [connID: %d]", connID)
 
 	case *events.Disconnected:
 		wasConnected := m.GetStatus() == WAStatusConnected
 		m.setStatus(WAStatusDisconnected)
-		log.Printf("❌ WhatsApp disconnected")
+		log.Printf("❌ WhatsApp disconnected [connID: %d]", connID)
 
 		// Auto-reconnect only if we were previously connected and have a session
 		if wasConnected {
-			m.scheduleReconnect()
+			m.mu.RLock()
+			hasSession := m.client != nil && m.client.Store.ID != nil
+			m.mu.RUnlock()
+			
+			if hasSession {
+				m.scheduleReconnect()
+			}
 		}
 
 	case *events.LoggedOut:
@@ -338,22 +477,20 @@ func (m *WAManager) handleEvent(evt interface{}) {
 		m.status = WAStatusDisconnected
 		m.qrCode = ""
 		m.reconnectCount = 0
+		m.qrCancel = nil
 		m.mu.Unlock()
-		log.Printf("⚠️ WhatsApp logged out")
+		log.Printf("⚠️ WhatsApp logged out [connID: %d]", connID)
 
 		// Clear any scheduled reconnects
-		if m.reconnectCancel != nil {
-			m.reconnectCancel()
-			m.reconnectCancel = nil
-		}
+		m.cancelOngoingOperations()
 
 	case *events.PairSuccess:
-		log.Printf("✅ WhatsApp pairing successful")
+		log.Printf("✅ WhatsApp pairing successful [connID: %d]", connID)
 		// Status will be updated by Connected event
 
 	case *events.ConnectFailure:
 		m.setStatus(WAStatusDisconnected)
-		log.Printf("❌ WhatsApp connect failure: %v", v)
+		log.Printf("❌ WhatsApp connect failure [connID: %d]: %v", connID, v)
 
 		// Schedule reconnect if we have a session
 		m.mu.RLock()
@@ -363,6 +500,10 @@ func (m *WAManager) handleEvent(evt interface{}) {
 		if hasSession && m.reconnectCount < waMaxReconnectAttempts {
 			m.scheduleReconnect()
 		}
+
+	case *events.StreamReplaced:
+		log.Printf("🔄 WhatsApp stream replaced [connID: %d]", connID)
+		// Connection is still valid, just the stream was replaced
 	}
 }
 

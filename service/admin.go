@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -271,16 +272,16 @@ func (s *adminService) GetWhatsAppStatus(_ context.Context) (map[string]interfac
 	if s.messenger == nil {
 		return map[string]interface{}{
 			"status": "not_initialized",
-			"error": "WhatsApp manager not configured",
+			"error":  "WhatsApp manager not configured",
 		}, nil
 	}
-	
+
 	status := s.messenger.GetStatus()
 	result := map[string]interface{}{
 		"status": string(status),
 		"jid":    s.messenger.GetJID(),
 	}
-	
+
 	// Only include QR code when actively waiting for pairing
 	if status == config.WAStatusWaitingQR {
 		if qr := s.messenger.GetQRCode(); qr != "" {
@@ -290,7 +291,7 @@ func (s *adminService) GetWhatsAppStatus(_ context.Context) (map[string]interfac
 			result["message"] = "Waiting for QR code generation..."
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -299,14 +300,14 @@ func (s *adminService) ConnectWhatsApp(_ context.Context) (map[string]interface{
 	if s.messenger == nil {
 		return nil, errors.New("whatsapp manager tidak diinisialisasi")
 	}
-	
+
 	status := s.messenger.GetStatus()
-	
+
 	switch status {
 	case config.WAStatusConnected:
 		return map[string]interface{}{
-			"status": "already_connected",
-			"jid":    s.messenger.GetJID(),
+			"status":  "already_connected",
+			"jid":     s.messenger.GetJID(),
 			"message": "WhatsApp sudah terhubung",
 		}, nil
 	case config.WAStatusConnecting, config.WAStatusWaitingQR:
@@ -321,22 +322,34 @@ func (s *adminService) ConnectWhatsApp(_ context.Context) (map[string]interface{
 				log.Printf("⚠️ WhatsApp Connect() error: %v", err)
 			}
 		}()
-		
+
 		return map[string]interface{}{
 			"status":  "connecting",
 			"message": "Memulai koneksi WhatsApp. Poll status untuk mendapatkan QR code.",
 		}, nil
 	}
 }
+
 // DisconnectWhatsApp clears the session (full logout) then immediately
 // starts a fresh connect so a new QR is ready without a second API call.
 func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 	if s.messenger == nil {
 		return errors.New("whatsapp manager tidak diinisialisasi")
 	}
+
+	// First disconnect to stop any ongoing operations
+	s.messenger.Disconnect()
+
+	// Then logout to clear session
 	if err := s.messenger.Logout(ctx); err != nil {
 		log.Printf("⚠️  WhatsApp logout warning: %v", err)
+		// Continue even if logout fails - we want to force a new connection
 	}
+
+	// Small delay to ensure cleanup completes
+	time.Sleep(500 * time.Millisecond)
+
+	// Now start fresh connection
 	go func() {
 		if err := s.messenger.Connect(); err != nil {
 			log.Printf("⚠️  WhatsApp reconnect after logout failed: %v", err)
