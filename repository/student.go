@@ -81,27 +81,37 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		return nil, fmt.Errorf("gagal mengambil jadwal: %w", err)
 	}
 
-	// ── 3. Teacher finished-class counts (reuse existing helper) ─────────────
+	// ── 3. Teacher finished-class counts ─────────────────────────────────────
 	teacherFinishedCounts, err := r.fetchTeacherFinishedClassCounts(ctx)
 	if err != nil {
 		teacherFinishedCounts = make(map[string]int)
 	}
-
-	// ── 4. Check which durations the student already used with this trial pkg ─
-	// Business rule: 1×30min + 1×60min allowed. Block if already used that duration.
+	
+	// ── 4. Used quota check (1×30min + 1×60min trial rule) ───────────────────
 	var thirtyMinUsed, sixtyMinUsed int64
 	r.db.WithContext(ctx).Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("bookings.student_package_id = ?", packageID).
-		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted}).
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted, domain.StatusRescheduled}).
 		Where("ts.duration = 30").Count(&thirtyMinUsed)
 	r.db.WithContext(ctx).Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("bookings.student_package_id = ?", packageID).
-		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted}).
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted, domain.StatusRescheduled}).
 		Where("ts.duration = 60").Count(&sixtyMinUsed)
 
-	// ── 5. Enrich each schedule ───────────────────────────────────────────────
+	// ── 5. Fetch instrument for drum check ───────────────────────────────────
+	var instrument domain.Instrument
+	if err := r.db.WithContext(ctx).Where("id = ?", instrumentID).First(&instrument).Error; err != nil {
+		return nil, fmt.Errorf("instrumen tidak ditemukan: %w", err)
+	}
+	isDrum := strings.EqualFold(instrument.Name, "drum") || strings.EqualFold(instrument.Name, "drums")
+	roomLimit := domain.RegularRoomLimit
+	if isDrum {
+		roomLimit = domain.DrumRoomLimit
+	}
+
+	// ── 6. Enrich each schedule ───────────────────────────────────────────────
 	var results []domain.ScheduleAvailabilityResult
 
 	for i := range schedules {
@@ -112,20 +122,12 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			TeacherFinishedClassCount: teacherFinishedCounts[sch.TeacherUUID],
 		}
 
-		// 5a. Next class date - ensure it's in Asia/Makassar
+		// 6a. Next class date
 		startTimeParsed, _ := time.Parse("15:04", sch.StartTime)
 		next := utils.GetNextClassDate(sch.DayOfWeek, startTimeParsed)
-
-		// CRITICAL: Ensure next date is in Asia/Makassar timezone
-		loc, _ := time.LoadLocation("Asia/Makassar")
-		next = time.Date(
-			next.Year(), next.Month(), next.Day(),
-			next.Hour(), next.Minute(), next.Second(), next.Nanosecond(),
-			loc,
-		)
 		result.NextClassDate = &next
 
-		// 5b. IsDurationCompatible — trial rule: 30min slot ok if 30min quota not used, same for 60
+		// 6b. IsDurationCompatible
 		switch sch.Duration {
 		case 30:
 			result.IsDurationCompatible = ptrBool(thirtyMinUsed == 0)
@@ -135,23 +137,7 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			result.IsDurationCompatible = ptrBool(false)
 		}
 
-		// 5c. IsRoomAvailable — we don't know the instrument yet (student picks at booking),
-		// 5c. IsRoomAvailable — now we know the instrument, do a real room check
-		isDrum := false
-		var instName string
-		// look up instrument name for drum check
-		for _, inst := range sch.TeacherProfile.Instruments {
-			if inst.ID == instrumentID {
-				isDrum = strings.EqualFold(inst.Name, "drum") || strings.EqualFold(inst.Name, "drums")
-				instName = inst.Name
-				_ = instName
-				break
-			}
-		}
-		roomLimit := domain.RegularRoomLimit
-		if isDrum {
-			roomLimit = domain.DrumRoomLimit
-		}
+		// 6c. IsRoomAvailable
 		var roomCount int64
 		roomCountErr := r.countRoomUsage(
 			r.db.WithContext(ctx),
@@ -165,8 +151,8 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			result.IsRoomAvailable = ptrBool(roomCount < roomLimit)
 		}
 
-		// 5d. IsBookedSameDayAndTime
-		loc, _ = time.LoadLocation("Asia/Makassar")
+		// 6d. IsBookedSameDayAndTime
+		loc, _ := time.LoadLocation("Asia/Makassar")
 		dayInLoc := next.In(loc)
 		dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
 		dayEnd := dayStart.Add(24 * time.Hour)
@@ -185,14 +171,32 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 			result.IsBookedSameDayAndTime = ptrBool(false)
 		}
 
-		// 5e. IsTeacherBusy — only true when a DIFFERENT student blocks this teacher
+		// 6e. IsTeacherBusy
 		teacherBusy, _ := r.checkTeacherConflictForSchedule(
 			r.db.WithContext(ctx),
 			sch.TeacherUUID, sch.StartTime, sch.EndTime,
 			next, sch.ID,
-			studentUUID, // <-- new param: exclude own bookings
+			studentUUID,
 		)
 		result.IsTeacherBusy = ptrBool(teacherBusy)
+
+		// 6f. IsCancelAbleFromNow
+		result.IsCancelAbleFromNow = ptrBool(utils.CheckCancelAbleFromNow(next))
+
+		// 6g. IsFullyAvailable
+		thisScheduleBooked := r.hasActiveBookingOnDate(
+			r.db.WithContext(ctx), sch.ID, next,
+		)
+
+		result.IsFullyAvailable = ptrBool(
+			*result.IsRoomAvailable &&
+				*result.IsDurationCompatible &&
+				!*result.IsBookedSameDayAndTime &&
+				!*result.IsTeacherBusy &&
+				!thisScheduleBooked,
+		)
+
+		results = append(results, result)
 	}
 
 	return &results, nil
@@ -251,14 +255,11 @@ func (r *studentRepository) BookClassTrial(
 		return nil, errors.New("jadwal sudah dibooking")
 	}
 
-	// ── 2b. Compute next class date early so we can check teacher conflict ────
+	// ── 2b. Compute next class date early ────────────────────────────────────
 	startTimeParsedEarly, _ := time.Parse("15:04", schedule.StartTime)
 	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsedEarly)
 
 	// ── 2c. Teacher overlap conflict check ────────────────────────────────────
-	// Blocks booking if the teacher already has ANY booking on this date whose
-	// schedule time window overlaps with [start, end) of the requested schedule.
-	// This handles the 60-min ↔ 30-min sibling blocking correctly.
 	teacherBusy, conflictErr := r.checkTeacherConflict(tx, schedule.TeacherUUID, schedule.StartTime, schedule.EndTime, classDate)
 	if conflictErr != nil {
 		tx.Rollback()
@@ -293,7 +294,7 @@ func (r *studentRepository) BookClassTrial(
 	if err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("bookings.student_package_id = ?", packageID).
-		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted}).
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted, domain.StatusRescheduled}).
 		Where("ts.duration = ?", schedule.Duration).
 		Count(&durationCount).Error; err != nil {
 		tx.Rollback()
@@ -347,12 +348,17 @@ func (r *studentRepository) BookClassTrial(
 	}
 
 	// ── 7. Student conflict check ─────────────────────────────────────────────
+	loc, _ = time.LoadLocation("Asia/Makassar")
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+
 	var existingBookingCount int64
 	if err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
 		Where("bookings.student_uuid = ?", studentUUID).
 		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-		Where("bookings.class_date::DATE = ?::DATE", classDate).
+		Where("bookings.class_date >= ? AND bookings.class_date < ?", dayStart, dayEnd).
 		Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", schedule.StartTime, schedule.EndTime).
 		Count(&existingBookingCount).Error; err != nil {
 		tx.Rollback()
