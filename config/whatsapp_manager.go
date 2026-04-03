@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib" // registers "pgx" driver for whatsmeow sqlstore
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -62,7 +63,7 @@ func (m *WAManager) Connect() error {
 	ctx := context.Background()
 	dbLog := waLog.Stdout("Database", "WARN", true)
 
-	container, err := sqlstore.New(ctx, "postgres", m.dbAddress, dbLog)
+	container, err := sqlstore.New(ctx, "pgx", m.dbAddress, dbLog)
 	if err != nil {
 		return fmt.Errorf("whatsapp sqlstore: %w", err)
 	}
