@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // embed IANA timezone DB for Railway/Docker (no OS tzdata)
 
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
