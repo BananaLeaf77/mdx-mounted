@@ -273,17 +273,12 @@ func (s *adminService) GetWhatsAppStatus(_ context.Context) (map[string]interfac
 	switch s.messenger.GetStatus() {
 	case config.WAStatusConnected:
 		return map[string]interface{}{"status": "connected", "jid": s.messenger.GetJID()}, nil
-	case config.WAStatusWaitingQR:
-		result := map[string]interface{}{"status": "waiting_qr"}
+	case config.WAStatusDisconnected:
+		result := map[string]interface{}{"status": "disconnected_sending_qr"}
 		if qr := s.messenger.GetQRCode(); qr != "" {
 			result["qr_code"] = qr
 		}
 		return result, nil
-	case config.WAStatusDisconnected:
-		if jid := s.messenger.GetJID(); jid != "" {
-			return map[string]interface{}{"status": "disconnected_but_linked", "jid": jid}, nil
-		}
-		return map[string]interface{}{"status": "disconnected"}, nil
 	default:
 		return map[string]interface{}{"status": "not_linked"}, nil
 	}
