@@ -1,22 +1,31 @@
-// config/whatsapp.go
 package config
 
 import (
+	"errors"
 	"log"
+	"time"
 )
 
-// InitWA creates a WAManager using the same Postgres DSN used by the main DB,
-// then immediately attempts to connect (either resumes session or starts QR).
-// Returns the manager; callers use it instead of the raw whatsmeow.Client.
+// InitWA creates a WAManager with proper initialization
 func InitWA(dbAddress string) (*WAManager, error) {
-	mgr := NewWAManager(dbAddress)
-
-	if err := mgr.Connect(); err != nil {
-		log.Printf("⚠️  WhatsApp initial connect failed: %v", err)
-		// Return the manager anyway — admin can trigger reconnect from dashboard.
-		return mgr, nil
+	if dbAddress == "" {
+		return nil, errors.New("database address is required for WhatsApp manager")
 	}
-
-	log.Println("✅ WhatsApp manager initialised")
+	
+	mgr := NewWAManager(dbAddress)
+	
+	// Don't block on connection - it will happen asynchronously
+	go func() {
+		// Give the system a moment to settle
+		time.Sleep(1 * time.Second)
+		
+		if err := mgr.Connect(); err != nil {
+			log.Printf("⚠️ WhatsApp initial connection failed: %v", err)
+			log.Println("📱 WhatsApp will be available via admin dashboard for manual connection")
+		} else {
+			log.Println("✅ WhatsApp manager initialized and connecting...")
+		}
+	}()
+	
 	return mgr, nil
 }

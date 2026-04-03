@@ -266,45 +266,68 @@ func (s *adminService) UpdateSetting(ctx context.Context, setting *domain.Settin
 
 // ─── WhatsApp management ─────────────────────────────────────────────────────
 
+// GetWhatsAppStatus improved version
 func (s *adminService) GetWhatsAppStatus(_ context.Context) (map[string]interface{}, error) {
 	if s.messenger == nil {
-		return map[string]interface{}{"status": "not_initialized"}, nil
+		return map[string]interface{}{
+			"status": "not_initialized",
+			"error": "WhatsApp manager not configured",
+		}, nil
 	}
-	switch s.messenger.GetStatus() {
-	case config.WAStatusConnected:
-		return map[string]interface{}{"status": "connected", "jid": s.messenger.GetJID()}, nil
-	case config.WAStatusDisconnected:
-		result := map[string]interface{}{"status": "disconnected_sending_qr", "qr_code": ""}
+	
+	status := s.messenger.GetStatus()
+	result := map[string]interface{}{
+		"status": string(status),
+		"jid":    s.messenger.GetJID(),
+	}
+	
+	// Only include QR code when actively waiting for pairing
+	if status == config.WAStatusWaitingQR {
 		if qr := s.messenger.GetQRCode(); qr != "" {
-			log.Println("QR Code:", qr)
 			result["qr_code"] = qr
+			log.Println("📱 QR Code length:", len(qr))
+		} else {
+			result["message"] = "Waiting for QR code generation..."
 		}
-		return result, nil
-	default:
-		return map[string]interface{}{"status": "not_linked"}, nil
 	}
+	
+	return result, nil
 }
 
-// ConnectWhatsApp fires a non-blocking connect. The HTTP response returns
-// immediately; the frontend must poll GET /admin/whatsapp/status for the QR.
+// ConnectWhatsApp improved version
 func (s *adminService) ConnectWhatsApp(_ context.Context) (map[string]interface{}, error) {
 	if s.messenger == nil {
 		return nil, errors.New("whatsapp manager tidak diinisialisasi")
 	}
-	if s.messenger.GetStatus() == config.WAStatusConnected {
-		return map[string]interface{}{"status": "already_connected", "jid": s.messenger.GetJID()}, nil
+	
+	status := s.messenger.GetStatus()
+	
+	switch status {
+	case config.WAStatusConnected:
+		return map[string]interface{}{
+			"status": "already_connected",
+			"jid":    s.messenger.GetJID(),
+			"message": "WhatsApp sudah terhubung",
+		}, nil
+	case config.WAStatusConnecting, config.WAStatusWaitingQR:
+		return map[string]interface{}{
+			"status":  "connecting",
+			"message": "Koneksi WhatsApp sedang berlangsung, silakan cek status",
+		}, nil
+	default:
+		// Start new connection
+		go func() {
+			if err := s.messenger.Connect(); err != nil {
+				log.Printf("⚠️ WhatsApp Connect() error: %v", err)
+			}
+		}()
+		
+		return map[string]interface{}{
+			"status":  "connecting",
+			"message": "Memulai koneksi WhatsApp. Poll status untuk mendapatkan QR code.",
+		}, nil
 	}
-	go func() {
-		if err := s.messenger.Connect(); err != nil {
-			log.Printf("⚠️  WhatsApp Connect() error: %v", err)
-		}
-	}()
-	return map[string]interface{}{
-		"status":  "connecting",
-		"message": "Koneksi dimulai. Poll GET /admin/whatsapp/status untuk QR code.",
-	}, nil
 }
-
 // DisconnectWhatsApp clears the session (full logout) then immediately
 // starts a fresh connect so a new QR is ready without a second API call.
 func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
