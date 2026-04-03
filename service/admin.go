@@ -362,7 +362,11 @@ func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interf
 
 	if s.messenger.IsLoggedIn() {
 		fmt.Println("debug 2")
-		return map[string]interface{}{"status": "connected", "jid": s.messenger.Store.ID.String()}, nil
+		jidStr := ""
+		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
+			jidStr = s.messenger.Store.ID.String()
+		}
+		return map[string]interface{}{"status": "connected", "jid": jidStr}, nil
 	}
 
 	if s.messenger.IsConnected() {
@@ -385,7 +389,11 @@ func (s *adminService) ConnectWhatsApp(ctx context.Context) (map[string]interfac
 	}
 
 	if s.messenger.IsLoggedIn() {
-		return map[string]interface{}{"status": "already_connected", "jid": s.messenger.Store.ID.String()}, nil
+		jidStr := ""
+		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
+			jidStr = s.messenger.Store.ID.String()
+		}
+		return map[string]interface{}{"status": "already_connected", "jid": jidStr}, nil
 	}
 
 	// Device already linked — just reconnect
