@@ -1,6 +1,7 @@
 package service
 
 import (
+	"chronosphere/config"
 	"chronosphere/domain"
 	"chronosphere/utils"
 	"context"
@@ -8,17 +9,15 @@ import (
 	"log"
 	"os"
 	"time"
-
-	"go.mau.fi/whatsmeow"
 )
 
 type studentUseCase struct {
 	repo      domain.StudentRepository
-	messenger *whatsmeow.Client
+	messenger *config.WAManager
 }
 
-func NewStudentUseCase(repo domain.StudentRepository, meowClient *whatsmeow.Client) domain.StudentUseCase {
-	return &studentUseCase{repo: repo, messenger: meowClient}
+func NewStudentUseCase(repo domain.StudentRepository, mgr *config.WAManager) domain.StudentUseCase {
+	return &studentUseCase{repo: repo, messenger: mgr}
 }
 
 func (s *studentUseCase) GetTeacherDetails(ctx context.Context, teacherUUID string) (*domain.User, error) {
@@ -28,8 +27,6 @@ func (s *studentUseCase) GetTeacherDetails(ctx context.Context, teacherUUID stri
 func (s *studentUseCase) GetMyClassHistory(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
 	return s.repo.GetMyClassHistory(ctx, studentUUID, f)
 }
-
-// ─── Bulk Book ────────────────────────────────────────────────────────────────
 
 func (s *studentUseCase) GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]domain.TeacherSchedule, error) {
 	return s.repo.GetTeacherSchedulesForPackage(ctx, teacherUUID, studentPackageID, studentUUID)
@@ -48,81 +45,50 @@ func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, s
 		defaultReason := "Alasan tidak diberikan"
 		reason = &defaultReason
 	}
-
 	data, err := s.repo.CancelBookedClass(ctx, bookingID, studentUUID, reason)
 	if err != nil {
 		return err
 	}
-
-	if !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
 		return nil
 	}
-
 	s.sendCancelClassNotif(data, reason)
 	return nil
 }
 
-func (s *studentUseCase) BookClass(
-	ctx context.Context,
-	studentUUID string,
-	scheduleID int,
-	instrumentID int,
-) (*domain.Booking, error) {
+func (s *studentUseCase) BookClass(ctx context.Context, studentUUID string, scheduleID int, instrumentID int) (*domain.Booking, error) {
 	data, err := s.repo.BookClass(ctx, studentUUID, scheduleID, instrumentID)
 	if err != nil {
 		return nil, err
 	}
-
-	// if its not loggedin log it
-	if !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		log.Printf("🔕 WhatsApp not connected, skipping book notification")
 		return data, nil
 	}
-
 	s.sendBookClassNotif(data)
-
 	return data, nil
 }
 
-// GetAvailableSchedules delegates to the repository with the selected packageID,
-// which enables trial-vs-regular distinction and correct room categorization.
-func (s *studentUseCase) GetAvailableSchedules(
-	ctx context.Context,
-	studentUUID string,
-	instrumentID int,
-) (*[]domain.ScheduleAvailabilityResult, error) {
+func (s *studentUseCase) GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]domain.ScheduleAvailabilityResult, error) {
 	return s.repo.GetAvailableSchedules(ctx, studentUUID, instrumentID)
 }
 
-// Replace existing GetAvailableSchedulesTrial
-func (s *studentUseCase) GetAvailableSchedulesTrial(
-	ctx context.Context,
-	studentUUID string,
-	packageID int,
-	instrumentID int,
-) (*[]domain.ScheduleAvailabilityResult, error) {
+func (s *studentUseCase) GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int, instrumentID int) (*[]domain.ScheduleAvailabilityResult, error) {
 	return s.repo.GetAvailableSchedulesTrial(ctx, studentUUID, packageID, instrumentID)
 }
 
-// Add new method
 func (s *studentUseCase) GetAllInstruments(ctx context.Context) ([]domain.Instrument, error) {
 	return s.repo.GetAllInstruments(ctx)
 }
 
-func (s *studentUseCase) BookClassTrial(
-	ctx context.Context,
-	studentUUID string,
-	scheduleID int,
-	packageID int,
-	instrumentID int,
-) (*domain.Booking, error) {
+func (s *studentUseCase) BookClassTrial(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID int) (*domain.Booking, error) {
 	data, err := s.repo.BookClassTrial(ctx, studentUUID, scheduleID, packageID, instrumentID)
 	if err != nil {
 		return nil, err
 	}
-	if s.messenger != nil {
-		s.sendBookClassNotif(data) // reuse existing notification helper
+	if s.messenger != nil && s.messenger.IsLoggedIn() {
+		s.sendBookClassNotif(data)
 	}
 	return data, nil
 }
@@ -144,7 +110,7 @@ func (s *studentUseCase) GetMyBookedClasses(ctx context.Context, studentUUID str
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WhatsApp notification helpers (unchanged logic, extracted for clarity)
+// Notification helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 func (s *studentUseCase) sendCancelClassNotif(booking *domain.Booking, reason *string) {
@@ -153,9 +119,9 @@ func (s *studentUseCase) sendCancelClassNotif(booking *domain.Booking, reason *s
 	dayName := indonesianDayName(classDate.Weekday())
 	dateStr := classDate.Format("02/01/2006")
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
-
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
-	teacherMessage := fmt.Sprintf(`*PEMBATALAN KELAS*
+
+	teacherMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s %s,
 
@@ -178,7 +144,7 @@ Halo %s %s,
 		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
-	studentMessage := fmt.Sprintf(`*PEMBATALAN KELAS*
+	studentMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s,
 
@@ -204,14 +170,12 @@ Halo %s,
 		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
-	tPhone, sPhone, tMsg, sMsg :=
-		booking.Schedule.Teacher.Phone, booking.Student.Phone,
-		teacherMessage, studentMessage
-
+	mgr := s.messenger
+	tPhone := booking.Schedule.Teacher.Phone
+	sPhone := booking.Student.Phone
 	go func() {
-		notifyCtx := context.Background()
-		sendWA(s.messenger, notifyCtx, tPhone, tMsg)
-		sendWA(s.messenger, notifyCtx, sPhone, sMsg)
+		sendWA(mgr, tPhone, teacherMsg)
+		sendWA(mgr, sPhone, studentMsg)
 	}()
 }
 
@@ -221,9 +185,9 @@ func (s *studentUseCase) sendBookClassNotif(booking *domain.Booking) {
 	dayName := indonesianDayName(classDate.Weekday())
 	dateStr := classDate.Format("02/01/2006")
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
-
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
-	teacherMessage := fmt.Sprintf(`*PEMBERITAHUAN KELAS BARU*
+
+	teacherMsg := fmt.Sprintf(`*PEMBERITAHUAN KELAS BARU*
 
 Halo %s %s,
 
@@ -245,7 +209,7 @@ _Silakan persiapkan materi. Jangan lupa mencatat hasil kelas setelah selesai._
 		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
-	studentMessage := fmt.Sprintf(`*KONFIRMASI PEMESANAN KELAS*
+	studentMsg := fmt.Sprintf(`*KONFIRMASI PEMESANAN KELAS*
 
 Halo %s,
 
@@ -274,30 +238,25 @@ _Selamat belajar! 🎶_
 		"https://www.madeu.app", os.Getenv("APP_NAME"),
 	)
 
-	tPhone, sPhone, tMsg, sMsg :=
-		booking.Schedule.Teacher.Phone, booking.Student.Phone,
-		teacherMessage, studentMessage
-
+	mgr := s.messenger
+	tPhone := booking.Schedule.Teacher.Phone
+	sPhone := booking.Student.Phone
 	go func() {
-		notifyCtx := context.Background()
-		sendWA(s.messenger, notifyCtx, tPhone, tMsg)
-		sendWA(s.messenger, notifyCtx, sPhone, sMsg)
+		sendWA(mgr, tPhone, teacherMsg)
+		sendWA(mgr, sPhone, studentMsg)
 	}()
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Package-level helpers shared across student service
-// ─────────────────────────────────────────────────────────────────────────────
-
-func sendWA(client *whatsmeow.Client, ctx context.Context, phone, msg string) {
+// sendWA is a fire-and-forget helper shared across student service.
+func sendWA(mgr *config.WAManager, phone, msg string) {
 	normalized := utils.NormalizePhoneNumber(phone)
 	if normalized == "" {
 		return
 	}
-	if err := utils.SendWhatsAppMessage(client, normalized, msg); err != nil {
-		log.Printf("🔕 Failed to send WhatsApp: %v", err)
+	if err := mgr.SendMessage(normalized, msg); err != nil {
+		log.Printf("🔕 WA send failed to %s: %v", phone, err)
 	} else {
-		log.Printf("🔔 WhatsApp notification sent to: %s", phone)
+		log.Printf("🔔 WA notification sent to: %s", phone)
 	}
 }
 

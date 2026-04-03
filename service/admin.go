@@ -1,6 +1,7 @@
 package service
 
 import (
+	"chronosphere/config"
 	"chronosphere/domain"
 	"chronosphere/utils"
 	"context"
@@ -9,19 +10,18 @@ import (
 	"log"
 	"os"
 
-	"go.mau.fi/whatsmeow"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type adminService struct {
 	adminRepo domain.AdminRepository
-	messenger *whatsmeow.Client
+	messenger *config.WAManager
 }
 
-func NewAdminService(adminRepo domain.AdminRepository, meow *whatsmeow.Client) domain.AdminUseCase {
+func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) domain.AdminUseCase {
 	return &adminService{
 		adminRepo: adminRepo,
-		messenger: meow,
+		messenger: mgr,
 	}
 }
 
@@ -33,39 +33,21 @@ func (s *adminService) UpdateAdmin(ctx context.Context, payload domain.User) err
 }
 
 func (s *adminService) ClearUserDeletedAt(ctx context.Context, userUUID string) error {
-	err := s.adminRepo.ClearUserDeletedAt(ctx, userUUID)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return s.adminRepo.ClearUserDeletedAt(ctx, userUUID)
 }
 
 func (s *adminService) GetAllClassHistories(ctx context.Context) (*[]domain.ClassHistory, error) {
-	data, err := s.adminRepo.GetAllClassHistories(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
+	return s.adminRepo.GetAllClassHistories(ctx)
 }
 
-// Managers =====================================================================================================
-// TEACHER MANAGEMENT
 func (s *adminService) GetAllManagers(ctx context.Context) ([]domain.User, error) {
-	data, err := s.adminRepo.GetAllManagers(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return data, nil
+	return s.adminRepo.GetAllManagers(ctx)
 }
 
 func (s *adminService) CreateManager(ctx context.Context, user *domain.User) (*domain.User, error) {
 	if user.Name == "" || user.Email == "" || user.Phone == "" || user.Password == "" {
 		return nil, errors.New("semua field wajib diisi")
 	}
-
 	user.Role = domain.RoleManagement
 
 	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
@@ -78,16 +60,13 @@ func (s *adminService) CreateManager(ctx context.Context, user *domain.User) (*d
 	if err != nil {
 		return nil, errors.New(utils.TranslateDBError(err))
 	}
-
 	return created, nil
 }
 
-// ✅ Update Teacher Profile
 func (s *adminService) UpdateManager(ctx context.Context, user *domain.User) error {
 	if user.UUID == "" {
 		return errors.New("uuid tidak boleh kosong")
 	}
-
 	if err := s.adminRepo.UpdateManager(ctx, user); err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
@@ -95,23 +74,14 @@ func (s *adminService) UpdateManager(ctx context.Context, user *domain.User) err
 }
 
 func (s *adminService) GetAllManager(ctx context.Context) ([]domain.User, error) {
-	teachers, err := s.adminRepo.GetAllManagers(ctx)
-	if err != nil {
-		return nil, errors.New(utils.TranslateDBError(err))
-	}
-	return teachers, nil
+	return s.adminRepo.GetAllManagers(ctx)
 }
 
 func (s *adminService) GetManagerByUUID(ctx context.Context, uuid string) (*domain.User, error) {
 	if uuid == "" {
 		return nil, errors.New("uuid tidak boleh kosong")
 	}
-
-	teacher, err := s.adminRepo.GetManagerByUUID(ctx, uuid)
-	if err != nil {
-		return nil, errors.New(utils.TranslateDBError(err))
-	}
-	return teacher, nil
+	return s.adminRepo.GetManagerByUUID(ctx, uuid)
 }
 
 func (s *adminService) GetPackagesByID(ctx context.Context, id int) (*domain.Package, error) {
@@ -121,7 +91,6 @@ func (s *adminService) GetPackagesByID(ctx context.Context, id int) (*domain.Pac
 	return s.adminRepo.GetPackagesByID(ctx, id)
 }
 
-// AssignPackageToStudent assigns a package to a student
 func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) error {
 	if studentUUID == "" {
 		return errors.New("UUID siswa wajib diisi")
@@ -135,25 +104,11 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 		return err
 	}
 
-	if s.messenger != nil {
-		// Send WhatsApp notification to student
+	if s.messenger != nil && s.messenger.IsLoggedIn() {
 		phoneNormalized := utils.NormalizePhoneNumber(dataStudent.Phone)
-		if phoneNormalized != "" && s.messenger != nil {
+		if phoneNormalized != "" {
 			msgToStudent := fmt.Sprintf(
-				`Halo %s,
-
-Paket les Anda telah aktif!
-• Paket: %s (%s)
-• Instrument: %s
-• Kuota: %d sesi
-
-Silakan login ke aplikasi untuk mulai booking sesi.
-
-Terima kasih,
-
-🌐 Website: %s
-🔔 %s Notification System
-`,
+				"Halo %s,\n\nPaket les Anda telah aktif!\n• Paket: %s (%s)\n• Instrument: %s\n• Kuota: %d sesi\n\nSilakan login ke aplikasi untuk mulai booking sesi.\n\nTerima kasih,\n\n🌐 Website: %s\n🔔 %s Notification System\n",
 				dataStudent.Name,
 				dataPackage.Name,
 				dataPackage.Description,
@@ -162,36 +117,21 @@ Terima kasih,
 				"https://www.madeu.app",
 				os.Getenv("APP_NAME"),
 			)
-
-			if !s.messenger.IsLoggedIn() {
-				log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
-				return nil
-			}
-
 			go func() {
-				err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msgToStudent)
-				if err != nil {
-					log.Printf("🔕 Failed to send WhatsApp to student %s: %v", phoneNormalized, err)
-				} else {
-					log.Printf("🔔 WhatsApp notification sent to student: %s", dataStudent.Name)
+				if err := s.messenger.SendMessage(phoneNormalized, msgToStudent); err != nil {
+					log.Printf("🔕 WA to student %s failed: %v", phoneNormalized, err)
 				}
 			}()
 		}
 	}
-
 	return nil
 }
 
-// CreatePackage creates a package
 func (s *adminService) CreatePackage(ctx context.Context, pkg *domain.Package) (*domain.Package, error) {
 	if pkg == nil {
 		return nil, errors.New("paket tidak boleh kosong")
 	}
-	created, err := s.adminRepo.CreatePackage(ctx, pkg)
-	if err != nil {
-		return nil, err
-	}
-	return created, nil
+	return s.adminRepo.CreatePackage(ctx, pkg)
 }
 
 func (s *adminService) UpdatePackage(ctx context.Context, pkg *domain.Package) error {
@@ -208,7 +148,6 @@ func (s *adminService) DeletePackage(ctx context.Context, id int) error {
 	return s.adminRepo.DeletePackage(ctx, id)
 }
 
-// CreateInstrument creates a new instrument (note: accepts *domain.Instrument)
 func (s *adminService) CreateInstrument(ctx context.Context, instrument *domain.Instrument) (*domain.Instrument, error) {
 	if instrument == nil {
 		return nil, errors.New("instrumen tidak boleh kosong")
@@ -216,11 +155,7 @@ func (s *adminService) CreateInstrument(ctx context.Context, instrument *domain.
 	if instrument.Name == "" {
 		return nil, errors.New("nama instrumen tidak boleh kosong")
 	}
-	created, err := s.adminRepo.CreateInstrument(ctx, instrument)
-	if err != nil {
-		return nil, err
-	}
-	return created, nil
+	return s.adminRepo.CreateInstrument(ctx, instrument)
 }
 
 func (s *adminService) UpdateInstrument(ctx context.Context, instrument *domain.Instrument) error {
@@ -237,32 +172,26 @@ func (s *adminService) DeleteInstrument(ctx context.Context, id int) error {
 	return s.adminRepo.DeleteInstrument(ctx, id)
 }
 
-// GetAllPackages returns all packages
 func (s *adminService) GetAllPackages(ctx context.Context) ([]domain.Package, error) {
 	return s.adminRepo.GetAllPackages(ctx)
 }
 
-// GetAllInstruments returns all instruments
 func (s *adminService) GetAllInstruments(ctx context.Context) ([]domain.Instrument, error) {
 	return s.adminRepo.GetAllInstruments(ctx)
 }
 
-// GetAllStudents returns all students
 func (s *adminService) GetAllStudents(ctx context.Context) ([]domain.User, error) {
 	return s.adminRepo.GetAllStudents(ctx)
 }
 
-// GetFilteredStudents returns students filtered by activity status
 func (s *adminService) GetFilteredStudents(ctx context.Context, filter domain.StudentActivityFilter) ([]domain.User, error) {
 	return s.adminRepo.GetFilteredStudents(ctx, filter)
 }
 
-// GetAllUsers returns all users
 func (s *adminService) GetAllUsers(ctx context.Context) ([]domain.User, error) {
 	return s.adminRepo.GetAllUsers(ctx)
 }
 
-// GetStudentByUUID fetches a student by UUID
 func (s *adminService) GetStudentByUUID(ctx context.Context, uuid string) (*domain.User, error) {
 	if uuid == "" {
 		return nil, errors.New("UUID wajib diisi")
@@ -270,16 +199,12 @@ func (s *adminService) GetStudentByUUID(ctx context.Context, uuid string) (*doma
 	return s.adminRepo.GetStudentByUUID(ctx, uuid)
 }
 
-// TEACHER MANAGEMENT
 func (s *adminService) CreateTeacher(ctx context.Context, user *domain.User, instrumentIDs []int) (*domain.User, error) {
-	// Business validation
 	if user.Name == "" || user.Email == "" || user.Phone == "" || user.Password == "" {
 		return nil, errors.New("semua field wajib diisi")
 	}
+	user.Role = domain.RoleTeacher
 
-	user.Role = domain.RoleTeacher // enforce role
-
-	// Hash password sebelum disimpan
 	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, errors.New("gagal mengenkripsi password")
@@ -290,23 +215,19 @@ func (s *adminService) CreateTeacher(ctx context.Context, user *domain.User, ins
 	if err != nil {
 		return nil, errors.New(utils.TranslateDBError(err))
 	}
-
 	return created, nil
 }
 
-// ✅ Update Teacher Profile
 func (s *adminService) UpdateTeacher(ctx context.Context, user *domain.User, instrumentIDs []int) error {
 	if user.UUID == "" {
 		return errors.New("uuid teacher tidak boleh kosong")
 	}
-
 	if err := s.adminRepo.UpdateTeacher(ctx, user, instrumentIDs); err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
 	return nil
 }
 
-// ✅ Get All Teachers
 func (s *adminService) GetAllTeachers(ctx context.Context) ([]domain.User, error) {
 	teachers, err := s.adminRepo.GetAllTeachers(ctx)
 	if err != nil {
@@ -315,32 +236,23 @@ func (s *adminService) GetAllTeachers(ctx context.Context) ([]domain.User, error
 	return teachers, nil
 }
 
-// ✅ Get Teacher by UUID
 func (s *adminService) GetTeacherByUUID(ctx context.Context, uuid string) (*domain.User, error) {
 	if uuid == "" {
 		return nil, errors.New("uuid tidak boleh kosong")
 	}
-
-	teacher, err := s.adminRepo.GetTeacherByUUID(ctx, uuid)
-	if err != nil {
-		return nil, errors.New(utils.TranslateDBError(err))
-	}
-	return teacher, nil
+	return s.adminRepo.GetTeacherByUUID(ctx, uuid)
 }
 
-// ✅ Delete Teacher
 func (s *adminService) DeleteUser(ctx context.Context, uuid string) error {
 	if uuid == "" {
 		return errors.New("uuid tidak boleh kosong")
 	}
-
 	if err := s.adminRepo.DeleteUser(ctx, uuid); err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
 	return nil
 }
 
-// Setting
 func (s *adminService) GetSetting(ctx context.Context) (*domain.Setting, error) {
 	return s.adminRepo.GetSetting(ctx)
 }
@@ -352,146 +264,75 @@ func (s *adminService) UpdateSetting(ctx context.Context, setting *domain.Settin
 	return s.adminRepo.UpdateSetting(ctx, setting)
 }
 
-// WhatsApp Management =========================================================
+// ─── WhatsApp management ─────────────────────────────────────────────────────
 
-func (s *adminService) GetWhatsAppStatus(ctx context.Context) (map[string]interface{}, error) {
+func (s *adminService) GetWhatsAppStatus(_ context.Context) (map[string]interface{}, error) {
 	if s.messenger == nil {
-		fmt.Println("debug 1")
 		return map[string]interface{}{"status": "not_initialized"}, nil
 	}
-
-	if s.messenger.IsLoggedIn() {
-		fmt.Println("debug 2")
-		jidStr := ""
-		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
-			jidStr = s.messenger.Store.ID.String()
+	switch s.messenger.GetStatus() {
+	case config.WAStatusConnected:
+		return map[string]interface{}{"status": "connected", "jid": s.messenger.GetJID()}, nil
+	case config.WAStatusWaitingQR:
+		result := map[string]interface{}{"status": "waiting_qr"}
+		if qr := s.messenger.GetQRCode(); qr != "" {
+			result["qr_code"] = qr
 		}
-		return map[string]interface{}{"status": "connected", "jid": jidStr}, nil
+		return result, nil
+	case config.WAStatusDisconnected:
+		if jid := s.messenger.GetJID(); jid != "" {
+			return map[string]interface{}{"status": "disconnected_but_linked", "jid": jid}, nil
+		}
+		return map[string]interface{}{"status": "disconnected"}, nil
+	default:
+		return map[string]interface{}{"status": "not_linked"}, nil
 	}
-
-	if s.messenger.IsConnected() {
-		fmt.Println("debug 3")
-		return map[string]interface{}{"status": "initializing_connection"}, nil
-	}
-
-	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
-		fmt.Println("debug 4")
-		return map[string]interface{}{"status": "disconnected_but_linked"}, nil
-	}
-
-	fmt.Println("debug 5")
-	return map[string]interface{}{"status": "not_linked"}, nil
 }
 
-func (s *adminService) ConnectWhatsApp(ctx context.Context) (map[string]interface{}, error) {
+// ConnectWhatsApp fires a non-blocking connect. The HTTP response returns
+// immediately; the frontend must poll GET /admin/whatsapp/status for the QR.
+func (s *adminService) ConnectWhatsApp(_ context.Context) (map[string]interface{}, error) {
 	if s.messenger == nil {
-		return nil, errors.New("whatsapp client is not initialized")
+		return nil, errors.New("whatsapp manager tidak diinisialisasi")
 	}
-
-	if s.messenger.IsLoggedIn() {
-		jidStr := ""
-		if s.messenger.Store != nil && s.messenger.Store.ID != nil {
-			jidStr = s.messenger.Store.ID.String()
-		}
-		return map[string]interface{}{"status": "already_connected", "jid": jidStr}, nil
+	if s.messenger.GetStatus() == config.WAStatusConnected {
+		return map[string]interface{}{"status": "already_connected", "jid": s.messenger.GetJID()}, nil
 	}
-
-	// Device already linked — just reconnect
-	if s.messenger.Store.ID != nil {
-		if err := s.messenger.Connect(); err != nil {
-			return nil, fmt.Errorf("gagal menyambungkan: %v", err)
-		}
-		return map[string]interface{}{"status": "connected"}, nil
-	}
-
-	// Device not linked — generate QR code without blocking the request.
-	qrChan, _ := s.messenger.GetQRChannel(context.Background())
-	if err := s.messenger.Connect(); err != nil {
-		return nil, fmt.Errorf("gagal menyambungkan device baru: %w", err)
-	}
-
-	type result struct {
-		data map[string]interface{}
-		err  error
-	}
-	ch := make(chan result, 1)
 	go func() {
-		for evt := range qrChan {
-			switch evt.Event {
-			case "code":
-				ch <- result{data: map[string]interface{}{
-					"status":  "qr_code_generated",
-					"qr_code": evt.Code,
-				}}
-				return
-			case "success":
-				ch <- result{data: map[string]interface{}{"status": "connected"}}
-				return
-			case "timeout":
-				ch <- result{err: errors.New("QR code timeout, silakan coba lagi")}
-				return
-			}
+		if err := s.messenger.Connect(); err != nil {
+			log.Printf("⚠️  WhatsApp Connect() error: %v", err)
 		}
-		ch <- result{err: errors.New("gagal mendapatkan qr code")}
 	}()
-
-	select {
-	case r := <-ch:
-		if r.err != nil {
-			return nil, r.err
-		}
-		return r.data, nil
-	case <-ctx.Done():
-		return nil, errors.New("request timeout menunggu QR code")
-	}
+	return map[string]interface{}{
+		"status":  "connecting",
+		"message": "Koneksi dimulai. Poll GET /admin/whatsapp/status untuk QR code.",
+	}, nil
 }
+
+// DisconnectWhatsApp clears the session (full logout) then immediately
+// starts a fresh connect so a new QR is ready without a second API call.
 func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 	if s.messenger == nil {
-		return errors.New("whatsapp client not initialized")
+		return errors.New("whatsapp manager tidak diinisialisasi")
 	}
-
-	// Get the JID before disconnecting
-	var deviceJID string
-	if s.messenger.Store != nil && s.messenger.Store.ID != nil {
-		deviceJID = s.messenger.Store.ID.String()
+	if err := s.messenger.Logout(ctx); err != nil {
+		log.Printf("⚠️  WhatsApp logout warning: %v", err)
 	}
-
-	// 🔥 FIX: Just disconnect, don't call Logout() which generates prekeys
-	s.messenger.Logout(ctx)
-
-	// 🔥 CRITICAL: Cleanup database records after disconnect
-	if deviceJID != "" {
-		log.Printf("🧹 Cleaning up WhatsApp database for %s...", deviceJID)
-		if err := s.adminRepo.CleanupWhatsAppData(ctx, deviceJID); err != nil {
-			log.Printf("⚠️ Failed to cleanup WhatsApp database: %v", err)
-		} else {
-			log.Printf("✅ WhatsApp database cleaned up successfully")
+	go func() {
+		if err := s.messenger.Connect(); err != nil {
+			log.Printf("⚠️  WhatsApp reconnect after logout failed: %v", err)
 		}
-	}
-
-	// 🔥 CRITICAL: Clear device ID from store to allow fresh pairing
-	if s.messenger.Store != nil {
-		s.messenger.Store.ID = nil
-		log.Printf("✅ Device ID cleared from store")
-	}
-
+	}()
 	return nil
 }
 
-func (s *adminService) PingWhatsApp(ctx context.Context, phone string) error {
+func (s *adminService) PingWhatsApp(_ context.Context, phone string) error {
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		return errors.New("whatsapp is not connected")
+		return errors.New("whatsapp tidak terhubung")
 	}
-	phoneNormalized := utils.NormalizePhoneNumber(phone)
-	if phoneNormalized == "" {
+	normalized := utils.NormalizePhoneNumber(phone)
+	if normalized == "" {
 		return errors.New("nomor telepon tidak valid")
 	}
-	msg := "Ping dari sistem MadEU. Tes koneksi berhasil."
-	err := utils.SendWhatsAppMessage(s.messenger, phoneNormalized, msg)
-	if err != nil {
-		log.Printf("🔕 Failed to send WhatsApp to: %s: %v", phone, err)
-	} else {
-		log.Printf("🔔 Ping WhatsApp notification sent to: %s successfully", phone)
-	}
-	return nil
+	return s.messenger.SendMessage(normalized, "Ping dari sistem MadEU. Tes koneksi berhasil.")
 }

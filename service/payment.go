@@ -1,6 +1,7 @@
 package service
 
 import (
+	"chronosphere/config"
 	"chronosphere/domain"
 	"chronosphere/utils"
 	"context"
@@ -11,7 +12,6 @@ import (
 
 	xendit "github.com/xendit/xendit-go/v6"
 	invoice "github.com/xendit/xendit-go/v6/invoice"
-	"go.mau.fi/whatsmeow"
 	"gorm.io/gorm"
 )
 
@@ -20,40 +20,34 @@ type paymentService struct {
 	adminRepo    domain.AdminRepository
 	xenditClient *xendit.APIClient
 	db           *gorm.DB
-	messenger    *whatsmeow.Client
+	messenger    *config.WAManager
 }
 
-func NewPaymentService(paymentRepo domain.PaymentRepository, adminRepo domain.AdminRepository, db *gorm.DB, messenger *whatsmeow.Client) domain.PaymentUseCase {
+func NewPaymentService(paymentRepo domain.PaymentRepository, adminRepo domain.AdminRepository, db *gorm.DB, mgr *config.WAManager) domain.PaymentUseCase {
 	apiKey := os.Getenv("XENDIT_SECRET_KEY")
 	if apiKey == "" {
 		log.Println("⚠️  XENDIT_SECRET_KEY not set, payment features will not work")
 	}
-
-	client := xendit.NewClient(apiKey)
-
 	return &paymentService{
 		paymentRepo:  paymentRepo,
 		adminRepo:    adminRepo,
-		xenditClient: client,
+		xenditClient: xendit.NewClient(apiKey),
 		db:           db,
-		messenger:    messenger,
+		messenger:    mgr,
 	}
 }
 
 func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, packageID int) (*domain.Payment, error) {
-	// 1. Validate student exists
 	student, err := s.adminRepo.GetStudentByUUID(ctx, studentUUID)
 	if err != nil {
 		return nil, fmt.Errorf("siswa tidak ditemukan: %w", err)
 	}
 
-	// 2. Validate package exists
 	pkg, err := s.adminRepo.GetPackagesByID(ctx, packageID)
 	if err != nil {
 		return nil, fmt.Errorf("paket tidak ditemukan: %w", err)
 	}
 
-	// ── 3. Guard: trial package is a one-time purchase ────────────────────────
 	if pkg.IsTrial {
 		var trialCount int64
 		err = s.db.WithContext(ctx).
@@ -71,14 +65,11 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		}
 	}
 
-	// 4. Get settings for fees
 	setting, err := s.adminRepo.GetSetting(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("gagal mengambil pengaturan biaya: %w", err)
 	}
 
-	// 5. Check if this is the student's first non-trial package purchase.
-	//    Registration fee is a one-time charge — skip it on subsequent purchases.
 	var priorPaidCount int64
 	err = s.db.WithContext(ctx).
 		Table("payments").
@@ -92,7 +83,6 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	}
 	isFirstPurchase := priorPaidCount == 0
 
-	// 5. Calculate total amount
 	pkgPrice := pkg.Price
 	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
 		pkgPrice = pkg.PromoPrice
@@ -103,39 +93,30 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 
 	switch {
 	case pkg.IsTrial:
-		// Trial packages are always charged at face value — no registration fee ever.
 		totalAmount = pkgPrice
 		items = []invoice.InvoiceItem{
 			*invoice.NewInvoiceItem(fmt.Sprintf("Paket Trial %s", pkg.Name), float32(pkgPrice), 1),
 		}
-
 	case isFirstPurchase:
-		// First non-trial purchase includes the one-time registration fee.
 		totalAmount = setting.RegistrationFee + pkgPrice
 		items = []invoice.InvoiceItem{
 			*invoice.NewInvoiceItem("Biaya Pendaftaran", float32(setting.RegistrationFee), 1),
 			*invoice.NewInvoiceItem(fmt.Sprintf("Paket %s (%dx pertemuan)", pkg.Name, pkg.Quota), float32(pkgPrice), 1),
 		}
-
 	default:
-		// Subsequent non-trial purchases — no registration fee.
 		totalAmount = pkgPrice
 		items = []invoice.InvoiceItem{
 			*invoice.NewInvoiceItem(fmt.Sprintf("Paket %s (%dx pertemuan)", pkg.Name, pkg.Quota), float32(pkgPrice), 1),
 		}
 	}
 
-	// 7. Generate external ID
 	shortUUID := studentUUID
 	if len(shortUUID) > 8 {
 		shortUUID = shortUUID[:8]
 	}
 	externalID := fmt.Sprintf("MADEU-%s-%d", shortUUID, time.Now().UnixMilli())
-
-	// 8. Build description
 	description := fmt.Sprintf("Pembayaran Paket %s - %s", pkg.Name, student.Name)
 
-	// 9. Get redirect URLs
 	siteURL := os.Getenv("NEXT_PUBLIC_SITE_URL")
 	if siteURL == "" {
 		siteURL = "http://localhost:3000"
@@ -143,7 +124,6 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	successURL := fmt.Sprintf("%s/dashboard/panel/student/payment/success", siteURL)
 	failureURL := fmt.Sprintf("%s/dashboard/panel/student/payment/failed", siteURL)
 
-	// 10. Build customer
 	customer := invoice.CustomerObject{}
 	customer.GivenNames = *invoice.NewNullableString(&student.Name)
 	customer.Email = *invoice.NewNullableString(&student.Email)
@@ -151,7 +131,6 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		customer.MobileNumber = *invoice.NewNullableString(&student.Phone)
 	}
 
-	// 11. Create Xendit invoice request
 	currency := "IDR"
 	locale := "id"
 	shouldSendEmail := true
@@ -173,16 +152,13 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		"package_id":   packageID,
 	}
 
-	// 12. Call Xendit API
 	inv, _, xenditErr := s.xenditClient.InvoiceApi.CreateInvoice(ctx).
 		CreateInvoiceRequest(createReq).
 		Execute()
 	if xenditErr != nil {
-		log.Printf("❌ Xendit CreateInvoice error: %v", xenditErr)
 		return nil, fmt.Errorf("gagal membuat invoice pembayaran: %v", xenditErr)
 	}
 
-	// 13. Save payment record
 	invoiceID := ""
 	if inv.Id != nil {
 		invoiceID = *inv.Id
@@ -199,37 +175,27 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	}
 
 	if err := s.paymentRepo.CreatePayment(ctx, payment); err != nil {
-		log.Printf("❌ Failed to save payment record: %v", err)
 		return nil, fmt.Errorf("gagal menyimpan data pembayaran: %w", err)
 	}
 
-	log.Printf("✅ Invoice created: %s | Amount: %.0f | First purchase: %v | Student: %s",
+	log.Printf("✅ Invoice created: %s | Amount: %.0f | First: %v | Student: %s",
 		externalID, totalAmount, isFirstPurchase, student.Name)
-
 	return payment, nil
 }
 
 func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.XenditWebhookPayload) error {
-	fmt.Println("webhoook called")
-	// 1. Find payment by external_id
 	payment, err := s.paymentRepo.GetPaymentByExternalID(ctx, payload.ExternalID)
 	if err != nil {
-		log.Printf("⚠️  Webhook: payment not found for external_id: %s", payload.ExternalID)
 		return fmt.Errorf("payment tidak ditemukan: %w", err)
 	}
 
-	// 2. Skip if already processed (idempotent)
 	if payment.Status == domain.PaymentStatusPaid {
-		log.Printf("ℹ️  Webhook: payment %s already processed (status: PAID)", payload.ExternalID)
 		return nil
 	}
 
-	// 3. Process based on status
 	switch payload.Status {
 	case "PAID", "SETTLED":
-		// Use DB transaction for atomic update + package assignment
 		txErr := s.db.Transaction(func(tx *gorm.DB) error {
-			// Parse paid_at time
 			var paidAt *time.Time
 			if payload.PaidAt != "" {
 				t, parseErr := time.Parse(time.RFC3339, payload.PaidAt)
@@ -247,48 +213,37 @@ func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.Xendi
 				method = nil
 			}
 
-			// Update payment status
 			if err := s.paymentRepo.UpdatePaymentStatus(ctx, payload.ExternalID, domain.PaymentStatusPaid, method, paidAt); err != nil {
-				log.Printf("❌ Webhook: failed to update payment status: %v", err)
 				return err
 			}
 
-			fmt.Println("run auto assign")
-			// Auto-assign package to student
 			if err := s.autoAssignPackage(ctx, payment.StudentUUID, payment.PackageID); err != nil {
-				log.Printf("⚠️  Webhook: auto-assign failed, admin can assign manually: %v", err)
-				// Don't return error — payment is already marked as paid
-				// Admin can manually assign later if auto-assign fails
+				log.Printf("⚠️  Webhook auto-assign failed (admin can assign manually): %v", err)
 			}
-
 			return nil
 		})
-
 		if txErr != nil {
-			log.Printf("❌ Webhook: transaction failed: %v", txErr)
 			return txErr
 		}
 
-		log.Printf("✅ Payment completed: %s | Student: %s | Package: %d", payload.ExternalID, payment.StudentUUID, payment.PackageID)
+		log.Printf("✅ Payment completed: %s | Student: %s", payload.ExternalID, payment.StudentUUID)
 
-		// Send WhatsApp notification to student
-		if s.messenger != nil {
+		if s.messenger != nil && s.messenger.IsLoggedIn() {
 			student, err := s.adminRepo.GetStudentByUUID(context.Background(), payment.StudentUUID)
 			if err != nil {
-				log.Printf("⚠️ Failed to fetch student for WA notification: %v", err)
+				log.Printf("⚠️  WA payment notify: student lookup failed: %v", err)
+				return nil
 			}
 			pkg, err := s.adminRepo.GetPackagesByID(context.Background(), payment.PackageID)
 			if err != nil {
-				log.Printf("⚠️ Failed to fetch package for WA notification: %v", err)
+				log.Printf("⚠️  WA payment notify: package lookup failed: %v", err)
+				return nil
 			}
-
 			s.sendPaymentSuccessNotification(student, pkg)
-			
 		}
 
 	case "EXPIRED":
 		if err := s.paymentRepo.UpdatePaymentStatus(ctx, payload.ExternalID, domain.PaymentStatusExpired, nil, nil); err != nil {
-			log.Printf("❌ Webhook: failed to update expired status: %v", err)
 			return err
 		}
 		log.Printf("⏰ Payment expired: %s", payload.ExternalID)
@@ -313,10 +268,6 @@ func (s *paymentService) GetPaymentsByStudent(ctx context.Context, studentUUID s
 	return s.paymentRepo.GetPaymentsByStudent(ctx, studentUUID)
 }
 
-// ========================================================================
-// Admin Reporting Methods
-// ========================================================================
-
 func (s *paymentService) GetTotalProfit(ctx context.Context, filter domain.ProfitFilter) (float64, error) {
 	return s.paymentRepo.GetTotalProfit(ctx, filter)
 }
@@ -328,12 +279,14 @@ func (s *paymentService) GetPaymentHistory(ctx context.Context, filter domain.Hi
 func (s *paymentService) GetPackageSummary(ctx context.Context) ([]domain.PackageSummary, error) {
 	return s.paymentRepo.GetPackageSummary(ctx)
 }
-func (s *paymentService) sendPaymentSuccessNotification(student *domain.User, pkg *domain.Package) {
-	// Normalize phone number
-	studentPhone := utils.NormalizePhoneNumber(student.Phone)
 
-	// Rich message with emojis
-	msgToStudent := fmt.Sprintf(
+func (s *paymentService) sendPaymentSuccessNotification(student *domain.User, pkg *domain.Package) {
+	phone := utils.NormalizePhoneNumber(student.Phone)
+	if phone == "" {
+		return
+	}
+
+	msg := fmt.Sprintf(
 		`🎉 *Halo %s!*
 
 ✅ *Pembayaran Berhasil!*
@@ -352,30 +305,16 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 🚀 *Mulai belajar sekarang:*
 🔗 https://madeu.app
 
-Terima kasih telah memilih MadEU! 🌟
-
-*#MadEU #BelajarJadiMudah*`,
-		student.Name,
-		pkg.Name,
-		pkg.Name,
-		pkg.Quota,
-		pkg.ExpiredDuration,
+Terima kasih telah memilih MadEU! 🌟`,
+		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredDuration,
 	)
 
-	if !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp client is not initialized, Skipping notification")
-		return
-	}
-
-	// Send message asynchronously
+	mgr := s.messenger
 	go func() {
-		err := utils.SendWhatsAppMessage(s.messenger, studentPhone, msgToStudent)
-		if err != nil {
-			log.Printf("🔕 Gagal mengirim notifikasi WhatsApp ke %s (%s): %v",
-				student.Name, studentPhone, err)
+		if err := mgr.SendMessage(phone, msg); err != nil {
+			log.Printf("🔕 WA payment success to %s failed: %v", phone, err)
 		} else {
-			log.Printf("🔔 Notifikasi WhatsApp berhasil dikirim ke: %s (%s)",
-				student.Name, studentPhone)
+			log.Printf("🔔 WA payment success sent to: %s", student.Name)
 		}
 	}()
 }

@@ -18,51 +18,54 @@ import (
 	"gorm.io/gorm"
 )
 
-func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cron) {
-	// Load .env
+// initApp contains all shared bootstrap logic.
+// waEnabled  — pass false to skip WhatsApp entirely (no-wa mode)
+// limiterEnabled — pass false to skip rate limiter (no-limiter mode)
+func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron) {
 	if err := godotenv.Load(); err != nil {
 		log.Println("⚠️  .env file not found, using system environment variables")
 	}
 
-	// ✅ Register custom validators
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		utils.RegisterCustomValidations(v)
 	}
 
-	// Boot DB
-	db, _, err := config.BootDB()
+	db, dbAddr, err := config.BootDB()
 	if err != nil {
 		log.Fatal("❌ Failed to connect to database: ", err)
 	}
 
-	// init WA message
-	// WhatsappClient, _, err := config.InitWA(*addr)
-	// if err != nil {
-	// 	log.Fatal("❌ Failed to connect to WhatsApp: ", err)
-	// }
+	// ── WhatsApp ──────────────────────────────────────────────────────────────
+	var waMgr *config.WAManager
+	if waEnabled {
+		waMgr, err = config.InitWA(*dbAddr)
+		if err != nil {
+			// Non-fatal: log and continue without WhatsApp.
+			log.Printf("⚠️  WhatsApp init failed: %v", err)
+		}
+	}
 
-	// Redis config
+	// ── Redis ─────────────────────────────────────────────────────────────────
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
-		log.Fatal("❌ Failed to fetch Redis address from env")
+		log.Fatal("❌ REDIS_ADDR not set")
 	}
-
 	redisPass := os.Getenv("REDIS_PASSWORD")
 	if redisPass == "" {
-		log.Fatal("❌ Failed to fetch Redis password from env")
+		log.Fatal("❌ REDIS_PASSWORD not set")
 	}
-
 	redisClient := config.InitRedisDB(redisAddr, redisPass, 0)
-	// JWT secret validation
+
+	// ── JWT ───────────────────────────────────────────────────────────────────
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		log.Fatal("❌ JWT_SECRET not found in .env")
+		log.Fatal("❌ JWT_SECRET not set")
 	}
 	if len(jwtSecret) < 32 {
-		log.Fatal("❌ JWT_SECRET must be at least 32 characters for security. Generate one with: openssl rand -base64 32")
+		log.Fatal("❌ JWT_SECRET must be at least 32 characters")
 	}
 
-	// Init repositories
+	// ── Repositories ─────────────────────────────────────────────────────────
 	authRepo := repository.NewAuthRepository(db)
 	studentRepo := repository.NewStudentRepository(db)
 	teacherRepo := repository.NewTeacherRepository(db)
@@ -74,27 +77,29 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cr
 	reportRepo := repository.NewReportRepository(db)
 	financeRepo := repository.NewFinanceRepository(db)
 
-	// Init services
-	studentService := service.NewStudentUseCase(studentRepo, nil)
-	managementService := service.NewManagerService(managerRepo, nil)
-	adminService := service.NewAdminService(adminRepo, nil)
-	teacherService := service.NewTeacherService(teacherRepo, nil)
+	// ── Services ──────────────────────────────────────────────────────────────
+	// All services that previously accepted *whatsmeow.Client now accept
+	// *config.WAManager (nil-safe — they guard with IsLoggedIn() checks).
+	studentService := service.NewStudentUseCase(studentRepo, waMgr)
+	managementService := service.NewManagerService(managerRepo, waMgr)
+	adminService := service.NewAdminService(adminRepo, waMgr)
+	teacherService := service.NewTeacherService(teacherRepo, waMgr)
 	authService := service.NewAuthService(authRepo, otpRepo, jwtSecret)
-	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, nil)
+	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, waMgr)
 	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
 	reportService := service.NewReportService(reportRepo)
 	financeService := service.NewFinanceService(financeRepo)
 
-	// RATE LIMITER
-	middleware.InitRateLimiter(redisClient)
+	// ── Rate limiter ──────────────────────────────────────────────────────────
+	if limiterEnabled {
+		middleware.InitRateLimiter(redisClient)
+	}
 
-	// Init Gin
+	// ── Gin ───────────────────────────────────────────────────────────────────
 	app := gin.Default()
 	config.InitMiddleware(app, authService.GetAccessTokenManager())
 
-	// ========================================================================
-	// INIT HANDLERS
-	// ========================================================================
+	// ── Handlers ─────────────────────────────────────────────────────────────
 	delivery.NewAuthHandler(app, authService, db)
 	delivery.NewManagerHandler(app, managementService, authService.GetAccessTokenManager(), db)
 	delivery.NewStudentHandler(app, studentService, authService.GetAccessTokenManager())
@@ -106,197 +111,19 @@ func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cr
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
 
-	c := InitCron(teacherPaymentService, db, nil)
-
-	return app, db, c
-}
-
-func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB, *cron.Cron) {
-	// Load .env
-	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️  .env file not found, using system environment variables")
-	}
-
-	// ✅ Register custom validators
-	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		utils.RegisterCustomValidations(v)
-	}
-
-	// Boot DB
-	db, addr, err := config.BootDB()
-	if err != nil {
-		log.Fatal("❌ Failed to connect to database: ", err)
-	}
-
-	// init WA message
-	WhatsappClient, _, err := config.InitWA(*addr)
-	if WhatsappClient == nil {
-		log.Println("whatsup client is nil")
-	}
-	if err != nil {
-		log.Fatal("❌ Failed to connect to WhatsApp: ", err)
-	}
-
-	// Redis config
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		log.Fatal("❌ Failed to fetch Redis address from env")
-	}
-
-	redisPass := os.Getenv("REDIS_PASSWORD")
-	if redisPass == "" {
-		log.Fatal("❌ Failed to fetch Redis password from env")
-	}
-
-	redisClient := config.InitRedisDB(redisAddr, redisPass, 0)
-	// JWT secret validation
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		log.Fatal("❌ JWT_SECRET not found in .env")
-	}
-	if len(jwtSecret) < 32 {
-		log.Fatal("❌ JWT_SECRET must be at least 32 characters for security. Generate one with: openssl rand -base64 32")
-	}
-
-	// Init repositories
-	authRepo := repository.NewAuthRepository(db)
-	studentRepo := repository.NewStudentRepository(db)
-	teacherRepo := repository.NewTeacherRepository(db)
-	managerRepo := repository.NewManagerRepository(db)
-	adminRepo := repository.NewAdminRepository(db)
-	otpRepo := repository.NewOTPRedisRepository(redisClient)
-	paymentRepo := repository.NewPaymentRepository(db)
-	teacherPaymentRepo := repository.NewTeacherPaymentRepository(db)
-	reportRepo := repository.NewReportRepository(db)
-	financeRepo := repository.NewFinanceRepository(db)
-
-	// Init services
-	studentService := service.NewStudentUseCase(studentRepo, WhatsappClient)
-	managementService := service.NewManagerService(managerRepo, WhatsappClient)
-	adminService := service.NewAdminService(adminRepo, WhatsappClient)
-	teacherService := service.NewTeacherService(teacherRepo, WhatsappClient)
-	authService := service.NewAuthService(authRepo, otpRepo, jwtSecret)
-	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, WhatsappClient)
-	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
-	reportService := service.NewReportService(reportRepo)
-	financeService := service.NewFinanceService(financeRepo)
-
-	// RATE LIMITER
-	// middleware.InitRateLimiter(redisClient)
-
-	// Init Gin
-	app := gin.Default()
-	config.InitMiddleware(app, authService.GetAccessTokenManager())
-
-	// ========================================================================
-	// INIT HANDLERS
-	// ========================================================================
-	delivery.NewAuthHandler(app, authService, db)
-	delivery.NewManagerHandler(app, managementService, authService.GetAccessTokenManager(), db)
-	delivery.NewStudentHandler(app, studentService, authService.GetAccessTokenManager())
-	delivery.NewAdminHandler(app, adminService, authService.GetAccessTokenManager())
-	delivery.NewTeacherHandler(app, teacherService, authService.GetAccessTokenManager(), db)
-	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
-	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
-	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
-	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
-	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
-
-	c := InitCron(teacherPaymentService, db, WhatsappClient)
+	c := InitCron(teacherPaymentService, db, waMgr)
 
 	return app, db, c
 }
 
 func InitializeFullApp() (*gin.Engine, *gorm.DB, *cron.Cron) {
-	// Load .env
-	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️  .env file not found, using system environment variables")
-	}
+	return initApp(true, true)
+}
 
-	// ✅ Register custom validators
-	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		utils.RegisterCustomValidations(v)
-	}
+func InitializeAppWithoutWhatsappNotification() (*gin.Engine, *gorm.DB, *cron.Cron) {
+	return initApp(false, true)
+}
 
-	// Boot DB
-	db, addr, err := config.BootDB()
-	if err != nil {
-		log.Fatal("❌ Failed to connect to database: ", err)
-	}
-
-	// init WA message
-	WhatsappClient, _, err := config.InitWA(*addr)
-	if WhatsappClient == nil {
-		log.Println("whatsup client is nil")
-	}
-	if err != nil {
-		log.Fatal("❌ Failed to connect to WhatsApp: ", err)
-	}
-
-	// Redis config
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		log.Fatal("❌ Failed to fetch Redis address from env")
-	}
-
-	redisPass := os.Getenv("REDIS_PASSWORD")
-	if redisPass == "" {
-		log.Fatal("❌ Failed to fetch Redis password from env")
-	}
-
-	redisClient := config.InitRedisDB(redisAddr, redisPass, 0)
-	// JWT secret validation
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		log.Fatal("❌ JWT_SECRET not found in .env")
-	}
-	if len(jwtSecret) < 32 {
-		log.Fatal("❌ JWT_SECRET must be at least 32 characters for security. Generate one with: openssl rand -base64 32")
-	}
-
-	// Init repositories
-	authRepo := repository.NewAuthRepository(db)
-	studentRepo := repository.NewStudentRepository(db)
-	teacherRepo := repository.NewTeacherRepository(db)
-	managerRepo := repository.NewManagerRepository(db)
-	adminRepo := repository.NewAdminRepository(db)
-	otpRepo := repository.NewOTPRedisRepository(redisClient)
-	paymentRepo := repository.NewPaymentRepository(db)
-	teacherPaymentRepo := repository.NewTeacherPaymentRepository(db)
-	reportRepo := repository.NewReportRepository(db)
-	financeRepo := repository.NewFinanceRepository(db)
-	// Init services
-	studentService := service.NewStudentUseCase(studentRepo, WhatsappClient)
-	managementService := service.NewManagerService(managerRepo, WhatsappClient)
-	adminService := service.NewAdminService(adminRepo, WhatsappClient)
-	teacherService := service.NewTeacherService(teacherRepo, WhatsappClient)
-	authService := service.NewAuthService(authRepo, otpRepo, jwtSecret)
-	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, WhatsappClient)
-	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
-	reportService := service.NewReportService(reportRepo)
-	financeService := service.NewFinanceService(financeRepo)
-	// RATE LIMITER
-	middleware.InitRateLimiter(redisClient)
-
-	// Init Gin
-	app := gin.Default()
-	config.InitMiddleware(app, authService.GetAccessTokenManager())
-
-	// ========================================================================
-	// INIT HANDLERS
-	// ========================================================================
-	delivery.NewAuthHandler(app, authService, db)
-	delivery.NewManagerHandler(app, managementService, authService.GetAccessTokenManager(), db)
-	delivery.NewStudentHandler(app, studentService, authService.GetAccessTokenManager())
-	delivery.NewAdminHandler(app, adminService, authService.GetAccessTokenManager())
-	delivery.NewTeacherHandler(app, teacherService, authService.GetAccessTokenManager(), db)
-	delivery.NewPaymentHandler(app, paymentService, authService.GetAccessTokenManager())
-	delivery.NewTeacherPaymentHandler(app, teacherPaymentService, authService.GetAccessTokenManager())
-	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
-	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
-	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
-
-	c := InitCron(teacherPaymentService, db, WhatsappClient)
-
-	return app, db, c
+func InitializeAppWithoutRateLimiter() (*gin.Engine, *gorm.DB, *cron.Cron) {
+	return initApp(true, false)
 }
