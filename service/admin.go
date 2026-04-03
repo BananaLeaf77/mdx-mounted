@@ -276,6 +276,7 @@ func (s *adminService) GetWhatsAppStatus(_ context.Context) (map[string]interfac
 	case config.WAStatusDisconnected:
 		result := map[string]interface{}{"status": "disconnected_sending_qr", "qr_code": ""}
 		if qr := s.messenger.GetQRCode(); qr != "" {
+			log.Println("QR Code:", qr)
 			result["qr_code"] = qr
 		}
 		return result, nil
