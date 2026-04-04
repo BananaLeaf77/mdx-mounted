@@ -1056,8 +1056,7 @@ func (r *studentRepository) GetAvailableSchedules(
 		return nil, fmt.Errorf("gagal memuat paket siswa: %w", err)
 	}
 
-	fmt.Printf("[DEBUG] studentUUID=%s instrumentID=%d activePkgs=%+v\n",
-		studentUUID, instrumentID, activePkgs)
+
 
 	compatibleDurations := make(map[int]bool, 2)
 	for _, p := range activePkgs {
@@ -1080,84 +1079,120 @@ func (r *studentRepository) GetAvailableSchedules(
 		roomLimit = domain.DrumRoomLimit
 	}
 
-	// ── 4. Teacher finished-class counts ─────────────────────────────────────
+
+	// ── 4. Teacher finished-class counts (1 query) ────────────────────────────
 	teacherFinishedCounts, err := r.fetchTeacherFinishedClassCounts(ctx)
 	if err != nil {
 		teacherFinishedCounts = make(map[string]int)
 	}
 
-	// ── 5. Enrich each schedule ───────────────────────────────────────────────
+	if len(schedules) == 0 {
+		empty := []domain.ScheduleAvailabilityResult{}
+		return &empty, nil
+	}
+
+	// ── 5. Pre-compute next class dates & time windows ────────────────────────
+	type schedMeta struct {
+		next       time.Time
+		targetDate string // "2006-01-02" in Asia/Makassar
+	}
+	metas := make([]schedMeta, len(schedules))
+	var minDayStart, maxDayEnd time.Time
+	for i, sch := range schedules {
+		startTimeParsed, _ := time.Parse("15:04", sch.StartTime)
+		next := utils.GetNextClassDate(sch.DayOfWeek, startTimeParsed)
+		dayInLoc := next.In(loc)
+		dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+		dayEnd := dayStart.Add(24 * time.Hour)
+		metas[i] = schedMeta{
+			next:       next,
+			targetDate: next.In(loc).Format("2006-01-02"),
+		}
+		if i == 0 || dayStart.Before(minDayStart) {
+			minDayStart = dayStart
+		}
+		if dayEnd.After(maxDayEnd) {
+			maxDayEnd = dayEnd
+		}
+	}
+
+	// ── 6. Batch: fetch ALL active bookings in the relevant date range ─────────
+	// Replaces 3 per-schedule queries (countRoomUsage, IsBookedSameDayAndTime,
+	// IsTeacherBusy, hasActiveBookingOnDate) with a single batch query.
+	type activeBkgRow struct {
+		ScheduleID   int
+		TeacherUUID  string
+		StudentUUID  string
+		ClassDate    time.Time
+		StartTime    string
+		EndTime      string
+		InstrumentID int
+	}
+	var activeBkgs []activeBkgRow
+	r.db.WithContext(ctx).
+		Table("bookings").
+		Select("bookings.schedule_id, ts.teacher_uuid, bookings.student_uuid, bookings.class_date, ts.start_time, ts.end_time, bookings.instrument_id").
+		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
+		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+		Where("bookings.class_date >= ? AND bookings.class_date < ?", minDayStart, maxDayEnd).
+		Scan(&activeBkgs)
+
+	// ── 7. Enrich each schedule using in-memory lookups ───────────────────────
 	var results []domain.ScheduleAvailabilityResult
 
 	for i := range schedules {
 		sch := &schedules[i]
+		m := metas[i]
 
 		result := domain.ScheduleAvailabilityResult{
 			TeacherSchedule:           *sch,
 			TeacherFinishedClassCount: teacherFinishedCounts[sch.TeacherUUID],
 		}
+		result.TeacherSchedule.NextClassDate = &m.next
 
-		// 5a. Next class date
-		startTimeParsed, _ := time.Parse("15:04", sch.StartTime)
-		next := utils.GetNextClassDate(sch.DayOfWeek, startTimeParsed)
-		result.NextClassDate = &next
-
-		// 5b. IsDurationCompatible
+		// IsDurationCompatible
 		result.IsDurationCompatible = ptrBool(compatibleDurations[sch.Duration])
 
-		// 5c. IsRoomAvailable
-		var bookingCount int64
-		roomCountErr := r.countRoomUsage(
-			r.db.WithContext(ctx),
-			next, sch.StartTime, sch.EndTime,
-			instrumentID, isDrum,
-			&bookingCount,
-		)
-		if roomCountErr != nil {
-			result.IsRoomAvailable = ptrBool(false)
-		} else {
-			result.IsRoomAvailable = ptrBool(bookingCount < roomLimit)
+		// Scan batch results once → derive all 4 per-schedule flags.
+		var roomCount int64
+		isConflict := false
+		isTeacherBusy := false
+		thisScheduleBooked := false
+
+		for _, bk := range activeBkgs {
+			if bk.ClassDate.In(loc).Format("2006-01-02") != m.targetDate {
+				continue
+			}
+
+			// IsRoomAvailable: same instrument + overlapping time
+			if bk.InstrumentID == instrumentID && timesOverlap(bk.StartTime, bk.EndTime, sch.StartTime, sch.EndTime) {
+				roomCount++
+			}
+
+			// IsBookedSameDayAndTime: student's own overlapping booking
+			if !isConflict && bk.StudentUUID == studentUUID &&
+				timesOverlap(bk.StartTime, bk.EndTime, sch.StartTime, sch.EndTime) {
+				isConflict = true
+			}
+
+			// IsTeacherBusy: same teacher, different schedule, different student
+			if !isTeacherBusy && bk.TeacherUUID == sch.TeacherUUID &&
+				bk.ScheduleID != sch.ID &&
+				bk.StudentUUID != studentUUID &&
+				timesOverlap(bk.StartTime, bk.EndTime, sch.StartTime, sch.EndTime) {
+				isTeacherBusy = true
+			}
+
+			// hasActiveBookingOnDate: any active booking on this exact schedule
+			if !thisScheduleBooked && bk.ScheduleID == sch.ID {
+				thisScheduleBooked = true
+			}
 		}
 
-		// 5d. IsBookedSameDayAndTime — UTC range, no AT TIME ZONE string cast
-		loc, _ := time.LoadLocation("Asia/Makassar")
-		dayInLoc := next.In(loc)
-		dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
-		dayEnd := dayStart.Add(24 * time.Hour)
-
-		var existingCount int64
-		if err := r.db.WithContext(ctx).
-			Model(&domain.Booking{}).
-			Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
-			Where("bookings.student_uuid = ?", studentUUID).
-			Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
-			Where("bookings.class_date >= ? AND bookings.class_date < ?", dayStart, dayEnd).
-			Where("(ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)", sch.StartTime, sch.EndTime).
-			Count(&existingCount).Error; err == nil {
-			result.IsBookedSameDayAndTime = ptrBool(existingCount > 0)
-		} else {
-			result.IsBookedSameDayAndTime = ptrBool(false)
-		}
-
-		// 5e. IsTeacherBusy — only true when a DIFFERENT student blocks this teacher
-		teacherBusy, _ := r.checkTeacherConflictForSchedule(
-			r.db.WithContext(ctx),
-			sch.TeacherUUID, sch.StartTime, sch.EndTime,
-			next, sch.ID, studentUUID,
-		)
-		result.IsTeacherBusy = ptrBool(teacherBusy)
-
-		// 5f. IsCancelAbleFromNow
-		result.IsCancelAbleFromNow = ptrBool(utils.CheckCancelAbleFromNow(next))
-
-		// 5g. IsFullyAvailable
-		// KEY FIX: do NOT use sch.IsBooked here. That flag is set on ALL overlapping
-		// sibling schedules when any one of them is booked (e.g. booking schedule 14
-		// also sets is_booked=true on schedule 15 which overlaps it). Instead, check
-		// whether an actual booking exists for THIS schedule on THIS specific date.
-		thisScheduleBooked := r.hasActiveBookingOnDate(
-			r.db.WithContext(ctx), sch.ID, next,
-		)
+		result.IsRoomAvailable = ptrBool(roomCount < int64(roomLimit))
+		result.IsBookedSameDayAndTime = ptrBool(isConflict)
+		result.IsTeacherBusy = ptrBool(isTeacherBusy)
+		result.TeacherSchedule.IsCancelAbleFromNow = ptrBool(utils.CheckCancelAbleFromNow(m.next))
 
 		result.IsFullyAvailable = ptrBool(
 			*result.IsRoomAvailable &&
@@ -1172,6 +1207,7 @@ func (r *studentRepository) GetAvailableSchedules(
 
 	return &results, nil
 }
+
 
 func (r *studentRepository) hasActiveBookingOnDate(
 	db *gorm.DB,
