@@ -86,6 +86,10 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 
 		phone := utils.NormalizePhoneNumber(booking.Schedule.Teacher.Phone)
 		if phone != "" {
+			if !s.messenger.IsLoggedIn() {
+				log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+				return booking, nil
+			}
 			go func() {
 				if err := s.messenger.SendMessage(phone, msg); err != nil {
 					log.Printf("🔕 WA to sub teacher %s failed: %v", phone, err)
@@ -162,6 +166,10 @@ Kuota yang telah dikembalikan dapat segera digunakan untuk penjadwalan sesi beri
 				"https://www.madeu.app",
 				os.Getenv("APP_NAME"),
 			)
+			if !s.messenger.IsLoggedIn() {
+				log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+				return nil
+			}
 			go func() {
 				if err := s.messenger.SendMessage(phone, msg); err != nil {
 					log.Printf("🔕 WA quota notification to %s failed: %v", phone, err)

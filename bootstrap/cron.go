@@ -49,7 +49,7 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 	_, err = c.AddFunc("0 9 * * 1", func() {
 		log.Println("🔔 [CRON] Starting weekly student booking reminder...")
 
-		if waMgr == nil || !waMgr.IsLoggedIn() {
+		if !waMgr.IsLoggedIn() {
 			log.Println("⚠️  [CRON] WhatsApp not connected, skipping student reminder")
 			return
 		}
@@ -134,6 +134,11 @@ Buka aplikasi → Pilih jadwal → Konfirmasi pemesanan
 			"https://www.madeu.app",
 			appName,
 		)
+
+		if !waMgr.IsLoggedIn() {
+			log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+			return nil
+		}
 
 		if err := waMgr.SendMessage(phone, msg); err != nil {
 			log.Printf("⚠️  [CRON] Failed to send reminder to %s (%s): %v", s.Name, phone, err)

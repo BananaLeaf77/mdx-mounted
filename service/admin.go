@@ -117,6 +117,10 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 				"https://www.madeu.app",
 				os.Getenv("APP_NAME"),
 			)
+			if !s.messenger.IsLoggedIn() {
+				log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+				return nil
+			}
 			go func() {
 				if err := s.messenger.SendMessage(phoneNormalized, msgToStudent); err != nil {
 					log.Printf("🔕 WA to student %s failed: %v", phoneNormalized, err)
@@ -348,7 +352,7 @@ func (s *adminService) DisconnectWhatsApp(ctx context.Context) error {
 }
 
 func (s *adminService) PingWhatsApp(_ context.Context, phone string) error {
-	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+	if !s.messenger.IsLoggedIn() {
 		return errors.New("whatsapp tidak terhubung")
 	}
 	normalized := utils.NormalizePhoneNumber(phone)
