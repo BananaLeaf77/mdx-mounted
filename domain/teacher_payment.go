@@ -61,8 +61,8 @@ type TeacherPaymentUseCase interface {
 	// GetAllPayments returns all teacher payment records, optionally filtered by status.
 	GetAllPayments(ctx context.Context, status string) ([]TeacherPayment, error)
 
-	// GetPaymentsByTeacher returns payment history for a specific teacher.
-	GetPaymentsByTeacher(ctx context.Context, teacherUUID string) ([]TeacherPayment, error)
+	// GetPaymentsByTeacher returns payment history for a specific teacher, optionally filtered by status.
+	GetPaymentsByTeacher(ctx context.Context, teacherUUID string, status string) ([]TeacherPayment, error)
 
 	// MarkAsPaid marks a payment as paid and stores the proof image + admin UUID.
 	MarkAsPaid(ctx context.Context, paymentID int, adminUUID string, req MarkPaidRequest) error
@@ -75,8 +75,8 @@ type TeacherPaymentRepository interface {
 	// GetAllPayments returns payment records filtered by status ("" = all).
 	GetAllPayments(ctx context.Context, status string) ([]TeacherPayment, error)
 
-	// GetPaymentsByTeacher returns payment records for one teacher.
-	GetPaymentsByTeacher(ctx context.Context, teacherUUID string) ([]TeacherPayment, error)
+	// GetPaymentsByTeacher returns payment records for one teacher, optionally filtered by status.
+	GetPaymentsByTeacher(ctx context.Context, teacherUUID string, status string) ([]TeacherPayment, error)
 
 	// MarkAsPaid updates status, proof image, paid_at, and paid_by.
 	MarkAsPaid(ctx context.Context, paymentID int, adminUUID string, req MarkPaidRequest) error

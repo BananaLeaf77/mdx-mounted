@@ -236,15 +236,19 @@ func (r *teacherPaymentRepo) GetAllPayments(ctx context.Context, status string) 
 // GetPaymentsByTeacher
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (r *teacherPaymentRepo) GetPaymentsByTeacher(ctx context.Context, teacherUUID string) ([]domain.TeacherPayment, error) {
+func (r *teacherPaymentRepo) GetPaymentsByTeacher(ctx context.Context, teacherUUID string, status string) ([]domain.TeacherPayment, error) {
 	var payments []domain.TeacherPayment
 
-	if err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Preload("Teacher").
 		Preload("PaidBy").
-		Where("teacher_uuid = ?", teacherUUID).
-		Order("period_start DESC").
-		Find(&payments).Error; err != nil {
+		Where("teacher_uuid = ?", teacherUUID)
+
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+
+	if err := q.Order("period_start DESC").Find(&payments).Error; err != nil {
 		return nil, fmt.Errorf("gagal mengambil riwayat pembayaran guru: %w", err)
 	}
 

@@ -64,11 +64,21 @@ func (s *teacherPaymentService) GetAllPayments(ctx context.Context, status strin
 	return s.repo.GetAllPayments(ctx, status)
 }
 
-func (s *teacherPaymentService) GetPaymentsByTeacher(ctx context.Context, teacherUUID string) ([]domain.TeacherPayment, error) {
+func (s *teacherPaymentService) GetPaymentsByTeacher(ctx context.Context, teacherUUID string, status string) ([]domain.TeacherPayment, error) {
 	if teacherUUID == "" {
 		return nil, errors.New("teacher UUID tidak boleh kosong")
 	}
-	return s.repo.GetPaymentsByTeacher(ctx, teacherUUID)
+	// Validate status if provided
+	if status != "" &&
+		status != domain.TeacherPaymentStatusUnpaid &&
+		status != domain.TeacherPaymentStatusPaid {
+		return nil, fmt.Errorf(
+			"status tidak valid, gunakan '%s' atau '%s'",
+			domain.TeacherPaymentStatusUnpaid,
+			domain.TeacherPaymentStatusPaid,
+		)
+	}
+	return s.repo.GetPaymentsByTeacher(ctx, teacherUUID, status)
 }
 
 func (s *teacherPaymentService) MarkAsPaid(
