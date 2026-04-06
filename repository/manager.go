@@ -409,7 +409,6 @@ func (r *managerRepo) ModifyStudentPackageQuota(ctx context.Context, studentUUID
 	var studentPackage domain.StudentPackage
 	if err := r.db.WithContext(ctx).
 		Preload("Package").
-		Preload("Package.Instrument").
 		Where("student_uuid = ? AND package_id = ? AND end_date >= ?", studentUUID, packageID, time.Now()).
 		First(&studentPackage).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
