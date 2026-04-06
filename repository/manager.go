@@ -448,7 +448,6 @@ func (r *managerRepo) ModifyStudentPackageQuota(ctx context.Context, studentUUID
 		Preload("StudentProfile.Packages", func(db *gorm.DB) *gorm.DB {
 			return db.
 				Preload("Package").
-				Preload("Package.Instrument").
 				Where("end_date >= ?", time.Now()) // Only active packages
 		}).
 		// Preload TeacherProfile (if needed, though student won't have one)
