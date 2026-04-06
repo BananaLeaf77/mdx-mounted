@@ -49,7 +49,7 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 	_, err = c.AddFunc("0 9 * * 1", func() {
 		log.Println("🔔 [CRON] Starting weekly student booking reminder...")
 
-		if !waMgr.IsLoggedIn() {
+		if waMgr == nil || !waMgr.IsLoggedIn() {
 			log.Println("⚠️  [CRON] WhatsApp not connected, skipping student reminder")
 			return
 		}
@@ -135,7 +135,7 @@ Buka aplikasi → Pilih jadwal → Konfirmasi pemesanan
 			appName,
 		)
 
-		if !waMgr.IsLoggedIn() {
+		if waMgr == nil || !waMgr.IsLoggedIn() {
 			log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
 			return nil
 		}

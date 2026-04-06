@@ -49,7 +49,7 @@ func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, s
 	if err != nil {
 		return err
 	}
-	if !s.messenger.IsLoggedIn() {
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
 		log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
 		return nil
 	}
@@ -62,7 +62,7 @@ func (s *studentUseCase) BookClass(ctx context.Context, studentUUID string, sche
 	if err != nil {
 		return nil, err
 	}
-	if !s.messenger.IsLoggedIn() {
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
 		log.Printf("🔕 WhatsApp not connected, skipping book notification")
 		return data, nil
 	}
@@ -87,7 +87,7 @@ func (s *studentUseCase) BookClassTrial(ctx context.Context, studentUUID string,
 	if err != nil {
 		return nil, err
 	}
-	if s.messenger.IsLoggedIn() {
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
 		s.sendBookClassNotif(data)
 	}
 	return data, nil
