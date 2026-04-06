@@ -54,6 +54,7 @@ type StudentProfile struct {
 	UserUUID             string           `gorm:"primaryKey;type:uuid;constraint:OnDelete:CASCADE;" json:"user_uuid"`
 	Packages             []StudentPackage `gorm:"foreignKey:StudentUUID;constraint:OnDelete:CASCADE;" json:"packages"`
 	LatestClassHistories *[]ClassHistory  `gorm:"-" json:"latest_class_histories"`
+	TotalPackageBought   int              `gorm:"-" json:"total_package_bought"`
 }
 
 type Package struct {

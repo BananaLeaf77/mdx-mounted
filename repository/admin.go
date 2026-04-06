@@ -568,10 +568,37 @@ func (r *adminRepo) GetAllUsers(ctx context.Context) ([]domain.User, error) {
 func (r *adminRepo) GetAllStudents(ctx context.Context) ([]domain.User, error) {
 	var students []domain.User
 	err := r.db.WithContext(ctx).
+		Preload("StudentProfile").
 		Where("role = ? AND deleted_at IS NULL", domain.RoleStudent).
 		Find(&students).Error
+	if err != nil {
+		return nil, err
+	}
 
-	return students, err
+	// Fetch total package counts efficiently
+	type countResult struct {
+		StudentUUID string
+		Total       int
+	}
+	var counts []countResult
+	r.db.WithContext(ctx).Model(&domain.StudentPackage{}).
+		Select("student_uuid, count(*) as total").
+		Group("student_uuid").
+		Scan(&counts)
+
+	// Map counts to students
+	countMap := make(map[string]int)
+	for _, c := range counts {
+		countMap[c.StudentUUID] = c.Total
+	}
+
+	for i := range students {
+		if students[i].StudentProfile != nil {
+			students[i].StudentProfile.TotalPackageBought = countMap[students[i].UUID]
+		}
+	}
+
+	return students, nil
 }
 
 // GetFilteredStudents returns students filtered by activity status:
@@ -679,13 +706,14 @@ func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.Stude
 func (r *adminRepo) GetStudentByUUID(ctx context.Context, uuid string) (*domain.User, error) {
 	var student domain.User
 	err := r.db.WithContext(ctx).
-		Preload("StudentProfile.Packages", "end_date >= ? AND remaining_quota > 0", time.Now()).
+		Preload("StudentProfile.Packages").
 		Preload("StudentProfile.Packages.Package.Instrument").
 		Where("uuid = ? AND role = ? AND deleted_at IS NULL", uuid, domain.RoleStudent).
 		First(&student).Error
 	if err != nil {
 		return nil, err
 	}
+
 	return &student, nil
 }
 
