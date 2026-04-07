@@ -119,7 +119,33 @@ func (r *reportRepo) GetAllStudentsWithClassHistory(
 		countMap[c.StudentUUID] = c.Total
 	}
 
-	// ── Format Trial Instruments safely ──
+	// Collect all instrument IDs first to avoid N+1 query
+	instrumentIDs := make(map[uint]bool)
+	for i := range students {
+		for j := range students[i].Bookings {
+			booking := &students[i].Bookings[j]
+			if booking.PackageUsed.ID != 0 && booking.PackageUsed.Package != nil && 
+			   booking.PackageUsed.Package.IsTrial && booking.InstrumentID != 0 {
+				instrumentIDs[uint(booking.InstrumentID)] = true
+			}
+		}
+	}
+	
+	// Fetch all instruments in one query
+	instrumentMap := make(map[uint]string)
+	if len(instrumentIDs) > 0 {
+		ids := make([]uint, 0, len(instrumentIDs))
+		for id := range instrumentIDs {
+			ids = append(ids, id)
+		}
+		var instruments []domain.Instrument
+		r.db.WithContext(ctx).Where("id IN ?", ids).Find(&instruments)
+		for _, inst := range instruments {
+			instrumentMap[uint(inst.ID)] = inst.Name
+		}
+	}
+	
+	// Apply trial instruments from map (no DB query in loop)
 	for i := range students {
 		if students[i].StudentProfile != nil {
 			students[i].StudentProfile.TotalPackageBought = countMap[students[i].UUID]
@@ -127,13 +153,12 @@ func (r *reportRepo) GetAllStudentsWithClassHistory(
 		for j := range students[i].Bookings {
 			booking := &students[i].Bookings[j]
 			if booking.PackageUsed.ID != 0 && booking.PackageUsed.Package != nil && booking.PackageUsed.Package.IsTrial {
-				var instrument domain.Instrument
-				r.db.WithContext(ctx).Where("id = ?", booking.InstrumentID).First(&instrument)
-
-				packageCopy := *booking.PackageUsed.Package
-				packageCopy.TrialInstrument = instrument.Name
-				packageCopy.Instrument = nil
-				booking.PackageUsed.Package = &packageCopy
+				if instName, ok := instrumentMap[uint(booking.InstrumentID)]; ok {
+					packageCopy := *booking.PackageUsed.Package
+					packageCopy.TrialInstrument = instName
+					packageCopy.Instrument = nil
+					booking.PackageUsed.Package = &packageCopy
+				}
 			}
 		}
 	}
