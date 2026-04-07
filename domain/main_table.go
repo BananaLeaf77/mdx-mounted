@@ -155,7 +155,7 @@ type TeacherSchedule struct {
 	DeletedAt   *time.Time `gorm:"index" json:"deleted_at,omitempty"`
 
 	Teacher        User            `gorm:"foreignKey:TeacherUUID;references:UUID" json:"teacher"`
-	TeacherProfile *TeacherProfile `gorm:"foreignKey:UserUUID;references:TeacherUUID" json:"teacher_profile,omitempty"`
+	TeacherProfile *TeacherProfile `gorm:"foreignKey:TeacherUUID;references:UserUUID" json:"teacher_profile,omitempty"`
 
 	// ✅ Add computed field for next class date
 	NextClassDate *time.Time `gorm:"-" json:"next_class_date,omitempty"`
