@@ -88,8 +88,10 @@ func (s *studentUseCase) BookClassTrial(ctx context.Context, studentUUID string,
 		return nil, err
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		s.sendBookClassNotif(data)
+		log.Printf("🔕 WhatsApp not connected, skipping book notification")
+		return data, nil
 	}
+	s.sendBookClassNotif(data)
 	return data, nil
 }
 
