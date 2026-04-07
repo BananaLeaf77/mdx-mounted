@@ -6,6 +6,7 @@ import (
 	"chronosphere/middleware"
 	"chronosphere/utils"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,6 +39,9 @@ func NewReportHandler(
 		// Accessible by admin and manager.
 		adminGroup.GET("/student/:uuid/class-history", h.GetStudentClassHistory)
 
+		// admin get all student and preload all of their class history, maybe add querry for filter data limit and page
+		adminGroup.GET("/students", h.GetAllStudentsWithClassHistory)
+
 		// GET /admin/reports/teachers/teaching?start_date=2025-01-01&end_date=2025-01-31&teacher_uuid=<optional>
 		// Returns teaching report for all teachers (or filtered to one if teacher_uuid is given).
 		adminGroup.GET("/teachers/teaching", h.GetTeacherTeachingReport)
@@ -52,6 +56,7 @@ func NewReportHandler(
 		teacherGroup.GET("/teaching", h.GetMyTeachingReport)
 	}
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /admin/reports/student/:uuid/class-history
@@ -88,6 +93,49 @@ func (h *ReportHandler) GetStudentClassHistory(c *gin.Context) {
 		"data":         histories,
 		"message":      "Riwayat kelas siswa berhasil diambil",
 	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /admin/reports/students
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (h *ReportHandler) GetAllStudentsWithClassHistory(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	f := parsePaginationReport(c)
+	search := c.Query("filter")
+
+	students, total, err := h.uc.GetAllStudentsWithClassHistory(c.Request.Context(), f, search)
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetAllStudentsWithClassHistory - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil data siswa beserta historinya",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetAllStudentsWithClassHistory", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    students,
+		"page":    f.Page,
+		"limit":   f.Limit,
+		"total":   total,
+		"message": "Data siswa beserta histori kelas berhasil diambil",
+	})
+}
+
+func parsePaginationReport(c *gin.Context) domain.PaginationFilter {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if limit < 0 {
+		limit = 10
+	}
+	return domain.PaginationFilter{Page: page, Limit: limit}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

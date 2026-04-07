@@ -45,6 +45,9 @@ type ReportRepository interface {
 	// GetClassHistoriesByStudentUUID fetches all class histories for a student.
 	GetClassHistoriesByStudentUUID(ctx context.Context, studentUUID string) (*[]ClassHistory, error)
 
+	// GetAllStudentsWithClassHistory gets all students along with their history and bookings (no limit).
+	GetAllStudentsWithClassHistory(ctx context.Context, filter PaginationFilter, search string) ([]User, int64, error)
+
 	// GetTeacherTeachingReport aggregates completed classes per teacher within the filter range.
 	GetTeacherTeachingReport(ctx context.Context, filter TeacherTeachingReportFilter) ([]TeacherTeachingReport, error)
 }
@@ -53,6 +56,9 @@ type ReportRepository interface {
 type ReportUseCase interface {
 	// GetClassHistoriesByStudentUUID is accessible to admin and manager.
 	GetClassHistoriesByStudentUUID(ctx context.Context, studentUUID string) (*[]ClassHistory, error)
+
+	// GetAllStudentsWithClassHistory aggregates all students with their class histories and bookings.
+	GetAllStudentsWithClassHistory(ctx context.Context, filter PaginationFilter, search string) ([]User, int64, error)
 
 	// GetTeacherTeachingReport generates the teaching report for one or all teachers.
 	// Accessible to admin and managers, and to the teacher themselves (repo filters by UUID).

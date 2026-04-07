@@ -30,6 +30,18 @@ func (s *reportService) GetClassHistoriesByStudentUUID(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GetAllStudentsWithClassHistory
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (s *reportService) GetAllStudentsWithClassHistory(
+	ctx context.Context,
+	filter domain.PaginationFilter,
+	search string,
+) ([]domain.User, int64, error) {
+	return s.repo.GetAllStudentsWithClassHistory(ctx, filter, search)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GetTeacherTeachingReport  (admin / manager — can query any teacher)
 // ─────────────────────────────────────────────────────────────────────────────
 

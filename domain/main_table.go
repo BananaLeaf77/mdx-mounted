@@ -48,6 +48,7 @@ type User struct {
 
 	TeacherProfile *TeacherProfile `gorm:"foreignKey:UserUUID" json:"teacher_profile,omitempty"`
 	StudentProfile *StudentProfile `gorm:"foreignKey:UserUUID" json:"student_profile,omitempty"`
+	Bookings       []Booking       `gorm:"foreignKey:StudentUUID;references:UUID" json:"bookings,omitempty"`
 }
 
 type StudentProfile struct {
@@ -188,6 +189,8 @@ type Booking struct {
 
 	IsReadyToFinish bool `gorm:"-" json:"is_ready_to_finish"`
 	IsManual        bool `gorm:"default:false" json:"is_manual"`
+
+	ClassHistory *ClassHistory `gorm:"foreignKey:BookingID" json:"class_history,omitempty"`
 }
 
 type ClassHistory struct {

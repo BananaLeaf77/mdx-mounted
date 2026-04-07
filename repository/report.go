@@ -51,6 +51,97 @@ func (r *reportRepo) GetClassHistoriesByStudentUUID(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GetAllStudentsWithClassHistory
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (r *reportRepo) GetAllStudentsWithClassHistory(
+	ctx context.Context,
+	filter domain.PaginationFilter,
+	search string,
+) ([]domain.User, int64, error) {
+
+	var students []domain.User
+	var total int64
+
+	baseQuery := r.db.WithContext(ctx).
+		Model(&domain.User{}).
+		Where("role = ? AND deleted_at IS NULL", domain.RoleStudent)
+
+	if search != "" {
+		searchTerm := "%" + search + "%"
+		baseQuery = baseQuery.Where("(name ILIKE ? OR email ILIKE ? OR phone ILIKE ?)", searchTerm, searchTerm, searchTerm)
+	}
+
+	if err := baseQuery.Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("gagal menghitung total siswa: %w", err)
+	}
+
+	query := baseQuery.
+		Preload("StudentProfile").
+		Preload("Bookings", func(db *gorm.DB) *gorm.DB {
+			return db.Order("class_date DESC")
+		}).
+		Preload("Bookings.ClassHistory").
+		Preload("Bookings.ClassHistory.Documentations").
+		Preload("Bookings.Schedule").
+		Preload("Bookings.Schedule.Teacher").
+		Preload("Bookings.PackageUsed.Package.Instrument")
+
+	if !filter.IsAll() {
+		query = query.Limit(filter.SafeLimit()).Offset(filter.Offset())
+	}
+
+	if err := query.Order("created_at DESC").Find(&students).Error; err != nil {
+		return nil, 0, fmt.Errorf("gagal mengambil data siswa: %w", err)
+	}
+
+	type countResult struct {
+		StudentUUID string
+		Total       int
+	}
+	var counts []countResult
+	
+	ids := make([]string, len(students))
+	for i, s := range students {
+		ids[i] = s.UUID
+	}
+
+	if len(ids) > 0 {
+		r.db.WithContext(ctx).Model(&domain.StudentPackage{}).
+			Select("student_uuid, count(*) as total").
+			Where("student_uuid IN ?", ids).
+			Group("student_uuid").
+			Scan(&counts)
+	}
+
+	countMap := make(map[string]int)
+	for _, c := range counts {
+		countMap[c.StudentUUID] = c.Total
+	}
+
+	// ── Format Trial Instruments safely ──
+	for i := range students {
+		if students[i].StudentProfile != nil {
+			students[i].StudentProfile.TotalPackageBought = countMap[students[i].UUID]
+		}
+		for j := range students[i].Bookings {
+			booking := &students[i].Bookings[j]
+			if booking.PackageUsed.ID != 0 && booking.PackageUsed.Package != nil && booking.PackageUsed.Package.IsTrial {
+				var instrument domain.Instrument
+				r.db.WithContext(ctx).Where("id = ?", booking.InstrumentID).First(&instrument)
+
+				packageCopy := *booking.PackageUsed.Package
+				packageCopy.TrialInstrument = instrument.Name
+				packageCopy.Instrument = nil
+				booking.PackageUsed.Package = &packageCopy
+			}
+		}
+	}
+
+	return students, total, nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GetTeacherTeachingReport
 //
 // Aggregates completed ClassHistory rows per teacher and breaks them down by
