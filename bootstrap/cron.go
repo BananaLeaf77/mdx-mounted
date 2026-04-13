@@ -45,9 +45,9 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 		log.Fatalf("❌ Failed to register monthly payment cron: %v", err)
 	}
 
-	// Every Monday at 09:00 WITA — remind students who haven't booked in 7 days
-	_, err = c.AddFunc("0 9 * * 1", func() {
-		log.Println("🔔 [CRON] Starting weekly student booking reminder...")
+	// Every day at 01:00 WITA — remind students who haven't booked in 7 days
+	_, err = c.AddFunc("0 1 * * *", func() {  // Changed from "0 1 * * 1" (Mon) to "0 1 * * *" (daily)
+		log.Println("🔔 [CRON] Starting daily student booking reminder...")
 
 		if waMgr == nil || !waMgr.IsLoggedIn() {
 			log.Println("⚠️  [CRON] WhatsApp not connected, skipping student reminder")
@@ -57,12 +57,12 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		if err := sendWeeklyBookingReminder(ctx, db, waMgr); err != nil {
-			log.Printf("❌ [CRON] Weekly student reminder failed: %v", err)
+		if err := sendDailyBookingReminder(ctx, db, waMgr); err != nil {  // Renamed function
+			log.Printf("❌ [CRON] Daily student reminder failed: %v", err)
 		}
 	})
 	if err != nil {
-		log.Fatalf("❌ Failed to register weekly reminder cron: %v", err)
+		log.Fatalf("❌ Failed to register daily reminder cron: %v", err)
 	}
 
 	c.Start()
@@ -70,7 +70,8 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 	return c
 }
 
-func sendWeeklyBookingReminder(ctx context.Context, db *gorm.DB, waMgr *config.WAManager) error {
+// Renamed from sendWeeklyBookingReminder to sendDailyBookingReminder
+func sendDailyBookingReminder(ctx context.Context, db *gorm.DB, waMgr *config.WAManager) error {
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	now := time.Now().In(loc)
 	sevenDaysAgo := now.AddDate(0, 0, -7)
@@ -87,23 +88,15 @@ func sendWeeklyBookingReminder(ctx context.Context, db *gorm.DB, waMgr *config.W
 
 	var students []studentRow
 
-	err := db.WithContext(ctx).Raw(`
-		SELECT u.uuid, u.name, u.phone
-		FROM users u
-		WHERE u.role = ?
-		  AND u.deleted_at IS NULL
-		  AND EXISTS (
-			  SELECT 1 FROM student_packages sp
-			  WHERE sp.student_uuid = u.uuid
-			    AND sp.remaining_quota > 0
-			    AND sp.end_date >= ?
-		  )
-		  AND NOT EXISTS (
-			  SELECT 1 FROM bookings b
-			  WHERE b.student_uuid = u.uuid
-			    AND b.booked_at >= ?
-		  )
-	`, domain.RoleStudent, now, sevenDaysAgo).
+	err := db.WithContext(ctx).
+		Model(&domain.User{}).
+		Select("users.uuid, users.name, users.phone").
+		Joins("INNER JOIN student_packages ON student_packages.student_uuid = users.uuid AND student_packages.remaining_quota > 0 AND student_packages.end_date >= ?", now).
+		Joins("LEFT JOIN bookings ON bookings.student_uuid = users.uuid AND bookings.booked_at >= ?", sevenDaysAgo).
+		Where("users.role = ?", domain.RoleStudent).
+		Where("users.deleted_at IS NULL").
+		Where("bookings.id IS NULL").
+		Group("users.uuid, users.name, users.phone").
 		Scan(&students).Error
 
 	if err != nil {
@@ -136,7 +129,7 @@ Buka aplikasi → Pilih jadwal → Konfirmasi pemesanan
 		)
 
 		if waMgr == nil || !waMgr.IsLoggedIn() {
-			log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+			log.Printf("🔕 WhatsApp not connected, skipping reminder")
 			return nil
 		}
 
@@ -154,6 +147,6 @@ Buka aplikasi → Pilih jadwal → Konfirmasi pemesanan
 		}
 	}
 
-	log.Printf("✅ [CRON] Weekly reminder sent to %d/%d students", sent, len(students))
+	log.Printf("✅ [CRON] Daily reminder sent to %d/%d students", sent, len(students))
 	return nil
 }
