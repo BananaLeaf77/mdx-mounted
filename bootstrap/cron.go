@@ -46,7 +46,9 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 	}
 
 	// Every day at 01:00 WITA — remind students who haven't booked in 7 days
-	_, err = c.AddFunc("0 1 * * *", func() {  // Changed from "0 1 * * 1" (Mon) to "0 1 * * *" (daily)
+	// For testing only - runs every minute
+	_, err = c.AddFunc("*/1 * * * *", func() {
+	// _, err = c.AddFunc("0 1 * * *", func() { // Changed from "0 1 * * 1" (Mon) to "0 1 * * *" (daily)
 		log.Println("🔔 [CRON] Starting daily student booking reminder...")
 
 		if waMgr == nil || !waMgr.IsLoggedIn() {
@@ -57,7 +59,7 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		if err := sendDailyBookingReminder(ctx, db, waMgr); err != nil {  // Renamed function
+		if err := sendDailyBookingReminder(ctx, db, waMgr); err != nil { // Renamed function
 			log.Printf("❌ [CRON] Daily student reminder failed: %v", err)
 		}
 	})

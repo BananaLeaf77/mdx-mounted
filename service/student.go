@@ -21,15 +21,43 @@ func NewStudentUseCase(repo domain.StudentRepository, mgr *config.WAManager) dom
 }
 
 func (s *studentUseCase) GetTeacherDetails(ctx context.Context, teacherUUID string) (*domain.User, error) {
-	return s.repo.GetTeacherDetails(ctx, teacherUUID)
+	teacher, err := s.repo.GetTeacherDetails(ctx, teacherUUID)
+	if err != nil {
+		return nil, err
+	}
+	if teacher != nil {
+		teacher.Email = ""
+		teacher.Phone = ""
+	}
+	return teacher, nil
 }
 
 func (s *studentUseCase) GetMyClassHistory(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
-	return s.repo.GetMyClassHistory(ctx, studentUUID, f)
+	histories, err := s.repo.GetMyClassHistory(ctx, studentUUID, f)
+	if err != nil {
+		return nil, err
+	}
+	if histories != nil {
+		for i := range *histories {
+			(*histories)[i].Booking.Schedule.Teacher.Email = ""
+			(*histories)[i].Booking.Schedule.Teacher.Phone = ""
+		}
+	}
+	return histories, nil
 }
 
 func (s *studentUseCase) GetTeacherSchedulesForPackage(ctx context.Context, teacherUUID string, studentPackageID int, studentUUID string) (*[]domain.TeacherSchedule, error) {
-	return s.repo.GetTeacherSchedulesForPackage(ctx, teacherUUID, studentPackageID, studentUUID)
+	schedules, err := s.repo.GetTeacherSchedulesForPackage(ctx, teacherUUID, studentPackageID, studentUUID)
+	if err != nil {
+		return nil, err
+	}
+	if schedules != nil {
+		for i := range *schedules {
+			(*schedules)[i].Teacher.Email = ""
+			(*schedules)[i].Teacher.Phone = ""
+		}
+	}
+	return schedules, nil
 }
 
 func (s *studentUseCase) BulkBookPreview(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) ([]domain.BulkBookPreview, error) {
@@ -37,7 +65,17 @@ func (s *studentUseCase) BulkBookPreview(ctx context.Context, studentUUID string
 }
 
 func (s *studentUseCase) BulkBookClass(ctx context.Context, studentUUID string, studentPackageID int, scheduleIDs []int) (*domain.BulkBookResult, error) {
-	return s.repo.BulkBookClass(ctx, studentUUID, studentPackageID, scheduleIDs)
+	res, err := s.repo.BulkBookClass(ctx, studentUUID, studentPackageID, scheduleIDs)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil {
+		for i := range res.Bookings {
+			res.Bookings[i].Schedule.Teacher.Email = ""
+			res.Bookings[i].Schedule.Teacher.Phone = ""
+		}
+	}
+	return res, nil
 }
 
 func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, studentUUID string, reason *string) error {
@@ -64,18 +102,42 @@ func (s *studentUseCase) BookClass(ctx context.Context, studentUUID string, sche
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
 		log.Printf("🔕 WhatsApp not connected, skipping book notification")
-		return data, nil
+	} else {
+		s.sendBookClassNotif(data)
 	}
-	s.sendBookClassNotif(data)
+	if data != nil {
+		data.Schedule.Teacher.Email = ""
+		data.Schedule.Teacher.Phone = ""
+	}
 	return data, nil
 }
 
 func (s *studentUseCase) GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]domain.ScheduleAvailabilityResult, error) {
-	return s.repo.GetAvailableSchedules(ctx, studentUUID, instrumentID)
+	res, err := s.repo.GetAvailableSchedules(ctx, studentUUID, instrumentID)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil {
+		for i := range *res {
+			(*res)[i].TeacherSchedule.Teacher.Email = ""
+			(*res)[i].TeacherSchedule.Teacher.Phone = ""
+		}
+	}
+	return res, nil
 }
 
 func (s *studentUseCase) GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int, instrumentID int) (*[]domain.ScheduleAvailabilityResult, error) {
-	return s.repo.GetAvailableSchedulesTrial(ctx, studentUUID, packageID, instrumentID)
+	res, err := s.repo.GetAvailableSchedulesTrial(ctx, studentUUID, packageID, instrumentID)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil {
+		for i := range *res {
+			(*res)[i].TeacherSchedule.Teacher.Email = ""
+			(*res)[i].TeacherSchedule.Teacher.Phone = ""
+		}
+	}
+	return res, nil
 }
 
 func (s *studentUseCase) GetAllInstruments(ctx context.Context) ([]domain.Instrument, error) {
@@ -89,9 +151,13 @@ func (s *studentUseCase) BookClassTrial(ctx context.Context, studentUUID string,
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
 		log.Printf("🔕 WhatsApp not connected, skipping book notification")
-		return data, nil
+	} else {
+		s.sendBookClassNotif(data)
 	}
-	s.sendBookClassNotif(data)
+	if data != nil {
+		data.Schedule.Teacher.Email = ""
+		data.Schedule.Teacher.Phone = ""
+	}
 	return data, nil
 }
 
@@ -108,7 +174,17 @@ func (s *studentUseCase) GetAllAvailablePackages(ctx context.Context, studentUUI
 }
 
 func (s *studentUseCase) GetMyBookedClasses(ctx context.Context, studentUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
-	return s.repo.GetMyBookedClasses(ctx, studentUUID, f)
+	res, err := s.repo.GetMyBookedClasses(ctx, studentUUID, f)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil {
+		for i := range *res {
+			(*res)[i].Schedule.Teacher.Email = ""
+			(*res)[i].Schedule.Teacher.Phone = ""
+		}
+	}
+	return res, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

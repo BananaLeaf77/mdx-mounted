@@ -25,7 +25,17 @@ func (s *teacherService) DeleteAvailabilityBasedOnDay(ctx context.Context, teach
 }
 
 func (s *teacherService) GetMyClassHistory(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.ClassHistory, error) {
-	return s.repo.GetMyClassHistory(ctx, teacherUUID, f)
+	res, err := s.repo.GetMyClassHistory(ctx, teacherUUID, f)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil {
+		for i := range *res {
+			(*res)[i].Booking.Student.Email = ""
+			(*res)[i].Booking.Student.Phone = ""
+		}
+	}
+	return res, nil
 }
 
 func (s *teacherService) FinishClass(ctx context.Context, bookingID int, teacherUUID string, payload domain.ClassHistory) error {
@@ -50,7 +60,17 @@ func (s *teacherService) CancelBookedClass(ctx context.Context, bookingID int, t
 }
 
 func (s *teacherService) GetAllBookedClass(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
-	return s.repo.GetAllBookedClass(ctx, teacherUUID, f)
+	res, err := s.repo.GetAllBookedClass(ctx, teacherUUID, f)
+	if err != nil {
+		return nil, err
+	}
+	if res != nil {
+		for i := range *res {
+			(*res)[i].Student.Email = ""
+			(*res)[i].Student.Phone = ""
+		}
+	}
+	return res, nil
 }
 
 func (s *teacherService) GetMyProfile(ctx context.Context, uuid string) (*domain.User, error) {
