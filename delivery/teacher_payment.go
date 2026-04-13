@@ -40,7 +40,7 @@ func NewTeacherPaymentHandler(app *gin.Engine, uc domain.TeacherPaymentUseCase, 
 	}
 
 	managerOnly := app.Group("/finance/teacher-payments")
-	managerOnly.Use(config.AuthMiddleware(jwtManager), middleware.ManagerOnly())
+	managerOnly.Use(config.AuthMiddleware(jwtManager), middleware.ManagerAndAdminOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
 	{
 		// POST /admin/teacher-payments/generate?year=2025&month=1
 		// Calculates earnings for all teachers for the given month and inserts
