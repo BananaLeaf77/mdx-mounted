@@ -357,11 +357,38 @@ func (m *WAManager) SendMessage(phone, text string) error {
 		return errors.New("whatsapp client not initialised")
 	}
 
+	// Heal stale state before giving up: status may lag behind reality.
+	if status == WAStatusConnected && !client.IsConnected() {
+		log.Printf("⚠️ WhatsApp stale state detected in SendMessage — reconnecting before send to %s", phone)
+		m.setStatus(WAStatusDisconnected)
+
+		if err := m.Connect(); err != nil {
+			return fmt.Errorf("whatsapp reconnect failed: %w", err)
+		}
+
+		// Wait up to 5 s for connection to establish.
+		for i := 0; i < 25; i++ {
+			time.Sleep(200 * time.Millisecond)
+			m.mu.RLock()
+			client = m.client
+			status = m.status
+			m.mu.RUnlock()
+			if status == WAStatusConnected && client != nil && client.IsConnected() {
+				break
+			}
+		}
+	}
+
 	if status != WAStatusConnected {
 		return errors.New("whatsapp not connected")
 	}
 
-	if !client.IsConnected() {
+	// Re-read under lock after potential reconnect.
+	m.mu.RLock()
+	client = m.client
+	m.mu.RUnlock()
+
+	if client == nil || !client.IsConnected() {
 		return errors.New("whatsapp client disconnected")
 	}
 
@@ -370,7 +397,7 @@ func (m *WAManager) SendMessage(phone, text string) error {
 	sendCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	// Check if number is on WhatsApp
+	// Check registration and get canonical JID.
 	res, err := client.IsOnWhatsApp(sendCtx, []string{phone})
 	if err != nil {
 		log.Printf("⚠️ IsOnWhatsApp check failed for %s: %v — attempting send anyway", phone, err)
@@ -388,7 +415,7 @@ func (m *WAManager) SendMessage(phone, text string) error {
 
 	_, sendErr := client.SendMessage(sendCtx, jid, msg)
 	if sendErr != nil {
-		// One retry with device refresh
+		// One retry after device refresh.
 		if _, refreshErr := client.GetUserDevicesContext(sendCtx, []types.JID{jid}); refreshErr == nil {
 			_, sendErr = client.SendMessage(sendCtx, jid, msg)
 		}
@@ -425,12 +452,30 @@ func (m *WAManager) GetJID() string {
 
 func (m *WAManager) IsLoggedIn() bool {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	// CRITICAL: Check both IsLoggedIn() and IsConnected()
-	return m.client != nil &&
-		m.client.IsLoggedIn() &&
-		m.client.IsConnected() &&
-		m.status == WAStatusConnected
+	client := m.client
+	status := m.status
+	m.mu.RUnlock()
+
+	if client == nil || status != WAStatusConnected {
+		return false
+	}
+
+	// Detect stale state: status says connected but TCP is dead.
+	if !client.IsConnected() || !client.IsLoggedIn() {
+		log.Println("⚠️ WhatsApp stale state detected in IsLoggedIn — triggering reconnect")
+		// Fix the status so callers get accurate info immediately.
+		m.setStatus(WAStatusDisconnected)
+		// Schedule reconnect (non-blocking, same as the Disconnected event handler).
+		go func() {
+			time.Sleep(2 * time.Second)
+			if err := m.Connect(); err != nil {
+				log.Printf("⚠️ Background reconnect after stale detection failed: %v", err)
+			}
+		}()
+		return false
+	}
+
+	return true
 }
 
 func (m *WAManager) RawClient() *whatsmeow.Client {
