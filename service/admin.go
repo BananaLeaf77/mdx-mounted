@@ -114,7 +114,7 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 				dataPackage.Description,
 				dataPackage.Instrument.Name,
 				dataPackage.Quota,
-				"https://www.madeu.app",
+				"https://www.mdxmusiccourse.cloud/",
 				os.Getenv("APP_NAME"),
 			)
 			if s.messenger == nil || !s.messenger.IsLoggedIn() {

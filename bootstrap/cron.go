@@ -126,7 +126,7 @@ Buka aplikasi → Pilih jadwal → Konfirmasi pemesanan
 🌐 %s
 🔔 %s Notification System`,
 			s.Name,
-			"https://www.madeu.app",
+			"https://www.mdxmusiccourse.cloud/",
 			appName,
 		)
 

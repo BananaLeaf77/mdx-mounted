@@ -135,7 +135,7 @@ Pembatalan kelas berhasil:
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app",
+		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"))
 
 	studentMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
@@ -161,7 +161,7 @@ Halo %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app",
+		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"))
 
 	mgr := s.messenger

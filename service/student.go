@@ -219,7 +219,7 @@ Halo %s %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
 
 	studentMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
@@ -245,7 +245,7 @@ Halo %s,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
 		*reason,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
 
 	mgr := s.messenger
@@ -284,7 +284,7 @@ _Silakan persiapkan materi. Jangan lupa mencatat hasil kelas setelah selesai._
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
 
 	studentMsg := fmt.Sprintf(`*KONFIRMASI PEMESANAN KELAS*
@@ -313,7 +313,7 @@ _Selamat belajar! 🎶_
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
 		booking.PackageUsed.Package.Instrument.Name,
-		"https://www.madeu.app", os.Getenv("APP_NAME"),
+		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
 
 	mgr := s.messenger
