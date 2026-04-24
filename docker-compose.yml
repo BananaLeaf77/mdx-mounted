@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: golang_backend
+    restart: always
+    ports:
+      - "8080:8080" # Map port host ke port container
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - backend-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432" # Opsional: Tutup port ini jika db hanya diakses oleh Go via internal network
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_cache
+    restart: always
+    ports:
+      - "6379:6379" # Opsional: Tutup port ini di production demi keamanan
+    volumes:
+      - redisdata:/data
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    networks:
+      - backend-network
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  backend-network:
+    driver: bridge

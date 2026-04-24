@@ -68,7 +68,7 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		// admin.PUT("/settings", h.UpdateSetting)
 
 		// Assign package to student
-		// admin.POST("/assign-package", h.AssignPackageToStudent)
+		admin.POST("/assign-package", h.AssignPackageToStudent)
 
 		// Class Histories
 		admin.GET("/class-histories", h.GetAllClassHistories)
