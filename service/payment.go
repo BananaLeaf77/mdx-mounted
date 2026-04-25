@@ -70,7 +70,6 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		return nil, fmt.Errorf("gagal mengambil pengaturan biaya: %w", err)
 	}
 
-	// Cek dari tabel payments (Xendit flow)
 	var priorPaidCount int64
 	err = s.db.WithContext(ctx).
 		Table("payments").
@@ -83,20 +82,7 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		return nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 	}
 
-	// Cek dari tabel StudentPackage (untuk WA flow - direct package assignment)
-	var existingPackageCount int64
-	err = s.db.WithContext(ctx).
-		Table("student_packages").
-		Joins("JOIN packages ON packages.id = student_packages.package_id").
-		Where("student_packages.student_uuid = ?", studentUUID).
-		Where("packages.is_trial = false").
-		Count(&existingPackageCount).Error
-	if err != nil {
-		return nil, fmt.Errorf("gagal memeriksa riwayat paket: %w", err)
-	}
-
-	// First purchase kalau tidak ada payment history DAN tidak ada existing packages
-	isFirstPurchase := priorPaidCount == 0 && existingPackageCount == 0
+	isFirstPurchase := priorPaidCount == 0
 
 	pkgPrice := pkg.Price
 	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
@@ -107,7 +93,7 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	var items []invoice.InvoiceItem
 
 	switch {
-	case pkg.IsTrial:
+	case pkg.IsTrial: 
 		totalAmount = pkgPrice
 		items = []invoice.InvoiceItem{
 			*invoice.NewInvoiceItem(fmt.Sprintf("Paket Trial %s", pkg.Name), float32(pkgPrice), 1),
