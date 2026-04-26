@@ -96,30 +96,42 @@ func (s *manualPaymentSvc) RequestManualPayment(
 		return nil, fmt.Errorf("gagal mengambil pengaturan biaya: %w", err)
 	}
 
-	var priorXendit int64
-	_ = s.db.WithContext(ctx).
-		Table("payments").
-		Joins("JOIN packages ON packages.id = payments.package_id").
-		Where("payments.student_uuid = ? AND payments.status = ? AND packages.is_trial = false",
-			studentUUID, domain.PaymentStatusPaid).
-		Count(&priorXendit)
+	// Single query mirrors the identical check in GetAllAvailablePackages (student repo).
+	// We count every non-trial "paid" touchpoint across all three sources:
+	//   1. Xendit payments (status = PAID)
+	//   2. Confirmed manual payments
+	//   3. Directly assigned student_packages (admin assign-package flow)
+	// If any row exists the student is not a first-time buyer → no registration fee.
+	var priorNonTrialCount int64
+	_ = s.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT payments.id
+			FROM payments
+			JOIN packages ON packages.id = payments.package_id
+			WHERE payments.student_uuid = ?
+			  AND payments.status       = ?
+			  AND packages.is_trial     = false
+			UNION ALL
+			SELECT manual_payments.id
+			FROM manual_payments
+			JOIN packages ON packages.id = manual_payments.package_id
+			WHERE manual_payments.student_uuid = ?
+			  AND manual_payments.status       = ?
+			  AND packages.is_trial            = false
+			UNION ALL
+			SELECT student_packages.id
+			FROM student_packages
+			JOIN packages ON packages.id = student_packages.package_id
+			WHERE student_packages.student_uuid = ?
+			  AND packages.is_trial              = false
+		) combined
+	`,
+		studentUUID, domain.PaymentStatusPaid,
+		studentUUID, domain.ManualPaymentStatusConfirmed,
+		studentUUID,
+	).Scan(&priorNonTrialCount)
 
-	var priorManual int64
-	_ = s.db.WithContext(ctx).
-		Table("manual_payments").
-		Joins("JOIN packages ON packages.id = manual_payments.package_id").
-		Where("manual_payments.student_uuid = ? AND manual_payments.status = ? AND packages.is_trial = false",
-			studentUUID, domain.ManualPaymentStatusConfirmed).
-		Count(&priorManual)
-
-	var existingPkg int64
-	_ = s.db.WithContext(ctx).
-		Table("student_packages").
-		Joins("JOIN packages ON packages.id = student_packages.package_id").
-		Where("student_packages.student_uuid = ? AND packages.is_trial = false", studentUUID).
-		Count(&existingPkg)
-
-	isFirstPurchase := priorXendit == 0 && priorManual == 0 && existingPkg == 0
+	isFirstPurchase := priorNonTrialCount == 0
 
 	// ── Pricing ───────────────────────────────────────────────────────────────
 	pkgPrice := pkg.Price
@@ -147,13 +159,12 @@ func (s *manualPaymentSvc) RequestManualPayment(
 		return nil, err
 	}
 
-	// ── Notifications (fire-and-forget) ───────────────────────────────────────
+	// ── Notify admin via WhatsApp (fire-and-forget) ───────────────────────────
 	mpCopy := *mp
 	studentCopy := *student
 	pkgCopy := *pkg
 
 	go s.notifyAdmin(&studentCopy, &pkgCopy, &mpCopy)
-	go s.notifyStudentPending(&studentCopy, &pkgCopy, &mpCopy)
 
 	return mp, nil
 }
@@ -330,54 +341,7 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 	}
 }
 
-func (s *manualPaymentSvc) notifyStudentPending(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
-	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		return
-	}
-	normalized := utils.NormalizePhoneNumber(student.Phone)
-	if normalized == "" {
-		return
-	}
 
-	instrumentName := "-"
-	if pkg.Instrument != nil {
-		instrumentName = pkg.Instrument.Name
-	}
-	regFeeStr := "Rp0"
-	if mp.IsFirstPurchase {
-		regFeeStr = fmt.Sprintf("Rp%.0f", mp.RegistrationFee)
-	}
-
-	msg := fmt.Sprintf(
-		"Halo %s! 👋\n\n"+
-			"Permintaan pembelian paket les Anda telah kami terima! ✅\n\n"+
-			"📋 *ID Permintaan: #%d*\n\n"+
-			"📦 *Detail Paket:*\n"+
-			"- Nama Paket: %s\n"+
-			"- Instrumen: %s\n"+
-			"- Durasi: %d Menit\n"+
-			"- Kuota: %d Sesi\n"+
-			"- Masa Berlaku: %s\n\n"+
-			"💰 *Rincian Biaya:*\n"+
-			"- Biaya Pendaftaran: %s\n"+
-			"- Harga Paket: Rp%.0f\n"+
-			"- *Total: Rp%.0f*\n\n"+
-			"⏳ *Status: Menunggu Konfirmasi*\n\n"+
-			"Tim admin akan segera menghubungi Anda untuk informasi pembayaran. "+
-			"Setelah pembayaran dikonfirmasi, paket Anda akan langsung aktif.\n\n"+
-			"🌐 %s\n"+
-			"🔔 %s Notification System",
-		student.Name, mp.ID,
-		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, manualFormatExpired(pkg.ExpiredDuration),
-		regFeeStr, mp.PackagePrice, mp.TotalAmount,
-		"https://www.mdxmusiccourse.cloud/",
-		os.Getenv("APP_NAME"),
-	)
-
-	if err := s.messenger.SendMessage(normalized, msg); err != nil {
-		log.Printf("⚠️ WA student pending notify failed: %v", err)
-	}
-}
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {

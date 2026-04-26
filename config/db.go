@@ -123,6 +123,7 @@ func runMigrations(db *gorm.DB) error {
 		&domain.ClassHistory{},
 		&domain.ClassDocumentation{},
 		&domain.Setting{},
+		&domain.ManualPayment{},
 	}
 
 	for _, m := range models {
