@@ -1056,8 +1056,6 @@ func (r *studentRepository) GetAvailableSchedules(
 		return nil, fmt.Errorf("gagal memuat paket siswa: %w", err)
 	}
 
-
-
 	compatibleDurations := make(map[int]bool, 2)
 	for _, p := range activePkgs {
 		compatibleDurations[p.Duration] = true
@@ -1078,7 +1076,6 @@ func (r *studentRepository) GetAvailableSchedules(
 	if isDrum {
 		roomLimit = domain.DrumRoomLimit
 	}
-
 
 	// ── 4. Teacher finished-class counts (1 query) ────────────────────────────
 	teacherFinishedCounts, err := r.fetchTeacherFinishedClassCounts(ctx)
@@ -1207,7 +1204,6 @@ func (r *studentRepository) GetAvailableSchedules(
 
 	return &results, nil
 }
-
 
 func (r *studentRepository) hasActiveBookingOnDate(
 	db *gorm.DB,
@@ -1362,18 +1358,38 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		}
 
 		// Count non-trial paid purchases to determine registration fee waiver.
-		var priorPaidCount int64
-		if err := r.db.WithContext(ctx).
-			Table("payments").
-			Joins("JOIN packages ON packages.id = payments.package_id").
-			Where("payments.student_uuid = ?", *studentUUID).
-			Where("payments.status = ?", domain.PaymentStatusPaid).
-			Where("packages.is_trial = false").
-			Count(&priorPaidCount).Error; err != nil {
+		var priorNonTrialCount int64
+		if err := r.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT payments.id
+			FROM payments
+			JOIN packages ON packages.id = payments.package_id
+			WHERE payments.student_uuid = ?
+			  AND payments.status       = ?
+			  AND packages.is_trial     = false
+			UNION ALL
+			SELECT manual_payments.id
+			FROM manual_payments
+			JOIN packages ON packages.id = manual_payments.package_id
+			WHERE manual_payments.student_uuid = ?
+			  AND manual_payments.status       = ?
+			  AND packages.is_trial            = false
+			UNION ALL
+			SELECT student_packages.id
+			FROM student_packages
+			JOIN packages ON packages.id = student_packages.package_id
+			WHERE student_packages.student_uuid = ?
+			  AND packages.is_trial              = false
+		) combined
+	`,
+			*studentUUID, domain.PaymentStatusPaid,
+			*studentUUID, domain.ManualPaymentStatusConfirmed,
+			*studentUUID,
+		).Scan(&priorNonTrialCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 		}
 
-		if priorPaidCount > 0 {
+		if priorNonTrialCount > 0 {
 			setting.RegistrationFee = 0
 		}
 	}

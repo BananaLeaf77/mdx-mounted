@@ -70,19 +70,41 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 		return nil, fmt.Errorf("gagal mengambil pengaturan biaya: %w", err)
 	}
 
-	var priorPaidCount int64
-	err = s.db.WithContext(ctx).
-		Table("payments").
-		Joins("JOIN packages ON packages.id = payments.package_id").
-		Where("payments.student_uuid = ?", studentUUID).
-		Where("payments.status = ?", domain.PaymentStatusPaid).
-		Where("packages.is_trial = false").
-		Count(&priorPaidCount).Error
+	// Check all three non-trial purchase sources — Xendit, manual payment, and
+	// directly assigned packages. Any confirmed prior purchase means no reg fee.
+	var priorNonTrialCount int64
+	err = s.db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT payments.id
+			FROM payments
+			JOIN packages ON packages.id = payments.package_id
+			WHERE payments.student_uuid = ?
+			  AND payments.status       = ?
+			  AND packages.is_trial     = false
+			UNION ALL
+			SELECT manual_payments.id
+			FROM manual_payments
+			JOIN packages ON packages.id = manual_payments.package_id
+			WHERE manual_payments.student_uuid = ?
+			  AND manual_payments.status       = ?
+			  AND packages.is_trial            = false
+			UNION ALL
+			SELECT student_packages.id
+			FROM student_packages
+			JOIN packages ON packages.id = student_packages.package_id
+			WHERE student_packages.student_uuid = ?
+			  AND packages.is_trial              = false
+		) combined
+	`,
+		studentUUID, domain.PaymentStatusPaid,
+		studentUUID, domain.ManualPaymentStatusConfirmed,
+		studentUUID,
+	).Scan(&priorNonTrialCount).Error
 	if err != nil {
 		return nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 	}
 
-	isFirstPurchase := priorPaidCount == 0
+	isFirstPurchase := priorNonTrialCount == 0
 
 	pkgPrice := pkg.Price
 	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
@@ -93,7 +115,7 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	var items []invoice.InvoiceItem
 
 	switch {
-	case pkg.IsTrial: 
+	case pkg.IsTrial:
 		totalAmount = pkgPrice
 		items = []invoice.InvoiceItem{
 			*invoice.NewInvoiceItem(fmt.Sprintf("Paket Trial %s", pkg.Name), float32(pkgPrice), 1),
