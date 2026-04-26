@@ -76,6 +76,7 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 	teacherPaymentRepo := repository.NewTeacherPaymentRepository(db)
 	reportRepo := repository.NewReportRepository(db)
 	financeRepo := repository.NewFinanceRepository(db)
+	manualPaymentRepo := repository.NewManualPaymentRepository(db)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	// All services that previously accepted *whatsmeow.Client now accept
@@ -89,6 +90,7 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 	teacherPaymentService := service.NewTeacherPaymentService(teacherPaymentRepo, adminRepo)
 	reportService := service.NewReportService(reportRepo)
 	financeService := service.NewFinanceService(financeRepo)
+	manualPaymentService := service.NewManualPaymentService(manualPaymentRepo, adminRepo, db, waMgr)
 
 	// ── Rate limiter ──────────────────────────────────────────────────────────
 	if limiterEnabled {
@@ -110,6 +112,7 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 	delivery.NewReportHandler(app, reportService, authService.GetAccessTokenManager())
 	delivery.NewFinanceHandler(app, financeService, paymentService, authService.GetAccessTokenManager(), db)
 	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
+	delivery.NewManualPaymentHandler(app, manualPaymentService, authService.GetAccessTokenManager())
 
 	c := InitCron(teacherPaymentService, db, waMgr)
 
