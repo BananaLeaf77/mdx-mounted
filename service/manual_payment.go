@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -286,11 +287,19 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 		return
 	}
 
-	adminPhone := os.Getenv("ADMIN_WHATSAPP_NUMBER")
-	if adminPhone == "" {
-		log.Println("⚠️ ADMIN_WHATSAPP_NUMBER not set")
+	// Get the logged-in JID (format: "628xxx@s.whatsapp.net") and extract the phone number
+	jid := s.messenger.GetJID()
+	if jid == "" {
+		log.Println("⚠️ Could not get logged-in WhatsApp JID")
 		return
 	}
+
+	// JID format is "628xxx@s.whatsapp.net" — take only the user part before "@"
+	adminPhone := jid
+	if idx := strings.Index(jid, "@"); idx != -1 {
+		adminPhone = jid[:idx]
+	}
+
 	normalized := utils.NormalizePhoneNumber(adminPhone)
 	if normalized == "" {
 		return
@@ -340,8 +349,6 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 		log.Printf("⚠️ WA admin manual-payment notify failed: %v", err)
 	}
 }
-
-
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
