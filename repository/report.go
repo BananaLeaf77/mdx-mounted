@@ -78,6 +78,11 @@ func (r *reportRepo) GetAllStudentsWithClassHistory(
 
 	query := baseQuery.
 		Preload("StudentProfile").
+		// Preload packages dari student_packages (dibuat saat manual payment dikonfirmasi).
+		// Berbeda dari Bookings.PackageUsed: murid bisa punya paket tapi BELUM booking kelas.
+		Preload("StudentProfile.Packages").
+		Preload("StudentProfile.Packages.Package").
+		Preload("StudentProfile.Packages.Package.Instrument").
 		Preload("Bookings", func(db *gorm.DB) *gorm.DB {
 			return db.Order("class_date DESC")
 		}).
@@ -100,7 +105,7 @@ func (r *reportRepo) GetAllStudentsWithClassHistory(
 		Total       int
 	}
 	var counts []countResult
-	
+
 	ids := make([]string, len(students))
 	for i, s := range students {
 		ids[i] = s.UUID
@@ -124,13 +129,13 @@ func (r *reportRepo) GetAllStudentsWithClassHistory(
 	for i := range students {
 		for j := range students[i].Bookings {
 			booking := &students[i].Bookings[j]
-			if booking.PackageUsed.ID != 0 && booking.PackageUsed.Package != nil && 
-			   booking.PackageUsed.Package.IsTrial && booking.InstrumentID != 0 {
+			if booking.PackageUsed.ID != 0 && booking.PackageUsed.Package != nil &&
+				booking.PackageUsed.Package.IsTrial && booking.InstrumentID != 0 {
 				instrumentIDs[uint(booking.InstrumentID)] = true
 			}
 		}
 	}
-	
+
 	// Fetch all instruments in one query
 	instrumentMap := make(map[uint]string)
 	if len(instrumentIDs) > 0 {
@@ -144,7 +149,7 @@ func (r *reportRepo) GetAllStudentsWithClassHistory(
 			instrumentMap[uint(inst.ID)] = inst.Name
 		}
 	}
-	
+
 	// Apply trial instruments from map (no DB query in loop)
 	for i := range students {
 		if students[i].StudentProfile != nil {
