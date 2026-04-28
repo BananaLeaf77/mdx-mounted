@@ -359,5 +359,5 @@ func (s *adminService) PingWhatsApp(_ context.Context, phone string) error {
 	if normalized == "" {
 		return errors.New("nomor telepon tidak valid")
 	}
-	return s.messenger.SendMessage(normalized, "Ping dari sistem MadEU. Tes koneksi berhasil.")
+	return s.messenger.SendMessage(normalized, "Ping dari sistem MDX. Tes koneksi berhasil.")
 }

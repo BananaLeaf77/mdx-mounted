@@ -177,7 +177,7 @@ func (s *authService) Register(ctx context.Context, email string, name string, t
 	}
 
 	// Kirim email OTP
-	subject := "Kode OTP MadEU Anda"
+	subject := "Kode OTP MDX Anda"
 	body := fmt.Sprintf("Kode OTP Anda adalah: %s (berlaku selama %d menit)", otp, otpTime)
 
 	if err := utils.SendEmail(email, subject, body); err != nil {
@@ -242,7 +242,7 @@ func (s *authService) ForgotPassword(ctx context.Context, email string) error {
 	}
 
 	// Kirim email OTP
-	subject := "MadEU Reset Password OTP"
+	subject := "MDX Reset Password OTP"
 	body := fmt.Sprintf("Halo %s,\n\nKode OTP untuk reset password akun Anda adalah: %s\nKode ini hanya berlaku selama 5 menit.\n\nJika Anda tidak merasa melakukan permintaan ini, abaikan email ini.",
 		user.Name, otp)
 	if err := utils.SendEmail(email, subject, body); err != nil {

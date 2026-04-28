@@ -137,7 +137,7 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	if len(shortUUID) > 8 {
 		shortUUID = shortUUID[:8]
 	}
-	externalID := fmt.Sprintf("MADEU-%s-%d", shortUUID, time.Now().UnixMilli())
+	externalID := fmt.Sprintf("MDX-%s-%d", shortUUID, time.Now().UnixMilli())
 	description := fmt.Sprintf("Pembayaran Paket %s - %s", pkg.Name, student.Name)
 
 	siteURL := os.Getenv("NEXT_PUBLIC_SITE_URL")
@@ -326,9 +326,9 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 • 🏆 Pantau progress belajarmu
 
 🚀 *Mulai belajar sekarang:*
-🔗 https://madeu.app
+🔗 https://mdxmusiccourse.cloud
 
-Terima kasih telah memilih MadEU! 🌟`,
+Terima kasih telah memilih MDX! 🌟`,
 		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredDuration,
 	)
 

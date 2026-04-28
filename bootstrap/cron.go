@@ -79,7 +79,7 @@ func sendDailyBookingReminder(ctx context.Context, db *gorm.DB, waMgr *config.WA
 	sevenDaysAgo := now.AddDate(0, 0, -7)
 	appName := os.Getenv("APP_NAME")
 	if appName == "" {
-		appName = "MadEU"
+		appName = "MDX"
 	}
 
 	type studentRow struct {
