@@ -22,6 +22,9 @@ func NewStudentHandler(r *gin.Engine, studUC domain.StudentUseCase, jwtManager *
 	handler := &StudentHandler{studUC: studUC}
 
 	r.GET("/packages", middleware.OptionalAuthMiddleware(jwtManager), handler.GetAllAvailablePackages)
+	// Public instruments endpoint — no auth required (instrument list is non-sensitive)
+	r.GET("/instruments", handler.GetAllInstruments)
+
 
 	student := r.Group("/student")
 	student.Use(config.AuthMiddleware(jwtManager), middleware.StudentOnly())
