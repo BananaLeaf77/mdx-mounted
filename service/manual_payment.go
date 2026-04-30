@@ -49,10 +49,10 @@ func (s *manualPaymentSvc) RequestManualPayment(
 	packageID int,
 ) (*domain.ManualPayment, error) {
 
-	student, err := s.adminRepo.GetStudentByUUID(ctx, studentUUID)
-	if err != nil {
-		return nil, fmt.Errorf("siswa tidak ditemukan: %w", err)
-	}
+	// student, err := s.adminRepo.GetStudentByUUID(ctx, studentUUID)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("siswa tidak ditemukan: %w", err)
+	// }
 
 	pkg, err := s.adminRepo.GetPackagesByID(ctx, packageID)
 	if err != nil {
@@ -161,11 +161,11 @@ func (s *manualPaymentSvc) RequestManualPayment(
 	}
 
 	// ── Notify admin via WhatsApp (fire-and-forget) ───────────────────────────
-	mpCopy := *mp
-	studentCopy := *student
-	pkgCopy := *pkg
+	// mpCopy := *mp
+	// studentCopy := *student
+	// pkgCopy := *pkg
 
-	go s.notifyAdmin(&studentCopy, &pkgCopy, &mpCopy)
+	// go s.notifyAdmin(&studentCopy, &pkgCopy, &mpCopy)
 
 	return mp, nil
 }
