@@ -25,7 +25,6 @@ func NewStudentHandler(r *gin.Engine, studUC domain.StudentUseCase, jwtManager *
 	// Public instruments endpoint — no auth required (instrument list is non-sensitive)
 	r.GET("/instruments", handler.GetAllInstruments)
 
-
 	student := r.Group("/student")
 	student.Use(config.AuthMiddleware(jwtManager), middleware.StudentOnly())
 	{
@@ -502,13 +501,19 @@ func (h *StudentHandler) GetAllAvailablePackages(c *gin.Context) {
 	}
 
 	type returnModifiedResponse struct {
-		Packages []domain.Package `json:"packages"`
-		Setting  domain.Setting   `json:"setting"`
+		Packages      []domain.Package `json:"packages"`
+		Setting       domain.Setting   `json:"setting"`
+		AdminWANumber string           `json:"admin_wa_number"` // NEW
+		WAAvailable   bool             `json:"wa_available"`    // NEW
 	}
 
+	adminPhone := h.studUC.GetAdminWhatsAppNumber()
+
 	res := returnModifiedResponse{
-		Packages: *packages,
-		Setting:  *setting,
+		Packages:      *packages,
+		Setting:       *setting,
+		AdminWANumber: adminPhone,
+		WAAvailable:   adminPhone != "",
 	}
 
 	utils.PrintLogInfo(nil, 200, "GetAllAvailablePackages", nil)

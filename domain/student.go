@@ -45,6 +45,7 @@ type BulkBookResult struct {
 // domain/student.go  — replace the two interface blocks
 
 type StudentUseCase interface {
+	GetAdminWhatsAppNumber() string
 	GetAvailableSchedulesTrial(ctx context.Context, studentUUID string, packageID int, instrumentID int) (*[]ScheduleAvailabilityResult, error)
 	BookClassTrial(ctx context.Context, studentUUID string, scheduleID int, packageID int, instrumentID int) (*Booking, error)
 	GetAllInstruments(ctx context.Context) ([]Instrument, error)

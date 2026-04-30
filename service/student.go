@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,21 @@ type studentUseCase struct {
 
 func NewStudentUseCase(repo domain.StudentRepository, mgr *config.WAManager) domain.StudentUseCase {
 	return &studentUseCase{repo: repo, messenger: mgr}
+}
+
+func (s *studentUseCase) GetAdminWhatsAppNumber() string {
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		return ""
+	}
+	jid := s.messenger.GetJID()
+	if jid == "" {
+		return ""
+	}
+	// JID format: "628xxx@s.whatsapp.net" — extract the number part
+	if idx := strings.Index(jid, "@"); idx != -1 {
+		return jid[:idx]
+	}
+	return jid
 }
 
 func (s *studentUseCase) GetTeacherDetails(ctx context.Context, teacherUUID string) (*domain.User, error) {

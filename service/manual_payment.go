@@ -49,6 +49,11 @@ func (s *manualPaymentSvc) RequestManualPayment(
 	packageID int,
 ) (*domain.ManualPayment, error) {
 
+	// Guard: admin must be reachable via WhatsApp before accepting a manual payment request.
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		return nil, errors.New("pembayaran manual saat ini tidak tersedia karena admin tidak dapat dihubungi melalui WhatsApp. Silakan coba lagi nanti atau hubungi admin secara langsung")
+	}
+
 	// student, err := s.adminRepo.GetStudentByUUID(ctx, studentUUID)
 	// if err != nil {
 	// 	return nil, fmt.Errorf("siswa tidak ditemukan: %w", err)
