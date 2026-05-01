@@ -177,7 +177,7 @@ func (s *authService) Register(ctx context.Context, email string, name string, t
 	}
 
 	// Kirim email OTP
-	subject := "Kode OTP MDX Anda"
+	subject := "Kode OTP MadEU Anda"
 	body := fmt.Sprintf("Kode OTP Anda adalah: %s (berlaku selama %d menit)", otp, otpTime)
 
 	if err := utils.SendEmail(email, subject, body); err != nil {
