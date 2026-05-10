@@ -717,6 +717,58 @@ func (r *adminRepo) GetStudentByUUID(ctx context.Context, uuid string) (*domain.
 	return &student, nil
 }
 
+// CreateStudent inserts a new student
+func (r *adminRepo) CreateStudent(ctx context.Context, user *domain.User) (*domain.User, error) {
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var existing domain.User
+	if err := tx.
+		Where("(email = ? OR phone = ?)", user.Email, user.Phone).
+		First(&existing).Error; err == nil {
+		tx.Rollback()
+		return nil, errors.New("email atau nomor telepon sudah digunakan")
+	}
+
+	user.TeacherProfile = nil
+	defImage := os.Getenv("DEFAULT_PROFILE_IMAGE")
+
+	if user.Image == nil || *user.Image == "" {
+		user.Image = &defImage
+	}
+
+	if err := tx.Create(user).Error; err != nil {
+		tx.Rollback()
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	if user.UUID == "" {
+		if err := tx.
+			Where("email = ?", user.Email).
+			First(user).Error; err != nil {
+			tx.Rollback()
+			return nil, errors.New("gagal mendapatkan UUID user")
+		}
+	}
+    
+    // Create StudentProfile
+    studentProfile := domain.StudentProfile{UserUUID: user.UUID}
+	if err := tx.Create(&studentProfile).Error; err != nil {
+		tx.Rollback()
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	return user, nil
+}
+
 // ✅ Delete Instrument (soft delete aware)
 func (r *adminRepo) DeleteInstrument(ctx context.Context, id int) error {
 	// Cek apakah instrument masih aktif (belum dihapus)

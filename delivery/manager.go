@@ -28,6 +28,7 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 		manager.GET("/teachers/:uuid/schedules", h.GetTeacherSchedules)
 		manager.GET("/teachers", h.GetAllTeachers)
 		manager.GET("/students", h.GetAllStudents)
+		manager.POST("/students", h.CreateStudent)
 		manager.GET("/students/:uuid", h.GetStudentByUUID)
 		manager.PUT("/students/:uuid/packages/:package_id/quota", h.ModifyStudentPackageQuota)
 		manager.PUT("/modify", h.UpdateManager)
@@ -277,6 +278,41 @@ func (h *ManagerHandler) GetAllStudents(c *gin.Context) {
 	}
 	utils.PrintLogInfo(&name, 200, "GetAllStudents", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": students, "message": "Data siswa berhasil diambil"})
+}
+
+func (h *ManagerHandler) CreateStudent(c *gin.Context) {
+	var req dto.CreateStudentRequest // pakai DTO
+	adminName := utils.GetAPIHitter(c)
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&adminName, 400, "CreateStudent - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   utils.TranslateValidationError(err),
+			"massage": "Gagal membuat siswa",
+		})
+		return
+	}
+
+	user := dto.MapCreateStudentRequestToUser(&req)
+
+	created, err := h.uc.CreateStudent(c.Request.Context(), user)
+	if err != nil {
+		utils.PrintLogInfo(&adminName, 500, "CreateStudent - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   utils.TranslateDBError(err),
+			"massage": "Gagal membuat siswa",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&adminName, 201, "CreateStudent", nil)
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"data":    created,
+		"message": "Siswa berhasil dibuat",
+	})
 }
 
 func (h *ManagerHandler) GetStudentByUUID(c *gin.Context) {

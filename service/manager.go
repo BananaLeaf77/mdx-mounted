@@ -137,6 +137,20 @@ func (s *managerService) GetStudentByUUID(ctx context.Context, uuid string) (*do
 	return s.managerRepo.GetStudentByUUID(ctx, uuid)
 }
 
+func (s *managerService) CreateStudent(ctx context.Context, user *domain.User) (*domain.User, error) {
+	if user.Name == "" || user.Email == "" || user.Phone == "" || user.Password == "" {
+		return nil, errors.New("semua field wajib diisi")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, errors.New("gagal mengenkripsi password")
+	}
+	user.Password = string(hashed)
+
+	return s.managerRepo.CreateStudent(ctx, user)
+}
+
 func (s *managerService) ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) error {
 	data, err := s.managerRepo.ModifyStudentPackageQuota(ctx, studentUUID, packageID, incomingQuota)
 	if err != nil {

@@ -203,6 +203,25 @@ func (s *adminService) GetStudentByUUID(ctx context.Context, uuid string) (*doma
 	return s.adminRepo.GetStudentByUUID(ctx, uuid)
 }
 
+func (s *adminService) CreateStudent(ctx context.Context, user *domain.User) (*domain.User, error) {
+	if user.Name == "" || user.Email == "" || user.Phone == "" || user.Password == "" {
+		return nil, errors.New("semua field wajib diisi")
+	}
+	user.Role = domain.RoleStudent
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, errors.New("gagal mengenkripsi password")
+	}
+	user.Password = string(hashed)
+
+	created, err := s.adminRepo.CreateStudent(ctx, user)
+	if err != nil {
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+	return created, nil
+}
+
 func (s *adminService) CreateTeacher(ctx context.Context, user *domain.User, instrumentIDs []int) (*domain.User, error) {
 	if user.Name == "" || user.Email == "" || user.Phone == "" || user.Password == "" {
 		return nil, errors.New("semua field wajib diisi")

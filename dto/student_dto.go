@@ -18,6 +18,26 @@ func MapUpdateStudentRequestByStudent(req *UpdateStudentDataRequest) domain.User
 	}
 }
 
+type CreateStudentRequest struct {
+	Name     string  `json:"name" binding:"required,min=3,max=50"`
+	Gender   string  `json:"gender" binding:"required,oneof=male female"`
+	Email    string  `json:"email" binding:"required,email"`
+	Phone    string  `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Password string  `json:"password" binding:"required,min=6"`
+	Image    *string `json:"image" binding:"omitempty,url"`
+}
+
+func MapCreateStudentRequestToUser(req *CreateStudentRequest) *domain.User {
+	return &domain.User{
+		Name:     req.Name,
+		Gender:   req.Gender,
+		Email:    req.Email,
+		Phone:    req.Phone,
+		Password: req.Password,
+		Image:    req.Image,
+	}
+}
+
 type BookClassRequest struct {
 	ScheduleID   int `json:"schedule_id" binding:"required,min=1"`
 	InstrumentID int `json:"instrument_id" binding:"required,min=1"`

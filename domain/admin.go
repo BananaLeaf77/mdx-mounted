@@ -27,6 +27,7 @@ type AdminUseCase interface {
 	UpdateTeacher(ctx context.Context, user *User, instrumentIDs []int) error
 
 	// Student Management
+	CreateStudent(ctx context.Context, user *User) (*User, error)
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) error
 	GetAllStudents(ctx context.Context) ([]User, error)
@@ -80,6 +81,7 @@ type AdminRepository interface {
 	UpdateTeacher(ctx context.Context, user *User, instrumentIDs []int) error
 
 	// Student Management
+	CreateStudent(ctx context.Context, user *User) (*User, error)
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) (*User, *Package, error)
 	GetAllStudents(ctx context.Context) ([]User, error)

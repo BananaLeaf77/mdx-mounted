@@ -400,6 +400,54 @@ func (r *managerRepo) GetStudentByUUID(ctx context.Context, uuid string) (*domai
 	return &student, nil
 }
 
+// CreateStudent inserts a new student
+func (r *managerRepo) CreateStudent(ctx context.Context, user *domain.User) (*domain.User, error) {
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	var existing domain.User
+	if err := tx.
+		Where("(email = ? OR phone = ?)", user.Email, user.Phone).
+		First(&existing).Error; err == nil {
+		tx.Rollback()
+		return nil, errors.New("email atau nomor telepon sudah digunakan")
+	}
+
+	user.TeacherProfile = nil
+	user.Role = domain.RoleStudent
+
+	if err := tx.Create(user).Error; err != nil {
+		tx.Rollback()
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	if user.UUID == "" {
+		if err := tx.
+			Where("email = ?", user.Email).
+			First(user).Error; err != nil {
+			tx.Rollback()
+			return nil, errors.New("gagal mendapatkan UUID user")
+		}
+	}
+    
+    // Create StudentProfile
+    studentProfile := domain.StudentProfile{UserUUID: user.UUID}
+	if err := tx.Create(&studentProfile).Error; err != nil {
+		tx.Rollback()
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	return user, nil
+}
+
 func (r *managerRepo) ModifyStudentPackageQuota(ctx context.Context, studentUUID string, packageID int, incomingQuota int) (*domain.User, error) {
 	if incomingQuota > 50 {
 		return nil, fmt.Errorf("quota cannot exceed 50")
