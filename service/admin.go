@@ -104,7 +104,13 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 		return err
 	}
 
+	instrumentName := "-"
+	if dataPackage.Instrument != nil {
+		instrumentName = dataPackage.Instrument.Name
+	}
+
 	if s.messenger != nil && s.messenger.IsLoggedIn() {
+
 		phoneNormalized := utils.NormalizePhoneNumber(dataStudent.Phone)
 		if phoneNormalized != "" {
 			msgToStudent := fmt.Sprintf(
@@ -112,7 +118,7 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 				dataStudent.Name,
 				dataPackage.Name,
 				dataPackage.Description,
-				dataPackage.Instrument.Name,
+				instrumentName,
 				dataPackage.Quota,
 				"https://www.mdxmusiccourse.cloud/",
 				os.Getenv("APP_NAME"),
