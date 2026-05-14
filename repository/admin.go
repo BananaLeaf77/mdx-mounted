@@ -411,6 +411,22 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		return nil, nil, errors.New(utils.TranslateDBError(err))
 	}
 
+	// 2.5 Check if trial package limit exceeded
+	if pkg.IsTrial {
+		var trialCount int64
+		if err := tx.Table("student_packages").
+			Joins("JOIN packages ON packages.id = student_packages.package_id").
+			Where("student_packages.student_uuid = ? AND packages.is_trial = ?", studentUUID, true).
+			Count(&trialCount).Error; err != nil {
+			tx.Rollback()
+			return nil, nil, errors.New(utils.TranslateDBError(err))
+		}
+		if trialCount > 0 {
+			tx.Rollback()
+			return nil, nil, errors.New("siswa sudah pernah mendapatkan paket trial")
+		}
+	}
+
 	// 3. Ensure student profile exists
 	var studentProfile domain.StudentProfile
 	if err := tx.Where("user_uuid = ?", studentUUID).First(&studentProfile).Error; err != nil {
