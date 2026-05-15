@@ -31,17 +31,30 @@ func TranslateDayOfWeek(dayOfWeek string) string {
 
 // Helper function to normalize phone numbers for WhatsApp
 func NormalizePhoneNumber(phone string) string {
-	// Remove all non-digit characters
 	phone = strings.TrimSpace(phone)
 	phone = regexp.MustCompile(`[^\d]`).ReplaceAllString(phone, "")
 
-	// Handle Indonesian phone numbers
-	if strings.HasPrefix(phone, "0") {
-		phone = "62" + phone[1:] // Convert 08... to 628...
-	} else if strings.HasPrefix(phone, "62") {
-		// Already correct format
-	} else if strings.HasPrefix(phone, "+62") {
-		phone = phone[1:] // Remove +
+	if phone == "" {
+		return ""
+	}
+
+	switch {
+	case strings.HasPrefix(phone, "0"):
+		phone = "62" + phone[1:]
+	case strings.HasPrefix(phone, "+62"):
+		phone = phone[1:]
+	case strings.HasPrefix(phone, "62"):
+		// already correct
+	default:
+		// bare local number without leading 0
+		phone = "62" + phone
+	}
+
+	// Valid Indonesian WhatsApp numbers: 10–14 digits total.
+	// e.g. 62 + 8 local digits (min) to 62 + 12 local digits (max).
+	// Anything outside this range is a bad/dummy number — skip.
+	if len(phone) < 10 || len(phone) > 14 {
+		return ""
 	}
 
 	return phone
