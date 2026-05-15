@@ -15,7 +15,7 @@ type ManagerUpdateStudentRequest struct {
 	Gender   string  `json:"gender" binding:"omitempty,oneof=male female"`
 	Email    string  `json:"email" binding:"omitempty,email"`
 	Phone    string  `json:"phone" binding:"omitempty,numeric,min=9,max=14"`
-	Password string  `json:"password" binding:"omitempty,min=8,max=16"`
+	Password string  `json:"password" binding:"omitempty,min=8,max=64"`
 	Image    *string `json:"image" binding:"omitempty,url"`
 }
 
@@ -46,7 +46,7 @@ type CreateManagerRequest struct {
 	Name     string  `json:"name" binding:"required,min=3,max=50"`
 	Email    string  `json:"email" binding:"required,email"`
 	Phone    string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Password string  `json:"password" binding:"required,min=8"`
+	Password string  `json:"password" binding:"required,min=8,max=64"`
 	Gender   string  `json:"gender" binding:"required,oneof=male female"`
 	Image    *string `json:"image" binding:"omitempty,url"`
 	Bio      *string `json:"bio" binding:"omitempty,max=500"`
