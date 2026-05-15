@@ -23,7 +23,7 @@ type CreateStudentRequest struct {
 	Gender   string  `json:"gender" binding:"required,oneof=male female"`
 	Email    string  `json:"email" binding:"required,email"`
 	Phone    string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Password string  `json:"password" binding:"required,min=6"`
+	Password string  `json:"password" binding:"required,min=8,max=64"`
 	Image    *string `json:"image" binding:"omitempty,url"`
 }
 
