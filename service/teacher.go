@@ -174,9 +174,9 @@ Halo %s,
 				continue
 			}
 			if err := mgr.SendMessage(normalized, pair[1]); err != nil {
-				log.Printf("🔕 WA send to %s failed: %v", pair[0], err)
+				log.Printf("🔕 WA send to %s failed: %v (Teacher CancelBookedClass)", pair[0], err)
 			} else {
-				log.Printf("🔔 WA notification sent to: %s", pair[0])
+				log.Printf("🔔 WA notification sent to: %s (Teacher CancelBookedClass)", pair[0])
 			}
 		}
 	}()

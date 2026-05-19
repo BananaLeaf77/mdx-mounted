@@ -348,9 +348,9 @@ func sendWA(mgr *config.WAManager, phone, msg string) {
 		return
 	}
 	if err := mgr.SendMessage(normalized, msg); err != nil {
-		log.Printf("🔕 WA send failed to %s: %v", phone, err)
+		log.Printf("🔕 WA send failed to %s: %v, (Student BookClass & BookClassTrial)", phone, err)
 	} else {
-		log.Printf("🔔 WA notification sent to: %s", phone)
+		log.Printf("🔔 WA notification sent to: %s, (Student BookClass & BookClassTrial)", phone)
 	}
 }
 
