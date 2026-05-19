@@ -288,7 +288,7 @@ func (s *manualPaymentSvc) RejectManualPayment(
 
 func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Println("🔕 WhatsApp not connected, skipping admin manual-payment notification")
+		log.Printf("🔕 WhatsApp not connected, skipping admin manual-payment notification (ManualPayment)")
 		return
 	}
 

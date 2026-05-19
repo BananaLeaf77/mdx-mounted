@@ -124,7 +124,7 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 				os.Getenv("APP_NAME"),
 			)
 			if s.messenger == nil || !s.messenger.IsLoggedIn() {
-				log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+				log.Printf("🔕 WhatsApp not connected, skipping cancel notification (AssignPackageToStudent) Student Name: %s", dataStudent.Name)
 				return nil
 			}
 			go func() {

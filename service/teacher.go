@@ -51,8 +51,8 @@ func (s *teacherService) CancelBookedClass(ctx context.Context, bookingID int, t
 	if err != nil {
 		return err
 	}
-	if !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		log.Printf("🔕 WhatsApp not connected, skipping cancel notification (CancelBookedClass) Teacher Name: %s", data.Schedule.Teacher.Name)
 		return nil
 	}
 	s.sendCancelClassByTeacherNotif(data, reason)
