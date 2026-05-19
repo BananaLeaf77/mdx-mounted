@@ -101,7 +101,7 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 		if phone != "" {
 			go func() {
 				if err := s.messenger.SendMessage(phone, msg); err != nil {
-					log.Printf("🔕 WA to sub teacher %s failed: %v", phone, err)
+					log.Printf("🔕 WA to sub teacher %s failed: %v, (RebookWithSubstitute)", phone, err)
 				}
 			}()
 		}
