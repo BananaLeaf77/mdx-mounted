@@ -60,6 +60,19 @@ func (s *managerService) RebookWithSubstitute(ctx context.Context, req domain.Re
 			salutation = "Ibu"
 		}
 
+		// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
+		instrumentName := "-"
+		if booking.PackageUsed.Package != nil {
+			if booking.PackageUsed.Package.TrialInstrument != "" {
+				instrumentName = booking.PackageUsed.Package.TrialInstrument
+			} else if booking.PackageUsed.Package.Instrument != nil {
+				instrumentName = booking.PackageUsed.Package.Instrument.Name
+			}
+		}
+		if instrumentName == "" {
+			instrumentName = "-"
+		}
+
 		msg := fmt.Sprintf(
 			`*PENUGASAN GURU PENGGANTI*
 
@@ -79,7 +92,7 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 			booking.Student.Name,
 			dayName, classDate.Format("02/01/2006"),
 			booking.Schedule.StartTime, booking.Schedule.EndTime,
-			booking.PackageUsed.Package.Instrument.Name,
+			instrumentName,
 			"https://www.mdxmusiccourse.cloud/",
 			os.Getenv("APP_NAME"),
 		)

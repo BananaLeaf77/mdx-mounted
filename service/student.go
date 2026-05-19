@@ -104,7 +104,7 @@ func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, s
 		return err
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping cancel notification (CancelBookedClass) Student Name: %s", data.Student.Name)
+		log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
 		return nil
 	}
 	s.sendCancelClassNotif(data, reason)
@@ -117,7 +117,7 @@ func (s *studentUseCase) BookClass(ctx context.Context, studentUUID string, sche
 		return nil, err
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping book notification (BookClass) Student Name: %s", data.Student.Name)
+		log.Printf("🔕 WhatsApp not connected, skipping book notification")
 	} else {
 		s.sendBookClassNotif(data)
 	}
@@ -166,7 +166,7 @@ func (s *studentUseCase) BookClassTrial(ctx context.Context, studentUUID string,
 		return nil, err
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping book notification (BookClassTrial) Student Name: %s", data.Student.Name)
+		log.Printf("🔕 WhatsApp not connected, skipping book notification")
 	} else {
 		s.sendBookClassNotif(data)
 	}
@@ -215,6 +215,19 @@ func (s *studentUseCase) sendCancelClassNotif(booking *domain.Booking, reason *s
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
 
+	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
+	instrumentName := "-"
+	if booking.PackageUsed.Package != nil {
+		if booking.PackageUsed.Package.TrialInstrument != "" {
+			instrumentName = booking.PackageUsed.Package.TrialInstrument
+		} else if booking.PackageUsed.Package.Instrument != nil {
+			instrumentName = booking.PackageUsed.Package.Instrument.Name
+		}
+	}
+	if instrumentName == "" {
+		instrumentName = "-"
+	}
+
 	teacherMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s %s,
@@ -233,7 +246,7 @@ Halo %s %s,
 		booking.Student.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
-		booking.PackageUsed.Package.Instrument.Name,
+		instrumentName,
 		*reason,
 		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
@@ -259,7 +272,7 @@ Halo %s,
 		booking.Schedule.Teacher.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
-		booking.PackageUsed.Package.Instrument.Name,
+		instrumentName,
 		*reason,
 		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
@@ -281,6 +294,19 @@ func (s *studentUseCase) sendBookClassNotif(booking *domain.Booking) {
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
 
+	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
+	instrumentName := "-"
+	if booking.PackageUsed.Package != nil {
+		if booking.PackageUsed.Package.TrialInstrument != "" {
+			instrumentName = booking.PackageUsed.Package.TrialInstrument
+		} else if booking.PackageUsed.Package.Instrument != nil {
+			instrumentName = booking.PackageUsed.Package.Instrument.Name
+		}
+	}
+	if instrumentName == "" {
+		instrumentName = "-"
+	}
+
 	teacherMsg := fmt.Sprintf(`*PEMBERITAHUAN KELAS BARU*
 
 Halo %s %s,
@@ -299,7 +325,7 @@ _Silakan persiapkan materi. Jangan lupa mencatat hasil kelas setelah selesai._
 		booking.Student.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
-		booking.PackageUsed.Package.Instrument.Name,
+		instrumentName,
 		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
 
@@ -328,7 +354,7 @@ _Selamat belajar! 🎶_
 		booking.Schedule.Teacher.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
-		booking.PackageUsed.Package.Instrument.Name,
+		instrumentName,
 		"https://www.mdxmusiccourse.cloud/", os.Getenv("APP_NAME"),
 	)
 
@@ -348,9 +374,9 @@ func sendWA(mgr *config.WAManager, phone, msg string) {
 		return
 	}
 	if err := mgr.SendMessage(normalized, msg); err != nil {
-		log.Printf("🔕 WA send failed to %s: %v, (Student BookClass & BookClassTrial)", phone, err)
+		log.Printf("🔕 WA send failed to %s: %v", phone, err)
 	} else {
-		log.Printf("🔔 WA notification sent to: %s, (Student BookClass & BookClassTrial)", phone)
+		log.Printf("🔔 WA notification sent to: %s", phone)
 	}
 }
 

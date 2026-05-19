@@ -51,8 +51,8 @@ func (s *teacherService) CancelBookedClass(ctx context.Context, bookingID int, t
 	if err != nil {
 		return err
 	}
-	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping cancel notification (CancelBookedClass) Teacher Name: %s", data.Schedule.Teacher.Name)
+	if !s.messenger.IsLoggedIn() {
+		log.Printf("🔕 WhatsApp not connected, skipping cancel notification")
 		return nil
 	}
 	s.sendCancelClassByTeacherNotif(data, reason)
@@ -114,6 +114,19 @@ func (s *teacherService) sendCancelClassByTeacherNotif(booking *domain.Booking, 
 		salutation = "Ibu"
 	}
 
+	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
+	instrumentName := "-"
+	if booking.PackageUsed.Package != nil {
+		if booking.PackageUsed.Package.TrialInstrument != "" {
+			instrumentName = booking.PackageUsed.Package.TrialInstrument
+		} else if booking.PackageUsed.Package.Instrument != nil {
+			instrumentName = booking.PackageUsed.Package.Instrument.Name
+		}
+	}
+	if instrumentName == "" {
+		instrumentName = "-"
+	}
+
 	teacherMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s %s,
@@ -133,10 +146,11 @@ Pembatalan kelas berhasil:
 		booking.Student.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
-		booking.PackageUsed.Package.Instrument.Name,
+		instrumentName,
 		*reason,
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"))
+
 
 	studentMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
 
@@ -159,10 +173,11 @@ Halo %s,
 		booking.Schedule.Teacher.Name,
 		dayName, dateStr, classTime,
 		booking.Schedule.Duration,
-		booking.PackageUsed.Package.Instrument.Name,
+		instrumentName,
 		*reason,
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"))
+
 
 	mgr := s.messenger
 	tPhone := booking.Schedule.Teacher.Phone
@@ -174,9 +189,9 @@ Halo %s,
 				continue
 			}
 			if err := mgr.SendMessage(normalized, pair[1]); err != nil {
-				log.Printf("🔕 WA send to %s failed: %v (Teacher CancelBookedClass)", pair[0], err)
+				log.Printf("🔕 WA send to %s failed: %v", pair[0], err)
 			} else {
-				log.Printf("🔔 WA notification sent to: %s (Teacher CancelBookedClass)", pair[0])
+				log.Printf("🔔 WA notification sent to: %s", pair[0])
 			}
 		}
 	}()
