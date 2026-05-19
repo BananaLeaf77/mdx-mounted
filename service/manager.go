@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -49,132 +48,66 @@ func (s *managerService) RebookWithSubstitute(ctx context.Context, req domain.Re
 	}
 
 	if s.messenger != nil && s.messenger.IsLoggedIn() {
-		s.sendRebookNotif(booking)
-	}
+		loc, _ := time.LoadLocation("Asia/Makassar")
+		classDate := booking.ClassDate.In(loc)
+		dayName := map[string]string{
+			"Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
+			"Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu",
+		}[classDate.Weekday().String()]
 
-	return booking, nil
-}
-
-func (s *managerService) sendRebookNotif(booking *domain.Booking) {
-	loc, _ := time.LoadLocation("Asia/Makassar")
-	classDate := booking.ClassDate.In(loc)
-	dayName := indonesianDayName(classDate.Weekday())
-	dateStr := classDate.Format("02/01/2006")
-	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
-	salutation := salutationFor(booking.Schedule.Teacher.Gender)
-
-	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
-	instrumentName := "-"
-	if booking.PackageUsed.Package != nil {
-		if booking.PackageUsed.Package.TrialInstrument != "" {
-			instrumentName = booking.PackageUsed.Package.TrialInstrument
-		} else if booking.PackageUsed.Package.Instrument != nil {
-			instrumentName = booking.PackageUsed.Package.Instrument.Name
+		salutation := "Bapak"
+		if booking.Schedule.Teacher.Gender == "female" {
+			salutation = "Ibu"
 		}
-	}
-	if instrumentName == "" {
-		instrumentName = "-"
-	}
 
-	appURL := "https://www.mdxmusiccourse.cloud/"
-	appName := os.Getenv("APP_NAME")
+		// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
+		instrumentName := "-"
+		if booking.PackageUsed.Package != nil {
+			if booking.PackageUsed.Package.TrialInstrument != "" {
+				instrumentName = booking.PackageUsed.Package.TrialInstrument
+			} else if booking.PackageUsed.Package.Instrument != nil {
+				instrumentName = booking.PackageUsed.Package.Instrument.Name
+			}
+		}
+		if instrumentName == "" {
+			instrumentName = "-"
+		}
 
-	// ── 1. Notifikasi ke Guru Pengganti ─────────────────────────────────────
-	teacherMsg := fmt.Sprintf(`*PENUGASAN GURU PENGGANTI*
+		msg := fmt.Sprintf(
+			`*PENUGASAN GURU PENGGANTI*
 
 Halo %s %s,
 
 Anda ditugaskan sebagai guru pengganti untuk kelas berikut:
 👤 *Siswa:* %s
 📅 *Hari/Tanggal:* %s, %s
-⏰ *Waktu:* %s
-⏱️ *Durasi:* %d menit
+⏰ *Waktu:* %s - %s
 🎵 *Instrumen:* %s
 
 Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas dan tambahkan catatan melalui aplikasi.
 
-🌐 Website: %s
+🌐 %s
 🔔 %s Notification System`,
-		salutation, booking.Schedule.Teacher.Name,
-		booking.Student.Name,
-		dayName, dateStr,
-		classTime,
-		booking.Schedule.Duration,
-		instrumentName,
-		appURL, appName,
-	)
+			salutation, booking.Schedule.Teacher.Name,
+			booking.Student.Name,
+			dayName, classDate.Format("02/01/2006"),
+			booking.Schedule.StartTime, booking.Schedule.EndTime,
+			instrumentName,
+			"https://www.mdxmusiccourse.cloud/",
+			os.Getenv("APP_NAME"),
+		)
 
-	// ── 2. Notifikasi ke Siswa ───────────────────────────────────────────────
-	studentMsg := fmt.Sprintf(`*KONFIRMASI KELAS PENGGANTI*
-
-Halo %s,
-
-✅ Kelas pengganti Anda telah berhasil dijadwalkan!
-
-*Detail Kelas:*
-👨‍🏫 *Guru:* %s
-📅 *Hari/Tanggal:* %s, %s
-⏰ *Waktu:* %s
-⏱️ *Durasi:* %d menit
-🎵 *Instrumen:* %s
-
-Kelas ini merupakan pengganti dari kelas yang sebelumnya dibatalkan. Semangat belajar! 🎶
-
-🌐 Website: %s
-🔔 %s Notification System`,
-		booking.Student.Name,
-		booking.Schedule.Teacher.Name,
-		dayName, dateStr,
-		classTime,
-		booking.Schedule.Duration,
-		instrumentName,
-		appURL, appName,
-	)
-
-	// ── 3. Notifikasi ke Manager/Admin (JID yang sedang login) ──────────────
-	managerMsg := fmt.Sprintf(`*RINGKASAN KELAS BAYANGAN*
-
-Manager telah membuat kelas pengganti:
-👤 *Siswa:* %s
-👨‍🏫 *Guru Pengganti:* %s %s
-📅 *Hari/Tanggal:* %s, %s
-⏰ *Waktu:* %s
-⏱️ *Durasi:* %d menit
-🎵 *Instrumen:* %s
-
-Notifikasi telah dikirim ke guru dan siswa.
-
-🌐 Website: %s
-🔔 %s Notification System`,
-		booking.Student.Name,
-		salutation, booking.Schedule.Teacher.Name,
-		dayName, dateStr,
-		classTime,
-		booking.Schedule.Duration,
-		instrumentName,
-		appURL, appName,
-	)
-
-	mgr := s.messenger
-	tPhone := booking.Schedule.Teacher.Phone
-	sPhone := booking.Student.Phone
-
-	// Ambil nomor manager dari JID yang sedang login
-	managerJID := mgr.GetJID()
-	managerPhone := ""
-	if managerJID != "" {
-		if at := strings.Index(managerJID, "@"); at != -1 {
-			managerPhone = managerJID[:at]
+		phone := utils.NormalizePhoneNumber(booking.Schedule.Teacher.Phone)
+		if phone != "" {
+			go func() {
+				if err := s.messenger.SendMessage(phone, msg); err != nil {
+					log.Printf("🔕 WA to sub teacher %s failed: %v, (RebookWithSubstitute)", phone, err)
+				}
+			}()
 		}
 	}
 
-	go func() {
-		sendWA(mgr, tPhone, teacherMsg)
-		sendWA(mgr, sPhone, studentMsg)
-		if managerPhone != "" {
-			sendWA(mgr, managerPhone, managerMsg)
-		}
-	}()
+	return booking, nil
 }
 
 func (s *managerService) GetSetting(ctx context.Context) (*domain.Setting, error) {
