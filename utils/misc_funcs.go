@@ -39,6 +39,8 @@ func NormalizePhoneNumber(phone string) string {
 	}
 
 	switch {
+	case len(phone) == 10:
+		phone = "+62" + phone[1:]
 	case strings.HasPrefix(phone, "0"):
 		phone = "62" + phone[1:]
 	case strings.HasPrefix(phone, "+62"):
