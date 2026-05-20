@@ -281,7 +281,7 @@ func seedInstruments(db *gorm.DB) error {
 
 	commonInstruments := []string{
 		"guitar", "piano", "violin", "drums", "bass",
-		"ukulele", "vocal", "flute", "saxophone",
+		"vocal", "flute",
 	}
 
 	for _, name := range commonInstruments {
