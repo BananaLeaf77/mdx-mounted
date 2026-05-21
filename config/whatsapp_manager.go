@@ -1,6 +1,7 @@
 package config
 
 import (
+	"chronosphere/utils"
 	"context"
 	"errors"
 	"fmt"
@@ -399,17 +400,21 @@ func (m *WAManager) SendMessage(phone, text string) error {
 
 	// Check registration and get canonical JID.
 	res, err := client.IsOnWhatsApp(sendCtx, []string{phone})
+
+	log.Println("IsOnWhatsApp check", res, err)
+	utils.PrintPretty(res)
+
 	if err != nil {
 		log.Printf("⚠️ IsOnWhatsApp check failed for %s: %v — attempting send anyway", phone, err)
 	} else if len(res) > 0 {
-    if !res[0].IsIn {
-        // Warn only — IsOnWhatsApp can return false negatives due to
-        // privacy settings or transient server issues. Still attempt send.
-        log.Printf("⚠️ IsOnWhatsApp: %s may not be registered — attempting send anyway", phone)
-    }
-    if res[0].JID.User != "" {
-        jid = res[0].JID
-    	}
+		if !res[0].IsIn {
+			// Warn only — IsOnWhatsApp can return false negatives due to
+			// privacy settings or transient server issues. Still attempt send.
+			log.Printf("⚠️ IsOnWhatsApp: %s may not be registered — attempting send anyway", phone)
+		}
+		if res[0].JID.User != "" {
+			jid = res[0].JID
+		}
 	}
 
 	msg := &waE2E.Message{
