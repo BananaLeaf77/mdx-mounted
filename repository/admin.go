@@ -505,9 +505,9 @@ func (r *adminRepo) CreatePackage(ctx context.Context, pkg *domain.Package) (*do
 			return nil, errors.New("instrumen tidak ditemukan")
 		}
 	} else {
-		// Trial packages: force nil instrument and zero duration
+		// Trial packages: force nil instrument and 30 duration
 		pkg.InstrumentID = nil
-		pkg.Duration = 0
+		pkg.Duration = 30
 	}
 
 	if err := r.db.WithContext(ctx).Create(pkg).Error; err != nil {
