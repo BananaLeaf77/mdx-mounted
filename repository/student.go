@@ -73,6 +73,7 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		Joins("JOIN users ON users.uuid = teacher_schedules.teacher_uuid").
 		Where("teacher_instruments.instrument_id = ?", instrumentID).
 		Where("teacher_schedules.deleted_at IS NULL").
+		Where("teacher_schedules.duration = ?", 30).
 		Where("users.deleted_at IS NULL").
 		Preload("Teacher").
 		Preload("TeacherProfile.Instruments").
@@ -92,18 +93,8 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		teacherFinishedCounts = make(map[string]int)
 	}
 
-	// ── 4. Used quota check (1×30min + 1×60min trial rule) ─── (2 queries) ───
-	var thirtyMinUsed, sixtyMinUsed int64
-	r.db.WithContext(ctx).Model(&domain.Booking{}).
-		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
-		Where("bookings.student_package_id = ?", packageID).
-		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted, domain.StatusRescheduled}).
-		Where("ts.duration = 30").Count(&thirtyMinUsed)
-	r.db.WithContext(ctx).Model(&domain.Booking{}).
-		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
-		Where("bookings.student_package_id = ?", packageID).
-		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted, domain.StatusRescheduled}).
-		Where("ts.duration = 60").Count(&sixtyMinUsed)
+	// ── 4. Used quota check (1x30min + 1x60min trial rule) REMOVED ───────────
+	// Trial packages now only support 30-minute duration and use the total remaining_quota.
 
 	// ── 5. Fetch instrument for drum check (1 query) ──────────────────────────
 	var instrument domain.Instrument
@@ -177,14 +168,7 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		result.TeacherSchedule.NextClassDate = &m.next
 
 		// IsDurationCompatible
-		switch sch.Duration {
-		case 30:
-			result.IsDurationCompatible = ptrBool(thirtyMinUsed == 0)
-		case 60:
-			result.IsDurationCompatible = ptrBool(sixtyMinUsed == 0)
-		default:
-			result.IsDurationCompatible = ptrBool(false)
-		}
+		result.IsDurationCompatible = ptrBool(sch.Duration == 30)
 
 		// Scan batch results once → derive all 4 per-schedule flags.
 		var roomCount int64
@@ -328,23 +312,10 @@ func (r *studentRepository) BookClassTrial(
 		)
 	}
 
-	// ── 4. Trial duration quota check (1×30min + 1×60min) ────────────────────
-	var durationCount int64
-	if err := tx.Model(&domain.Booking{}).
-		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
-		Where("bookings.student_package_id = ?", packageID).
-		Where("bookings.status IN ?", []string{domain.StatusBooked, domain.StatusCompleted, domain.StatusRescheduled}).
-		Where("ts.duration = ?", schedule.Duration).
-		Count(&durationCount).Error; err != nil {
+	// ── 4. Trial duration check (Only 30 minutes allowed) ─────────────────────
+	if schedule.Duration != 30 {
 		tx.Rollback()
-		return nil, fmt.Errorf("gagal memeriksa kuota trial: %w", err)
-	}
-	if durationCount >= 1 {
-		tx.Rollback()
-		return nil, fmt.Errorf(
-			"kuota trial %d menit sudah digunakan. Setiap durasi hanya boleh 1 kali",
-			schedule.Duration,
-		)
+		return nil, errors.New("paket trial hanya dapat digunakan untuk jadwal berdurasi 30 menit")
 	}
 
 	// ── 5. Compute next class date + H-6 enforcement ──────────────────────────

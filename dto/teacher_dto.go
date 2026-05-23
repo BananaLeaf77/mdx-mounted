@@ -5,6 +5,25 @@ import (
 	"strings"
 )
 
+// BulkAddAvailabilityRequest is the new frontend-friendly payload.
+// Each entry in DaySlots represents one day column in the UI.
+type BulkAddAvailabilityRequest struct {
+	DaySlots []DaySlot `json:"day_slots" binding:"required,min=1,dive"`
+}
+
+// DaySlot represents one day's configuration chosen by the teacher.
+type DaySlot struct {
+	// Day in Indonesian lowercase: senin, selasa, rabu, kamis, jumat, sabtu, minggu
+	Day string `json:"day" binding:"required,oneof=senin selasa rabu kamis jumat sabtu minggu"`
+
+	// StartHours are the fixed hour anchors selected by the teacher.
+	// Format: "HH:MM" e.g. "07:00", "07:30", "08:00" ... "21:00"
+	StartHours []string `json:"start_hours" binding:"required,min=1,dive,timeformat"`
+
+	// Durations is a subset of [30, 60] — which class lengths are enabled.
+	Durations []int `json:"durations" binding:"required,min=1,dive,oneof=30 60"`
+}
+
 type AddMultipleAvailabilityRequest struct {
 	SlotsAvailability []SlotsAvailability `json:"slots_availability" binding:"required,min=1,dive"`
 }

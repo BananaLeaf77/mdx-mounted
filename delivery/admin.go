@@ -221,7 +221,7 @@ func (h *AdminHandler) CreatePackage(c *gin.Context) {
 	}
 
 	if req.IsTrial {
-		req.Duration = 0
+		req.Duration = 30
 		req.InstrumentID = nil
 	}
 

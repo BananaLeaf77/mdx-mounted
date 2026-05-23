@@ -30,6 +30,7 @@ func NewTeacherHandler(app *gin.Engine, tc domain.TeacherUseCase, jwtManager *ut
 		teacher.GET("/schedules", h.GetMySchedules)
 		teacher.PUT("/modify", h.UpdateTeacherData)
 		teacher.POST("/create-available-class", h.AddAvailability)
+		teacher.POST("/bulk-create-available-class", h.BulkAddAvailability)
 		teacher.DELETE("/delete-available-class/:id", h.DeleteAddAvailability)
 		teacher.GET("/booked", h.GetAllBookedClass)
 		teacher.GET("/class-history", h.GetMyClassHistory)
@@ -38,6 +39,133 @@ func NewTeacherHandler(app *gin.Engine, tc domain.TeacherUseCase, jwtManager *ut
 		teacher.DELETE("/delete-availability-by-day/:day", h.DeleteAvailabilityBasedOnDay)
 
 	}
+}
+
+func (h *TeacherHandler) BulkAddAvailability(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	teacherUUID, exists := c.Get("userUUID")
+	if !exists {
+		utils.PrintLogInfo(&name, 401, "BulkAddAvailability - MissingUserUUID", nil)
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"message": "Gagal menambahkan ketersediaan",
+			"error":   "Tidak terotorisasi: konteks pengguna tidak ditemukan",
+		})
+		return
+	}
+
+	var req dto.BulkAddAvailabilityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkAddAvailability - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Gagal menambahkan ketersediaan",
+			"error":   utils.TranslateValidationError(err),
+		})
+		return
+	}
+
+	// ── Expand DaySlots → []SlotsAvailability ────────────────────────────────
+	//
+	// For every (day, startHour, duration) triple we produce one
+	// SlotsAvailability entry. The existing convertToTeacherSchedules
+	// validates each entry independently, so all business rules still apply.
+	expanded, err := h.expandBulkSlots(req.DaySlots)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkAddAvailability - Expand", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Gagal menambahkan ketersediaan",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	if len(expanded) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Gagal menambahkan ketersediaan",
+			"error":   "Tidak ada slot yang dihasilkan dari input yang diberikan",
+		})
+		return
+	}
+
+	// ── Reuse existing conversion + validation ────────────────────────────────
+	teacherID := teacherUUID.(string)
+	schedules, err := h.convertToTeacherSchedules(teacherID, expanded)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "BulkAddAvailability - ConvertDTO", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Gagal menambahkan ketersediaan",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// ── Persist via existing use case ─────────────────────────────────────────
+	if err := h.tc.AddAvailability(c.Request.Context(), &schedules); err != nil {
+		statusCode := http.StatusInternalServerError
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "invalid") ||
+			strings.Contains(errMsg, "duplicate") ||
+			strings.Contains(errMsg, "overlapping") ||
+			strings.Contains(errMsg, "sudah ada") ||
+			strings.Contains(errMsg, "must be exactly 1 hour") ||
+			strings.Contains(errMsg, "between 07:00 and 22:00") {
+			statusCode = http.StatusBadRequest
+		}
+
+		utils.PrintLogInfo(&name, statusCode, "BulkAddAvailability - UseCase", &err)
+		c.JSON(statusCode, gin.H{
+			"success": false,
+			"message": "Gagal menambahkan ketersediaan",
+			"error":   errMsg,
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 201, "BulkAddAvailability - Success", nil)
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Berhasil menambahkan %d slot jadwal tersedia.", len(schedules)),
+		"data": gin.H{
+			"total_slots_added": len(schedules),
+			"teacher_uuid":      teacherID,
+		},
+	})
+}
+
+func (h *TeacherHandler) expandBulkSlots(slots []dto.DaySlot) ([]dto.SlotsAvailability, error) {
+	var result []dto.SlotsAvailability
+
+	for _, slot := range slots {
+		for _, startStr := range slot.StartHours {
+			startTime, err := time.Parse("15:04", startStr)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"format waktu mulai tidak valid '%s': gunakan format HH:MM", startStr,
+				)
+			}
+
+			for _, dur := range slot.Durations {
+				// dur is guaranteed to be 30 or 60 by binding validation.
+				endTime := startTime.Add(time.Duration(dur) * time.Minute)
+				endStr := endTime.Format("15:04")
+
+				result = append(result, dto.SlotsAvailability{
+					// Single day per entry — convertToTeacherSchedules iterates
+					// DayOfTheWeek, so this produces exactly one schedule row.
+					DayOfTheWeek: []string{slot.Day},
+					StartTime:    startStr,
+					EndTime:      endStr,
+				})
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (h *TeacherHandler) DeleteAvailabilityBasedOnDay(c *gin.Context) {
@@ -99,11 +227,11 @@ func (h *TeacherHandler) GetMyClassHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":    true,
-		"data":       data,
-		"page":       f.Page,
-		"limit":      f.Limit,
-		"total":      len(*data),
+		"success": true,
+		"data":    data,
+		"page":    f.Page,
+		"limit":   f.Limit,
+		"total":   len(*data),
 	})
 }
 
