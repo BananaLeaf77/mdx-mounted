@@ -865,7 +865,7 @@ func (h *AdminHandler) PingWhatsApp(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
 
 	var req struct {
-		Phone string `json:"phone" binding:"required,max=14"`
+		Phone string `json:"phone" binding:"required,max=16"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
