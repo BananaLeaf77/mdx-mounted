@@ -408,15 +408,8 @@ func (m *WAManager) SendMessage(phone, text string) error {
 	res, err := client.IsOnWhatsApp(sendCtx, []string{phone})
 	if err != nil {
 		log.Printf("⚠️ IsOnWhatsApp check failed for %s: %v — attempting send anyway", phone, err)
-	} else if len(res) > 0 {
-		if !res[0].IsIn {
-			// Warn only — IsOnWhatsApp can return false negatives due to
-			// privacy settings or transient server issues. Still attempt send.
-			log.Printf("⚠️ IsOnWhatsApp: %s may not be registered — attempting send anyway", phone)
-		}
-		if res[0].JID.User != "" {
-			jid = res[0].JID
-		}
+	} else if len(res) > 0 && !res[0].IsIn {
+		log.Printf("⚠️ IsOnWhatsApp: %s may not be registered — attempting send anyway", phone)
 	}
 
 	msg := &waE2E.Message{
