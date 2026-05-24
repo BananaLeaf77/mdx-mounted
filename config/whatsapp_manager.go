@@ -353,6 +353,10 @@ func (m *WAManager) SendMessage(phone, text string) error {
 	status := m.status
 	m.mu.RUnlock()
 
+	fmt.Println("=======================================")
+	fmt.Println(phone)
+	fmt.Println("=======================================")
+
 	if client == nil {
 		return errors.New("whatsapp client not initialised")
 	}

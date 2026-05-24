@@ -38,13 +38,16 @@ func NormalizePhoneNumber(phone string) string {
 		return ""
 	}
 
+	// Fix duplicate country code (e.g. "6262..." → "62...")
+	for strings.HasPrefix(phone, "6262") {
+		phone = phone[2:]
+	}
+
 	switch {
 	case len(phone) == 10:
-		phone = "+62" + phone[1:]
+		phone = "62" + phone[1:]
 	case strings.HasPrefix(phone, "0"):
 		phone = "62" + phone[1:]
-	case strings.HasPrefix(phone, "+62"):
-		phone = phone[1:]
 	case strings.HasPrefix(phone, "62"):
 		// already correct
 	default:
@@ -52,9 +55,6 @@ func NormalizePhoneNumber(phone string) string {
 		phone = "62" + phone
 	}
 
-	// Valid Indonesian WhatsApp numbers: 10–14 digits total.
-	// e.g. 62 + 8 local digits (min) to 62 + 12 local digits (max).
-	// Anything outside this range is a bad/dummy number — skip.
 	if len(phone) < 10 || len(phone) > 14 {
 		return ""
 	}
