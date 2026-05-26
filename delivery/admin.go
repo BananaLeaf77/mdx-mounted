@@ -72,6 +72,7 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/assign-package", h.AssignPackageToStudent)
 
 		// Class Histories
+		admin.GET("/booked-classes", h.GetBookedClasses)
 		admin.GET("/class-histories", h.GetAllClassHistories)
 
 		// WhatsApp
@@ -80,6 +81,18 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
 	}
+}
+
+func (h *AdminHandler) GetBookedClasses(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	classes, err := h.uc.GetBookedClasses(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetBookedClasses - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	utils.PrintLogInfo(&name, 200, "GetBookedClasses", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": classes})
 }
 
 /* ---------- Request DTOs ---------- */

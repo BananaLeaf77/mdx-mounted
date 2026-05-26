@@ -25,6 +25,10 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) do
 	}
 }
 
+func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.ClassHistory, error) {
+	return s.adminRepo.GetBookedClasses(ctx)
+}
+
 func (s *adminService) UpdateAdmin(ctx context.Context, payload domain.User) error {
 	if err := s.adminRepo.UpdateAdmin(ctx, payload); err != nil {
 		return errors.New(utils.TranslateDBError(err))

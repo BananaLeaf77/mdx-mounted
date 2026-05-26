@@ -22,6 +22,25 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.ClassHistory, error) {
+	var classes []domain.ClassHistory
+	err := r.db.WithContext(ctx).
+		Preload("Booking").
+		Preload("Booking.Schedule").
+		Preload("Booking.Schedule.Teacher").
+		Preload("Booking.Schedule.TeacherProfile").
+		Preload("Booking.Schedule.TeacherProfile.Instruments").
+		Preload("Booking.Student").
+		Preload("Booking.PackageUsed").
+		Preload("Booking.PackageUsed.Package").
+		Preload("Booking.PackageUsed.Package.Instrument").
+		Find(&classes).Error
+	if err != nil {
+		return nil, err
+	}
+	return classes, nil
+}
+
 func (r *adminRepo) UpdateAdmin(ctx context.Context, payload domain.User) error {
 	// Mulai transaction
 	tx := r.db.WithContext(ctx).Begin()
