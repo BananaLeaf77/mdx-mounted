@@ -25,6 +25,10 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) do
 	}
 }
 
+func (s *adminService) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool) (*domain.User, *domain.Package, error) {
+	return s.adminRepo.AssignPackageToStudentManual(ctx, studentUUID, packageID, recordData)
+}
+
 func (s *adminService) UpdateAdmin(ctx context.Context, payload domain.User) error {
 	if err := s.adminRepo.UpdateAdmin(ctx, payload); err != nil {
 		return errors.New(utils.TranslateDBError(err))

@@ -30,6 +30,8 @@ const (
 	DrumRoomLimit    int64 = 3
 
 	DefaultPackageExpiredDuration int = 30
+	PaymentMethodManual           = "Manual Assign"
+	PaymentMethodManualStatus     = "success"
 )
 
 type User struct {
