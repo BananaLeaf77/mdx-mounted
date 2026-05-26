@@ -29,7 +29,7 @@ WORKDIR /root/
 
 # Copy binary dari stage builder
 COPY --from=builder /app/main .
-COPY --from=builder /app/.env . 
+
 
 # Expose port aplikasi Go Anda (misal: 8080)
 EXPOSE 8080
