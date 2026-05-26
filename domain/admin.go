@@ -31,6 +31,7 @@ type AdminUseCase interface {
 	CreateStudent(ctx context.Context, user *User) (*User, error)
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) error
+	AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*User, *Package, error)
 	GetAllStudents(ctx context.Context) ([]User, error)
 	GetFilteredStudents(ctx context.Context, filter StudentActivityFilter) ([]User, error)
 
@@ -46,6 +47,7 @@ type AdminUseCase interface {
 	CreatePackage(ctx context.Context, pkg *Package) (*Package, error)
 	UpdatePackage(ctx context.Context, pkg *Package) error
 	DeletePackage(ctx context.Context, id int) error
+
 	// Instrument Management
 	GetAllInstruments(ctx context.Context) ([]Instrument, error)
 	CreateInstrument(ctx context.Context, instrument *Instrument) (*Instrument, error)
@@ -86,6 +88,7 @@ type AdminRepository interface {
 	CreateStudent(ctx context.Context, user *User) (*User, error)
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) (*User, *Package, error)
+	AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*User, *Package, error)
 	GetAllStudents(ctx context.Context) ([]User, error)
 	GetFilteredStudents(ctx context.Context, filter StudentActivityFilter) ([]User, error)
 

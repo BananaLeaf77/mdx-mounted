@@ -178,8 +178,11 @@ type UpdateInstrumentRequest struct {
 }
 
 type AssignPackageRequest struct {
-	StudentUUID string `json:"student_uuid" binding:"required,uuid"`
-	PackageID   int    `json:"package_id" binding:"required"`
+	StudentUUID   string  `json:"student_uuid" binding:"required,uuid"`
+	PackageID     int     `json:"package_id" binding:"required"`
+	RecordData    *bool   `json:"record_data" binding:"omitempty"`
+	ProofImageURL *string `json:"proof_image_url" binding:"omitempty"`
+	Notes         *string `json:"notes" binding:"omitempty"`
 }
 
 /* ---------- Handlers ---------- */
@@ -345,18 +348,18 @@ func (h *AdminHandler) AssignPackageToStudent(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.PrintLogInfo(&name, 400, "AssignPackageToStudent - BindJSON", &err)
+		utils.PrintLogInfo(&name, 400, "AssignPackageToStudentManual - BindJSON", &err)
 		c.JSON(http.StatusBadRequest, gin.H{"message": "Gagal menetapkan paket", "success": false, "error": utils.TranslateValidationError(err)})
 		return
 	}
 
-	if err := h.uc.AssignPackageToStudent(c.Request.Context(), req.StudentUUID, req.PackageID); err != nil {
-		utils.PrintLogInfo(&name, 500, "AssignPackageToStudent - UseCase", &err)
+	if _, _, err := h.uc.AssignPackageToStudentManual(c.Request.Context(), req.StudentUUID, req.PackageID, req.RecordData, req.ProofImageURL, req.Notes); err != nil {
+		utils.PrintLogInfo(&name, 500, "AssignPackageToStudentManual - UseCase", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal menetapkan paket", "success": false, "error": utils.TranslateDBError(err)})
 		return
 	}
 
-	utils.PrintLogInfo(&name, 200, "AssignPackageToStudent", nil)
+	utils.PrintLogInfo(&name, 200, "AssignPackageToStudentManual", nil)
 	c.JSON(http.StatusOK, gin.H{"message": "Paket berhasil ditetapkan ke siswa", "success": true})
 }
 

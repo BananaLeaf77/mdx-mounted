@@ -25,8 +25,8 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) do
 	}
 }
 
-func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
-	return s.adminRepo.GetBookedClasses(ctx)
+func (s *adminService) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*domain.User, *domain.Package, error) {
+	return s.adminRepo.AssignPackageToStudentManual(ctx, studentUUID, packageID, recordData, proofImageURL, notes)
 }
 
 func (s *adminService) UpdateAdmin(ctx context.Context, payload domain.User) error {

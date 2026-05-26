@@ -401,6 +401,127 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 	return nil
 }
 
+func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*domain.User, *domain.Package, error) {
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 1. Check student existence
+	var student domain.User
+	if err := tx.Where("uuid = ? AND role = ? AND deleted_at IS NULL", studentUUID, domain.RoleStudent).
+		First(&student).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, errors.New("siswa tidak ditemukan")
+		}
+		return nil, nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	// 2. Check package existence
+	var pkg domain.Package
+	if err := tx.Preload("Instrument").
+		Where("id = ? AND deleted_at IS NULL", packageID).
+		First(&pkg).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil, errors.New("paket tidak ditemukan")
+		}
+		return nil, nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	// 2.5 Check if trial package limit exceeded
+	if pkg.IsTrial {
+		var trialCount int64
+		if err := tx.Table("student_packages").
+			Joins("JOIN packages ON packages.id = student_packages.package_id").
+			Where("student_packages.student_uuid = ? AND packages.is_trial = ?", studentUUID, true).
+			Count(&trialCount).Error; err != nil {
+			tx.Rollback()
+			return nil, nil, errors.New(utils.TranslateDBError(err))
+		}
+		if trialCount > 0 {
+			tx.Rollback()
+			return nil, nil, errors.New("siswa sudah pernah mendapatkan paket trial")
+		}
+	}
+
+	// 3. Ensure student profile exists
+	var studentProfile domain.StudentProfile
+	if err := tx.Where("user_uuid = ?", studentUUID).First(&studentProfile).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			studentProfile = domain.StudentProfile{UserUUID: studentUUID}
+			if err := tx.Create(&studentProfile).Error; err != nil {
+				tx.Rollback()
+				return nil, nil, errors.New(utils.TranslateDBError(err))
+			}
+		} else {
+			tx.Rollback()
+			return nil, nil, errors.New(utils.TranslateDBError(err))
+		}
+	}
+
+	// 4. Snapshot the effective price at purchase time.
+	//    Use promo price when promo is active and promo price is set,
+	//    otherwise fall back to the base price.
+	//    This value is stored permanently on the StudentPackage row so that
+	//    teacher commission calculations remain accurate even if the package
+	//    price or promo status changes later.
+	pricePaid := pkg.Price
+	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
+		pricePaid = pkg.PromoPrice
+	}
+
+	// 5. Assign new package with snapshotted price
+	expiredDuration := pkg.ExpiredDuration
+	if expiredDuration <= 0 {
+		expiredDuration = domain.DefaultPackageExpiredDuration
+	}
+
+	newSub := domain.StudentPackage{
+		StudentUUID:    studentUUID,
+		PackageID:      packageID,
+		RemainingQuota: pkg.Quota,
+		PricePaid:      pricePaid,
+		StartDate:      time.Now(),
+		EndDate:        time.Now().AddDate(0, 0, expiredDuration),
+	}
+	
+	// if its true then record data to payment table
+	if recordData != nil && *recordData {
+		now := time.Now()
+
+		//record the payment data to table manual_payments
+		payment := domain.ManualPayment{
+			StudentUUID:   studentUUID,
+			PackageID:     packageID,
+			Status:        domain.ManualPaymentStatusConfirmed,
+			TotalAmount:   pricePaid,
+			ConfirmedAt:   &now,
+			ProofImageURL: proofImageURL,
+			Notes:         notes,
+		}
+
+		if err := tx.Create(&payment).Error; err != nil {
+			tx.Rollback()
+			return nil, nil, errors.New(utils.TranslateDBError(err))
+		}
+	}
+
+	if err := tx.Create(&newSub).Error; err != nil {
+		tx.Rollback()
+		return nil, nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return nil, nil, errors.New(utils.TranslateDBError(err))
+	}
+
+	return &student, &pkg, nil
+}
+
 // AssignPackageToStudent assigns a package to a student
 func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID string, packageID int) (*domain.User, *domain.Package, error) {
 	tx := r.db.WithContext(ctx).Begin()

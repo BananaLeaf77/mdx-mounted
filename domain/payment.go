@@ -11,6 +11,8 @@ const (
 	PaymentStatusPaid    = "PAID"
 	PaymentStatusExpired = "EXPIRED"
 	PaymentStatusFailed  = "FAILED"
+
+	PaymentMethodManualConfirm = "Manual Confirmation"
 )
 
 type Payment struct {
