@@ -22,19 +22,10 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
-func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.ClassHistory, error) {
-	var classes []domain.ClassHistory
-	err := r.db.WithContext(ctx).
-		Preload("Booking").
-		Preload("Booking.Schedule").
-		Preload("Booking.Schedule.Teacher").
-		Preload("Booking.Schedule.TeacherProfile").
-		Preload("Booking.Schedule.TeacherProfile.Instruments").
-		Preload("Booking.Student").
-		Preload("Booking.PackageUsed").
-		Preload("Booking.PackageUsed.Package").
-		Preload("Booking.PackageUsed.Package.Instrument").
-		Find(&classes).Error
+func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
+	// get all of Booking table data where status is "booked" or "ongoing"
+	var classes []domain.Booking
+	err := r.db.WithContext(ctx).Where("status = ? OR status = ?", domain.StatusBooked, domain.StatusOngoing).Find(&classes).Error
 	if err != nil {
 		return nil, err
 	}
@@ -789,9 +780,9 @@ func (r *adminRepo) CreateStudent(ctx context.Context, user *domain.User) (*doma
 			return nil, errors.New("gagal mendapatkan UUID user")
 		}
 	}
-    
-    // Create StudentProfile
-    studentProfile := domain.StudentProfile{UserUUID: user.UUID}
+
+	// Create StudentProfile
+	studentProfile := domain.StudentProfile{UserUUID: user.UUID}
 	if err := tx.Create(&studentProfile).Error; err != nil {
 		tx.Rollback()
 		return nil, errors.New(utils.TranslateDBError(err))

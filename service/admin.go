@@ -25,7 +25,7 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) do
 	}
 }
 
-func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.ClassHistory, error) {
+func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
 	return s.adminRepo.GetBookedClasses(ctx)
 }
 
