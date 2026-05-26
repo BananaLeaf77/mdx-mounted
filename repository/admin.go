@@ -23,9 +23,21 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 }
 
 func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
-	// get all of Booking table data where status is "booked" or "ongoing"
 	var classes []domain.Booking
-	err := r.db.WithContext(ctx).Where("status = ? OR status = ?", domain.StatusBooked, domain.StatusOngoing).Find(&classes).Error
+	err := r.db.WithContext(ctx).
+		Preload("Schedule.Teacher").
+		Preload("Schedule.TeacherProfile").
+		Preload("Schedule.TeacherProfile.Instruments").
+		Preload("Student").
+		Preload("Student.StudentProfile").
+		Preload("PackageUsed").
+		Preload("PackageUsed.Package").
+		Preload("PackageUsed.Package.Instrument").
+		Preload("ClassHistory").
+		Preload("ClassHistory.Documentations").
+		Preload("CancelUser").
+		Where("status = ? OR status = ?", domain.StatusBooked, domain.StatusOngoing).
+		Find(&classes).Error
 	if err != nil {
 		return nil, err
 	}
