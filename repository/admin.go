@@ -379,7 +379,7 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 	return nil
 }
 
-func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool) (*domain.User, *domain.Package, error) {
+func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*domain.User, *domain.Package, error) {
 	tx := r.db.WithContext(ctx).Begin()
 	defer func() {
 		if r := recover(); r != nil {
@@ -469,27 +469,17 @@ func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUI
 	
 	// if its true then record data to payment table
 	if recordData != nil && *recordData {
-		shortUUID := studentUUID
-		if len(shortUUID) > 8 {
-			shortUUID = shortUUID[:8]
-		}
-		milli := time.Now().UnixMilli()
-		invoiceID := fmt.Sprintf("MANUAL-INV-%s-%d", shortUUID, milli)
-		externalID := fmt.Sprintf("MANUAL-EXT-%s-%d", shortUUID, milli)
-
 		now := time.Now()
-		paymentMethod := domain.PaymentMethodManualConfirm
 
-		//record the payment data to table payment
-		payment := domain.Payment{
-			StudentUUID:     studentUUID,
-			PackageID:       packageID,
-			XenditInvoiceID: invoiceID,
-			ExternalID:      externalID,
-			Amount:          pricePaid,
-			Status:          domain.PaymentStatusPaid,
-			PaymentMethod:   &paymentMethod,
-			PaidAt:          &now,
+		//record the payment data to table manual_payments
+		payment := domain.ManualPayment{
+			StudentUUID:   studentUUID,
+			PackageID:     packageID,
+			Status:        domain.ManualPaymentStatusConfirmed,
+			TotalAmount:   pricePaid,
+			ConfirmedAt:   &now,
+			ProofImageURL: proofImageURL,
+			Notes:         notes,
 		}
 
 		if err := tx.Create(&payment).Error; err != nil {
