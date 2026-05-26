@@ -22,6 +22,28 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
+	var classes []domain.Booking
+	err := r.db.WithContext(ctx).
+		Preload("Schedule.Teacher").
+		Preload("Schedule.TeacherProfile").
+		Preload("Schedule.TeacherProfile.Instruments").
+		Preload("Student").
+		Preload("Student.StudentProfile").
+		Preload("PackageUsed").
+		Preload("PackageUsed.Package").
+		Preload("PackageUsed.Package.Instrument").
+		Preload("ClassHistory").
+		Preload("ClassHistory.Documentations").
+		Preload("CancelUser").
+		Where("status = ? OR status = ?", domain.StatusBooked, domain.StatusOngoing).
+		Find(&classes).Error
+	if err != nil {
+		return nil, err
+	}
+	return classes, nil
+}
+
 func (r *adminRepo) UpdateAdmin(ctx context.Context, payload domain.User) error {
 	// Mulai transaction
 	tx := r.db.WithContext(ctx).Begin()
@@ -770,9 +792,9 @@ func (r *adminRepo) CreateStudent(ctx context.Context, user *domain.User) (*doma
 			return nil, errors.New("gagal mendapatkan UUID user")
 		}
 	}
-    
-    // Create StudentProfile
-    studentProfile := domain.StudentProfile{UserUUID: user.UUID}
+
+	// Create StudentProfile
+	studentProfile := domain.StudentProfile{UserUUID: user.UUID}
 	if err := tx.Create(&studentProfile).Error; err != nil {
 		tx.Rollback()
 		return nil, errors.New(utils.TranslateDBError(err))

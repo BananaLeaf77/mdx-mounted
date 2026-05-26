@@ -84,8 +84,8 @@ func (h *StudentHandler) BookClassTrial(c *gin.Context) {
 		payload.PackageID,
 		payload.InstrumentID,
 	); err != nil {
-		utils.PrintLogInfo(&name, 400, "BookClassTrial", &err)
-		c.JSON(http.StatusBadRequest, gin.H{
+		utils.PrintLogInfo(&name, 500, "BookClassTrial", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   err.Error(),
 			"message": "Gagal memesan kelas trial",

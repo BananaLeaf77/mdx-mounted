@@ -354,6 +354,10 @@ func (m *WAManager) SendMessage(phone, text string) error {
 	status := m.status
 	m.mu.RUnlock()
 
+	fmt.Println("=======================================")
+	fmt.Println(phone)
+	fmt.Println("=======================================")
+
 	if client == nil {
 		return errors.New("whatsapp client not initialised")
 	}
@@ -393,7 +397,10 @@ func (m *WAManager) SendMessage(phone, text string) error {
 		return errors.New("whatsapp client disconnected")
 	}
 
-	jid := types.NewJID(phone, types.DefaultUserServer)
+	jid, err := types.ParseJID(phone + "@s.whatsapp.net")
+	if err != nil {
+		return fmt.Errorf("invalid phone %s: %w", phone, err)
+	}
 
 	sendCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -406,15 +413,8 @@ func (m *WAManager) SendMessage(phone, text string) error {
 
 	if err != nil {
 		log.Printf("⚠️ IsOnWhatsApp check failed for %s: %v — attempting send anyway", phone, err)
-	} else if len(res) > 0 {
-		if !res[0].IsIn {
-			// Warn only — IsOnWhatsApp can return false negatives due to
-			// privacy settings or transient server issues. Still attempt send.
-			log.Printf("⚠️ IsOnWhatsApp: %s may not be registered — attempting send anyway", phone)
-		}
-		if res[0].JID.User != "" {
-			jid = res[0].JID
-		}
+	} else if len(res) > 0 && !res[0].IsIn {
+		log.Printf("⚠️ IsOnWhatsApp: %s may not be registered — attempting send anyway", phone)
 	}
 
 	msg := &waE2E.Message{

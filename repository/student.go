@@ -219,6 +219,13 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 				!thisScheduleBooked,
 		)
 
+		// Align inner TeacherSchedule availability flags and booking status
+		result.TeacherSchedule.IsRoomAvailable = result.IsRoomAvailable
+		result.TeacherSchedule.IsBookedSameDayAndTime = result.IsBookedSameDayAndTime
+		result.TeacherSchedule.IsDurationCompatible = result.IsDurationCompatible
+		result.TeacherSchedule.IsFullyAvailable = result.IsFullyAvailable
+		result.TeacherSchedule.IsBooked = sch.IsBooked || thisScheduleBooked
+
 		results = append(results, result)
 	}
 
@@ -267,6 +274,9 @@ func (r *studentRepository) BookClassTrial(
 		Where("id = ? AND deleted_at IS NULL", scheduleID).
 		First(&schedule).Error; err != nil {
 		tx.Rollback()
+
+		utils.PrintPretty(schedule)
+
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("jadwal tidak ditemukan")
 		}
@@ -1169,6 +1179,13 @@ func (r *studentRepository) GetAvailableSchedules(
 				!*result.IsTeacherBusy &&
 				!thisScheduleBooked,
 		)
+
+		// Align inner TeacherSchedule availability flags and booking status
+		result.TeacherSchedule.IsRoomAvailable = result.IsRoomAvailable
+		result.TeacherSchedule.IsBookedSameDayAndTime = result.IsBookedSameDayAndTime
+		result.TeacherSchedule.IsDurationCompatible = result.IsDurationCompatible
+		result.TeacherSchedule.IsFullyAvailable = result.IsFullyAvailable
+		result.TeacherSchedule.IsBooked = sch.IsBooked || thisScheduleBooked
 
 		results = append(results, result)
 	}
