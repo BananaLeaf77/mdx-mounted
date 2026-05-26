@@ -235,6 +235,13 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 				!thisScheduleBooked,
 		)
 
+		// Align inner TeacherSchedule availability flags and booking status
+		result.TeacherSchedule.IsRoomAvailable = result.IsRoomAvailable
+		result.TeacherSchedule.IsBookedSameDayAndTime = result.IsBookedSameDayAndTime
+		result.TeacherSchedule.IsDurationCompatible = result.IsDurationCompatible
+		result.TeacherSchedule.IsFullyAvailable = result.IsFullyAvailable
+		result.TeacherSchedule.IsBooked = sch.IsBooked || thisScheduleBooked
+
 		results = append(results, result)
 	}
 
@@ -1198,6 +1205,13 @@ func (r *studentRepository) GetAvailableSchedules(
 				!*result.IsTeacherBusy &&
 				!thisScheduleBooked,
 		)
+
+		// Align inner TeacherSchedule availability flags and booking status
+		result.TeacherSchedule.IsRoomAvailable = result.IsRoomAvailable
+		result.TeacherSchedule.IsBookedSameDayAndTime = result.IsBookedSameDayAndTime
+		result.TeacherSchedule.IsDurationCompatible = result.IsDurationCompatible
+		result.TeacherSchedule.IsFullyAvailable = result.IsFullyAvailable
+		result.TeacherSchedule.IsBooked = sch.IsBooked || thisScheduleBooked
 
 		results = append(results, result)
 	}
