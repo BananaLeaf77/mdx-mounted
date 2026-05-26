@@ -29,6 +29,10 @@ func (s *adminService) AssignPackageToStudentManual(ctx context.Context, student
 	return s.adminRepo.AssignPackageToStudentManual(ctx, studentUUID, packageID, recordData, proofImageURL, notes)
 }
 
+func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
+	return s.adminRepo.GetBookedClasses(ctx)
+}
+
 func (s *adminService) UpdateAdmin(ctx context.Context, payload domain.User) error {
 	if err := s.adminRepo.UpdateAdmin(ctx, payload); err != nil {
 		return errors.New(utils.TranslateDBError(err))
