@@ -290,6 +290,9 @@ func (r *studentRepository) BookClassTrial(
 		Where("id = ? AND deleted_at IS NULL", scheduleID).
 		First(&schedule).Error; err != nil {
 		tx.Rollback()
+
+		utils.PrintPretty(schedule)
+
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("jadwal tidak ditemukan")
 		}
