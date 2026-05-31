@@ -35,7 +35,6 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 	month int,
 	commissionRate float64,
 ) ([]domain.TeacherPaymentDetail, error) {
-	fmt.Println("im running cuh===============================")
 
 	// Period boundaries (full calendar month, UTC)
 	periodStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
@@ -62,7 +61,6 @@ SELECT
     COUNT(*)               AS class_count,
     SUM(per_class_revenue) AS total_price_paid
 FROM (
-    -- a) Formally completed via FinishClass
     SELECT DISTINCT
         b.id AS booking_id,
         ts.teacher_uuid,
@@ -72,34 +70,15 @@ FROM (
     JOIN teacher_schedules ts ON ts.id = b.schedule_id
     JOIN student_packages  sp ON sp.id = b.student_package_id
     JOIN packages          p  ON p.id  = sp.package_id
-    WHERE ch.status   = ?
+    WHERE ch.status = ?
       AND b.class_date >= ? AND b.class_date <= ?
-
-    UNION
-
-    -- b) Stale: still "booked", class already fully passed (end time), no history yet
-    SELECT DISTINCT
-        b.id AS booking_id,
-        ts.teacher_uuid,
-        COALESCE(NULLIF(sp.price_paid, 0), p.price) / NULLIF(p.quota, 0) AS per_class_revenue
-    FROM bookings          b
-    JOIN teacher_schedules ts ON ts.id = b.schedule_id
-    JOIN student_packages  sp ON sp.id = b.student_package_id
-    JOIN packages          p  ON p.id  = sp.package_id
-    WHERE b.status     = ?
-      AND b.class_date >= ? AND b.class_date <= ?
-      AND (b.class_date + (ts.end_time::time - '00:00'::time)) AT TIME ZONE 'Asia/Makassar' < NOW() AT TIME ZONE 'Asia/Makassar'
-      AND NOT EXISTS (
-          SELECT 1 FROM class_histories ch2 WHERE ch2.booking_id = b.id
-      )
 ) AS combined
 GROUP BY teacher_uuid`
 
 	var rows []aggRow
 	err := r.db.WithContext(ctx).
 		Raw(rawSQL,
-			domain.StatusCompleted, periodStart, periodEnd, // for part (a)
-			domain.StatusBooked, periodStart, periodEnd, // for part (b)
+			domain.StatusCompleted, periodStart, periodEnd,
 		).
 		Scan(&rows).Error
 

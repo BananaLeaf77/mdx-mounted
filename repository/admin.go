@@ -36,7 +36,13 @@ func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.Booking, err
 		Preload("ClassHistory").
 		Preload("ClassHistory.Documentations").
 		Preload("CancelUser").
-		Where("status = ? OR status = ?", domain.StatusBooked, domain.StatusOngoing).
+		Where("status IN ?", []string{
+			domain.StatusBooked,
+			domain.StatusOngoing,
+			domain.StatusUpcoming,
+			domain.StatusRescheduled,
+			domain.StatusClassFinished,
+		}).
 		Find(&classes).Error
 	if err != nil {
 		return nil, err
