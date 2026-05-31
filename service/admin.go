@@ -25,6 +25,13 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) do
 	}
 }
 
+func (s *adminService) GetTeacherAllClasses(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
+	if teacherUUID == "" {
+		return nil, fmt.Errorf("UUID guru tidak boleh kosong")
+	}
+	return s.adminRepo.GetTeacherAllClasses(ctx, teacherUUID, f)
+}
+
 func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
 	return s.adminRepo.GetBookedClasses(ctx)
 }

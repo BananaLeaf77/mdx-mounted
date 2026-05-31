@@ -22,6 +22,82 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) GetTeacherAllClasses(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
+	// First verify teacher exists
+	var teacher domain.User
+	if err := r.db.WithContext(ctx).
+		Where("uuid = ? AND role = ?", teacherUUID, domain.RoleTeacher).
+		First(&teacher).Error; err != nil {
+		return nil, fmt.Errorf("guru tidak ditemukan")
+	}
+
+	var bookings []domain.Booking
+
+	q := r.db.WithContext(ctx).
+		Preload("Student").
+		Preload("Student.StudentProfile").
+		Preload("PackageUsed").
+		Preload("PackageUsed.Package").
+		Preload("PackageUsed.Package.Instrument").
+		Preload("Schedule").
+		Preload("Schedule.Teacher").
+		Preload("ClassHistory").
+		Preload("ClassHistory.Documentations").
+		Preload("CancelUser").
+		Where("schedule_id IN (SELECT id FROM teacher_schedules WHERE teacher_uuid = ? AND deleted_at IS NULL)", teacherUUID).
+		Order("class_date DESC")
+
+	if !f.IsAll() {
+		q = q.Limit(f.SafeLimit()).Offset(f.Offset())
+	}
+
+	if err := q.Find(&bookings).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil semua kelas guru: %w", err)
+	}
+
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	now := time.Now().In(loc)
+
+	for i := range bookings {
+		// Fix trial instrument
+		if bookings[i].PackageUsed.Package != nil && bookings[i].PackageUsed.Package.IsTrial {
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", bookings[i].InstrumentID).First(&instrument)
+			packageCopy := *bookings[i].PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			bookings[i].PackageUsed.Package = &packageCopy
+		}
+
+		// Compute live status for booked ones
+		if bookings[i].Status == domain.StatusBooked {
+			parsedStart, _ := time.Parse("15:04", bookings[i].Schedule.StartTime)
+			parsedEnd, _ := time.Parse("15:04", bookings[i].Schedule.EndTime)
+
+			classDateLoc := bookings[i].ClassDate.In(loc)
+			classStart := time.Date(
+				classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day(),
+				parsedStart.Hour(), parsedStart.Minute(), 0, 0, loc,
+			)
+			classEnd := time.Date(
+				classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day(),
+				parsedEnd.Hour(), parsedEnd.Minute(), 0, 0, loc,
+			)
+
+			switch {
+			case now.Before(classStart):
+				bookings[i].Status = domain.StatusUpcoming
+			case now.After(classStart) && now.Before(classEnd):
+				bookings[i].Status = domain.StatusOngoing
+			case now.Equal(classEnd) || now.After(classEnd):
+				bookings[i].IsReadyToFinish = true
+				bookings[i].Status = domain.StatusClassFinished
+			}
+		}
+	}
+
+	return &bookings, nil
+}
+
 func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.Booking, error) {
 	var classes []domain.Booking
 	err := r.db.WithContext(ctx).

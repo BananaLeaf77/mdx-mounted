@@ -33,6 +33,7 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.PUT("/teachers/modify/:uuid", h.UpdateTeacher)
 		admin.GET("/teachers", h.GetAllTeachers)
 		admin.GET("/teachers/:uuid", h.GetTeacherByUUID)
+		admin.GET("/teachers/:uuid/classes", h.GetTeacherAllClasses)
 
 		// Manager
 		admin.POST("/managers", h.CreateManager)
@@ -81,6 +82,46 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
 	}
+}
+
+func (h *AdminHandler) GetTeacherAllClasses(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	teacherUUID := c.Param("uuid")
+
+	f := domain.PaginationFilter{
+		Page:  1,
+		Limit: 10,
+	}
+	if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page > 0 {
+			f.Page = page
+		}
+	}
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit >= 0 {
+			f.Limit = limit
+		}
+	}
+
+	data, err := h.uc.GetTeacherAllClasses(c.Request.Context(), teacherUUID, f)
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetTeacherAllClasses - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil semua kelas guru",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetTeacherAllClasses", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    data,
+		"page":    f.Page,
+		"limit":   f.Limit,
+		"total":   len(*data),
+	})
 }
 
 func (h *AdminHandler) GetBookedClasses(c *gin.Context) {

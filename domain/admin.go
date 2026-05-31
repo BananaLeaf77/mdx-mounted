@@ -17,11 +17,13 @@ const (
 )
 
 type AdminUseCase interface {
+	
 	// Self
 	UpdateAdmin(ctx context.Context, payload User) error
 	GetBookedClasses(ctx context.Context) ([]Booking, error)
 
 	// Teacher Management
+	GetTeacherAllClasses(ctx context.Context, teacherUUID string, f PaginationFilter) (*[]Booking, error)
 	CreateTeacher(ctx context.Context, user *User, instrumentIDs []int) (*User, error)
 	GetAllTeachers(ctx context.Context) ([]User, error)
 	GetTeacherByUUID(ctx context.Context, uuid string) (*User, error)
@@ -77,6 +79,7 @@ type AdminRepository interface {
 	GetBookedClasses(ctx context.Context) ([]Booking, error)
 
 	// Teacher Management
+	GetTeacherAllClasses(ctx context.Context, teacherUUID string, f PaginationFilter) (*[]Booking, error)
 	CreateTeacher(ctx context.Context, user *User, instrumentIDs []int) (*User, error)
 	GetAllTeachers(ctx context.Context) ([]User, error)
 	GetTeacherByUUID(ctx context.Context, uuid string) (*User, error)
