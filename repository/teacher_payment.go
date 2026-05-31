@@ -35,6 +35,7 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 	month int,
 	commissionRate float64,
 ) ([]domain.TeacherPaymentDetail, error) {
+	fmt.Println("im running cuh===============================")
 
 	// Period boundaries (full calendar month, UTC)
 	periodStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
