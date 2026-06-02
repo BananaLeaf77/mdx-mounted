@@ -30,8 +30,8 @@ const (
 	DrumRoomLimit    int64 = 3
 
 	DefaultPackageExpiredDuration int = 30
-	PaymentMethodManual           = "Manual Assign"
-	PaymentMethodManualStatus     = "success"
+	PaymentMethodManual               = "Manual Assign"
+	PaymentMethodManualStatus         = "success"
 )
 
 type User struct {
@@ -66,9 +66,10 @@ type Package struct {
 	Price           float64     `gorm:"not null" json:"price"`
 	PromoPrice      float64     `gorm:"default:0" json:"promo_price"`
 	IsPromoActive   bool        `gorm:"default:false" json:"is_promo_active"`
-	IsTrial         bool        `gorm:"default:false" json:"is_trial"` // Paket percobaan/trial
+	IsTrial         bool        `gorm:"default:false" json:"is_trial"`
+	IsActive        bool        `gorm:"default:true" json:"is_active"` // NEW
 	Quota           int         `gorm:"not null" json:"quota"`
-	Duration        int         `gorm:"not null" json:"duration"` // Minutes: 30 or 60
+	Duration        int         `gorm:"not null" json:"duration"`
 	ExpiredDuration int         `json:"expired_duration"`
 	Description     string      `json:"description"`
 	InstrumentID    *int        `gorm:"default:null" json:"instrument_id"`

@@ -126,7 +126,13 @@ func CheckCancelAbleFromNow(classDate time.Time) bool {
 		loc = time.Local
 	}
 	now := time.Now().In(loc)
-	return classDate.Sub(now) > 24*time.Hour
+	classDateLoc := classDate.In(loc)
+
+	cancelDeadline := time.Date(
+		classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day()-1,
+		23, 59, 0, 0, loc,
+	)
+	return now.Before(cancelDeadline)
 }
 
 // GetDayName returns Indonesian day name from time.Weekday

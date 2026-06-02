@@ -17,7 +17,7 @@ const (
 )
 
 type AdminUseCase interface {
-	
+
 	// Self
 	UpdateAdmin(ctx context.Context, payload User) error
 	GetBookedClasses(ctx context.Context) ([]Booking, error)
@@ -44,6 +44,7 @@ type AdminUseCase interface {
 	UpdateManager(ctx context.Context, user *User) error
 
 	// Package
+	TogglePackageActive(ctx context.Context, id int, isActive bool) error
 	GetAllPackages(ctx context.Context) ([]Package, error)
 	GetPackagesByID(ctx context.Context, id int) (*Package, error)
 	CreatePackage(ctx context.Context, pkg *Package) (*Package, error)
@@ -102,6 +103,7 @@ type AdminRepository interface {
 	UpdateManager(ctx context.Context, user *User) error
 
 	// Package
+	TogglePackageActive(ctx context.Context, id int, isActive bool) error
 	GetAllPackages(ctx context.Context) ([]Package, error)
 	GetPackagesByID(ctx context.Context, id int) (*Package, error)
 	CreatePackage(ctx context.Context, pkg *Package) (*Package, error)

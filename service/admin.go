@@ -25,6 +25,13 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) do
 	}
 }
 
+func (s *adminService) TogglePackageActive(ctx context.Context, id int, isActive bool) error {
+	if id <= 0 {
+		return fmt.Errorf("ID paket tidak valid")
+	}
+	return s.adminRepo.TogglePackageActive(ctx, id, isActive)
+}
+
 func (s *adminService) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*domain.User, *domain.Package, error) {
 	return s.adminRepo.AssignPackageToStudentManual(ctx, studentUUID, packageID, recordData, proofImageURL, notes)
 }

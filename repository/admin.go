@@ -22,6 +22,21 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) TogglePackageActive(ctx context.Context, id int, isActive bool) error {
+	result := r.db.WithContext(ctx).
+		Model(&domain.Package{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Update("is_active", isActive)
+
+	if result.Error != nil {
+		return fmt.Errorf("gagal mengubah status paket: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("paket tidak ditemukan")
+	}
+	return nil
+}
+
 func (r *adminRepo) GetTeacherAllClasses(ctx context.Context, teacherUUID string, f domain.PaginationFilter) (*[]domain.Booking, error) {
 	// First verify teacher exists
 	var teacher domain.User
@@ -123,6 +138,52 @@ func (r *adminRepo) GetBookedClasses(ctx context.Context) ([]domain.Booking, err
 	if err != nil {
 		return nil, err
 	}
+
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	now := time.Now().In(loc)
+
+	for i := range classes {
+		// Fix trial instrument if trial
+		if classes[i].PackageUsed.Package != nil && classes[i].PackageUsed.Package.IsTrial {
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", classes[i].InstrumentID).First(&instrument)
+
+			packageCopy := *classes[i].PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			classes[i].PackageUsed.Package = &packageCopy
+		}
+
+		// Compute live status
+		if classes[i].Schedule.ID != 0 {
+			startTimeStr := classes[i].Schedule.StartTime
+			endTimeStr := classes[i].Schedule.EndTime
+			classDate := classes[i].ClassDate
+
+			parsedStart, _ := time.Parse("15:04", startTimeStr)
+			parsedEnd, _ := time.Parse("15:04", endTimeStr)
+
+			classDateLoc := classDate.In(loc)
+			classStart := time.Date(
+				classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day(),
+				parsedStart.Hour(), parsedStart.Minute(), 0, 0,
+				loc,
+			)
+
+			duration := parsedEnd.Sub(parsedStart)
+			classEnd := classStart.Add(duration)
+
+			switch {
+			case now.Before(classStart):
+				classes[i].Status = domain.StatusUpcoming
+			case (now.Equal(classStart) || now.After(classStart)) && now.Before(classEnd):
+				classes[i].Status = domain.StatusOngoing
+			case now.Equal(classEnd) || now.After(classEnd):
+				classes[i].IsReadyToFinish = true
+				classes[i].Status = domain.StatusClassFinished
+			}
+		}
+	}
+
 	return classes, nil
 }
 
@@ -570,7 +631,7 @@ func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUI
 		StartDate:      time.Now(),
 		EndDate:        time.Now().AddDate(0, 0, expiredDuration),
 	}
-	
+
 	// if its true then record data to payment table
 	if recordData != nil && *recordData {
 		now := time.Now()
@@ -776,12 +837,11 @@ func (r *adminRepo) CreateInstrument(ctx context.Context, instrument *domain.Ins
 func (r *adminRepo) GetAllPackages(ctx context.Context) ([]domain.Package, error) {
 	var packages []domain.Package
 	if err := r.db.WithContext(ctx).
-		Where("deleted_at IS NULL").
-		Preload("Instrument", "deleted_at IS NULL"). // ✅ Preload instrument yang aktif
+		Where("deleted_at IS NULL"). // admin sees both active and inactive
+		Preload("Instrument", "deleted_at IS NULL").
 		Find(&packages).Error; err != nil {
 		return nil, errors.New(utils.TranslateDBError(err))
 	}
-
 	return packages, nil
 }
 

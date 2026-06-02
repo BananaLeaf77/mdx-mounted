@@ -719,17 +719,19 @@ func (r *teacherRepository) CancelBookedClass(
 	now := time.Now().In(loc)
 	classDateLoc := booking.ClassDate.In(loc)
 
-	// Check if class is in the future
 	if classDateLoc.Before(now) {
 		tx.Rollback()
 		return nil, errors.New("tidak bisa membatalkan kelas yang sudah lewat")
 	}
 
-	// H-1 cancellation rule (24 hours before class)
-	minCancelTime := classDateLoc.Add(-24 * time.Hour)
-	if now.After(minCancelTime) {
+	// H-1 23:59 deadline
+	cancelDeadline := time.Date(
+		classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day()-1,
+		23, 59, 0, 0, loc,
+	)
+	if now.After(cancelDeadline) {
 		tx.Rollback()
-		return nil, errors.New("pembatalan hanya bisa dilakukan minimal H-1 (24 jam) sebelum kelas")
+		return nil, errors.New("pembatalan hanya bisa dilakukan maksimal H-1 pukul 23:59 sebelum kelas")
 	}
 
 	cancelTime := time.Now()

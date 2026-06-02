@@ -6,6 +6,7 @@ import (
 	"chronosphere/dto"
 	"chronosphere/middleware"
 	"chronosphere/utils"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -53,6 +54,7 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.PUT("/users/:uuid", h.ClearUserDeletedAt)
 
 		// Packages
+		admin.PUT("/packages/:id/toggle-active", h.TogglePackageActive)
 		admin.POST("/packages", h.CreatePackage)
 		admin.PUT("/packages/modify/:id", h.UpdatePackage)
 		admin.GET("/packages/:id", h.GetPackagesByID) // NOTE: get all packages, not by id
@@ -82,6 +84,55 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
 	}
+}
+
+func (h *AdminHandler) TogglePackageActive(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		utils.PrintLogInfo(&name, 400, "TogglePackageActive - Atoi", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "ID paket tidak valid",
+			"message": "Gagal mengubah status paket",
+		})
+		return
+	}
+
+	var req struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.PrintLogInfo(&name, 400, "TogglePackageActive - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   utils.TranslateValidationError(err),
+			"message": "Gagal mengubah status paket",
+		})
+		return
+	}
+
+	if err := h.uc.TogglePackageActive(c.Request.Context(), id, req.IsActive); err != nil {
+		utils.PrintLogInfo(&name, 500, "TogglePackageActive - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengubah status paket",
+		})
+		return
+	}
+
+	status := "dinonaktifkan"
+	if req.IsActive {
+		status = "diaktifkan"
+	}
+
+	utils.PrintLogInfo(&name, 200, "TogglePackageActive", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Paket berhasil %s", status),
+	})
 }
 
 func (h *AdminHandler) GetTeacherAllClasses(c *gin.Context) {

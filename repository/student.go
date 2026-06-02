@@ -558,17 +558,21 @@ func (r *studentRepository) CancelBookedClass(
 
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	now := time.Now().In(loc)
-	classDate := booking.ClassDate.In(loc)
+	classDateLoc := booking.ClassDate.In(loc)
 
-	if classDate.Before(now) {
+	if classDateLoc.Before(now) {
 		tx.Rollback()
 		return nil, errors.New("tidak bisa membatalkan kelas yang sudah lewat")
 	}
 
-	// H-1 / 24-hour cancellation window
-	if now.After(classDate.Add(-24 * time.Hour)) {
+	// H-1 23:59 deadline
+	cancelDeadline := time.Date(
+		classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day()-1,
+		23, 59, 0, 0, loc,
+	)
+	if now.After(cancelDeadline) {
 		tx.Rollback()
-		return nil, errors.New("pembatalan hanya bisa dilakukan minimal H-1 (24 jam) sebelum kelas")
+		return nil, errors.New("pembatalan hanya bisa dilakukan maksimal H-1 pukul 23:59 sebelum kelas")
 	}
 
 	cancelTime := time.Now()
@@ -1406,7 +1410,7 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 	}
 
 	// Build package query — conditionally exclude trial packages.
-	query := r.db.WithContext(ctx).Preload("Instrument")
+	query := r.db.WithContext(ctx).Preload("Instrument").Where("is_active = true")
 	if excludeTrial {
 		query = query.Where("is_trial = false")
 	}
