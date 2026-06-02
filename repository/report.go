@@ -184,24 +184,26 @@ func (r *reportRepo) GetTeacherTeachingReport(
 	filter domain.TeacherTeachingReportFilter,
 ) ([]domain.TeacherTeachingReport, error) {
 
-	// ── 1. Build the date range for the query ─────────────────────────────────
 	loc, _ := time.LoadLocation("Asia/Makassar")
-
-	// Default: current calendar month
 	now := time.Now().In(loc)
-	startDate := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
-	endDate := startDate.AddDate(0, 1, 0).Add(-time.Nanosecond)
+
+	// Default: all time if no filter provided
+	var startDate, endDate time.Time
 
 	if filter.StartDate != "" {
 		if t, err := time.ParseInLocation("2006-01-02", filter.StartDate, loc); err == nil {
 			startDate = t
 		}
+	} else {
+		startDate = time.Date(2000, 1, 1, 0, 0, 0, 0, loc) // far past
 	}
+
 	if filter.EndDate != "" {
 		if t, err := time.ParseInLocation("2006-01-02", filter.EndDate, loc); err == nil {
-			// end of that day
 			endDate = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 0, loc)
 		}
+	} else {
+		endDate = time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, loc) // today
 	}
 
 	// ── 2. Fetch raw rows (one per completed class) ──────────────────────────
