@@ -537,6 +537,9 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 		pkg.Duration = 0
 	}
 
+	// Preserve is_active — don't allow UpdatePackage to reset it (use TogglePackageActive for that)
+	pkg.IsActive = existing.IsActive
+
 	if err := r.db.WithContext(ctx).Save(pkg).Error; err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
