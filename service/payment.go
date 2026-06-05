@@ -74,31 +74,24 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	// directly assigned packages. Any confirmed prior purchase means no reg fee.
 	var priorNonTrialCount int64
 	err = s.db.WithContext(ctx).Raw(`
-		SELECT COUNT(*) FROM (
-			SELECT payments.id
-			FROM payments
-			JOIN packages ON packages.id = payments.package_id
-			WHERE payments.student_uuid = ?
-			  AND payments.status       = ?
-			  AND packages.is_trial     = false
-			UNION ALL
-			SELECT manual_payments.id
-			FROM manual_payments
-			JOIN packages ON packages.id = manual_payments.package_id
-			WHERE manual_payments.student_uuid = ?
-			  AND manual_payments.status       = ?
-			  AND packages.is_trial            = false
-			UNION ALL
-			SELECT student_packages.id
-			FROM student_packages
-			JOIN packages ON packages.id = student_packages.package_id
-			WHERE student_packages.student_uuid = ?
-			  AND packages.is_trial              = false
-		) combined
-	`,
+    SELECT COUNT(*) FROM (
+        SELECT payments.id
+        FROM payments
+        JOIN packages ON packages.id = payments.package_id
+        WHERE payments.student_uuid = ?
+          AND payments.status       = ?
+          AND packages.is_trial     = false
+        UNION ALL
+        SELECT manual_payments.id
+        FROM manual_payments
+        JOIN packages ON packages.id = manual_payments.package_id
+        WHERE manual_payments.student_uuid = ?
+          AND manual_payments.status       = ?
+          AND packages.is_trial            = false
+    ) combined
+`,
 		studentUUID, domain.PaymentStatusPaid,
 		studentUUID, domain.ManualPaymentStatusConfirmed,
-		studentUUID,
 	).Scan(&priorNonTrialCount).Error
 	if err != nil {
 		return nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
