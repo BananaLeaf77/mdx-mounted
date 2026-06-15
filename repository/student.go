@@ -224,7 +224,7 @@ func (r *studentRepository) GetAvailableSchedulesTrial(
 		result.TeacherSchedule.IsBookedSameDayAndTime = result.IsBookedSameDayAndTime
 		result.TeacherSchedule.IsDurationCompatible = result.IsDurationCompatible
 		result.TeacherSchedule.IsFullyAvailable = result.IsFullyAvailable
-		result.TeacherSchedule.IsBooked = sch.IsBooked || thisScheduleBooked
+		result.TeacherSchedule.IsBooked = thisScheduleBooked
 
 		results = append(results, result)
 	}
@@ -288,9 +288,28 @@ func (r *studentRepository) BookClassTrial(
 		return nil, errors.New("jadwal sudah dibooking")
 	}
 
-	// ── 2b. Compute next class date early ────────────────────────────────────
+	// NEW — check if there's actually an active booking on the next class date
 	startTimeParsedEarly, _ := time.Parse("15:04", schedule.StartTime)
 	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsedEarly)
+
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	var activeBookingCount int64
+	if err := tx.Model(&domain.Booking{}).
+		Where("schedule_id = ?", scheduleID).
+		Where("status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+		Where("class_date >= ? AND class_date < ?", dayStart, dayEnd).
+		Count(&activeBookingCount).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("gagal memeriksa status jadwal: %w", err)
+	}
+	if activeBookingCount > 0 {
+		tx.Rollback()
+		return nil, errors.New("jadwal sudah dibooking")
+	}
 
 	// ── 2c. Teacher overlap conflict check ────────────────────────────────────
 	teacherBusy, conflictErr := r.checkTeacherConflict(tx, schedule.TeacherUUID, schedule.StartTime, schedule.EndTime, classDate)
@@ -369,9 +388,6 @@ func (r *studentRepository) BookClassTrial(
 
 	// ── 7. Student conflict check ─────────────────────────────────────────────
 	loc, _ = time.LoadLocation("Asia/Makassar")
-	dayInLoc := classDate.In(loc)
-	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
-	dayEnd := dayStart.Add(24 * time.Hour)
 
 	var existingBookingCount int64
 	if err := tx.Model(&domain.Booking{}).
@@ -689,14 +705,28 @@ func (r *studentRepository) BookClass(
 		return nil, fmt.Errorf("gagal mengambil jadwal: %w", err)
 	}
 
-	if schedule.IsBooked {
+	// NEW — check if there's actually an active booking on the next class date
+	startTimeParsedEarly, _ := time.Parse("15:04", schedule.StartTime)
+	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsedEarly)
+
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	dayInLoc := classDate.In(loc)
+	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
+	dayEnd := dayStart.Add(24 * time.Hour)
+
+	var activeBookingCount int64
+	if err := tx.Model(&domain.Booking{}).
+		Where("schedule_id = ?", scheduleID).
+		Where("status IN ?", []string{domain.StatusBooked, domain.StatusRescheduled}).
+		Where("class_date >= ? AND class_date < ?", dayStart, dayEnd).
+		Count(&activeBookingCount).Error; err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("gagal memeriksa status jadwal: %w", err)
+	}
+	if activeBookingCount > 0 {
 		tx.Rollback()
 		return nil, errors.New("jadwal sudah dibooking")
 	}
-
-	// ── 1b. Check if the teacher is already occupied at this time
-	startTimeParsedEarly, _ := time.Parse("15:04", schedule.StartTime)
-	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsedEarly)
 
 	teacherBusy, conflictErr := r.checkTeacherConflict(tx, schedule.TeacherUUID, schedule.StartTime, schedule.EndTime, classDate)
 	if conflictErr != nil {
@@ -791,11 +821,6 @@ func (r *studentRepository) BookClass(
 	}
 
 	// ── 7. Student conflict check - FIXED with proper timezone handling ───────
-	// Convert classDate to UTC range for database query
-	dayInLoc := classDate.In(loc)
-	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
-	dayEnd := dayStart.Add(24 * time.Hour)
-
 	var existingBookingCount int64
 	if err := tx.Model(&domain.Booking{}).
 		Joins("JOIN teacher_schedules ts ON ts.id = bookings.schedule_id").
@@ -1189,7 +1214,7 @@ func (r *studentRepository) GetAvailableSchedules(
 		result.TeacherSchedule.IsBookedSameDayAndTime = result.IsBookedSameDayAndTime
 		result.TeacherSchedule.IsDurationCompatible = result.IsDurationCompatible
 		result.TeacherSchedule.IsFullyAvailable = result.IsFullyAvailable
-		result.TeacherSchedule.IsBooked = sch.IsBooked || thisScheduleBooked
+		result.TeacherSchedule.IsBooked = thisScheduleBooked
 
 		results = append(results, result)
 	}
@@ -1339,24 +1364,31 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		//   3. Directly assigned student_packages (admin assign-package flow)
 		var trialPurchaseCount int64
 		if err := r.db.WithContext(ctx).Raw(`
-    SELECT COUNT(*) FROM (
-        SELECT payments.id
-        FROM payments
-        JOIN packages ON packages.id = payments.package_id
-        WHERE payments.student_uuid = ?
-          AND payments.status       = ?
-          AND packages.is_trial     = true
-        UNION ALL
-        SELECT manual_payments.id
-        FROM manual_payments
-        JOIN packages ON packages.id = manual_payments.package_id
-        WHERE manual_payments.student_uuid = ?
-          AND manual_payments.status       = ?
-          AND packages.is_trial            = true
-    ) combined
-`,
+        SELECT COUNT(*) FROM (
+            SELECT payments.id
+            FROM payments
+            JOIN packages ON packages.id = payments.package_id
+            WHERE payments.student_uuid = ?
+              AND payments.status       = ?
+              AND packages.is_trial     = true
+            UNION ALL
+            SELECT manual_payments.id
+            FROM manual_payments
+            JOIN packages ON packages.id = manual_payments.package_id
+            WHERE manual_payments.student_uuid = ?
+              AND manual_payments.status       = ?
+              AND packages.is_trial            = true
+            UNION ALL
+            SELECT student_packages.id
+            FROM student_packages
+            JOIN packages ON packages.id = student_packages.package_id
+            WHERE student_packages.student_uuid = ?
+              AND packages.is_trial              = true
+        ) combined
+    `,
 			*studentUUID, domain.PaymentStatusPaid,
 			*studentUUID, domain.ManualPaymentStatusConfirmed,
+			*studentUUID,
 		).Scan(&trialPurchaseCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat paket trial: %w", err)
 		}
@@ -1368,24 +1400,31 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		// Count non-trial paid purchases to determine registration fee waiver.
 		var priorNonTrialCount int64
 		if err := r.db.WithContext(ctx).Raw(`
-    SELECT COUNT(*) FROM (
-        SELECT payments.id
-        FROM payments
-        JOIN packages ON packages.id = payments.package_id
-        WHERE payments.student_uuid = ?
-          AND payments.status       = ?
-          AND packages.is_trial     = false
-        UNION ALL
-        SELECT manual_payments.id
-        FROM manual_payments
-        JOIN packages ON packages.id = manual_payments.package_id
-        WHERE manual_payments.student_uuid = ?
-          AND manual_payments.status       = ?
-          AND packages.is_trial            = false
-    ) combined
-`,
+		SELECT COUNT(*) FROM (
+			SELECT payments.id
+			FROM payments
+			JOIN packages ON packages.id = payments.package_id
+			WHERE payments.student_uuid = ?
+			  AND payments.status       = ?
+			  AND packages.is_trial     = false
+			UNION ALL
+			SELECT manual_payments.id
+			FROM manual_payments
+			JOIN packages ON packages.id = manual_payments.package_id
+			WHERE manual_payments.student_uuid = ?
+			  AND manual_payments.status       = ?
+			  AND packages.is_trial            = false
+			UNION ALL
+			SELECT student_packages.id
+			FROM student_packages
+			JOIN packages ON packages.id = student_packages.package_id
+			WHERE student_packages.student_uuid = ?
+			  AND packages.is_trial              = false
+		) combined
+	`,
 			*studentUUID, domain.PaymentStatusPaid,
 			*studentUUID, domain.ManualPaymentStatusConfirmed,
+			*studentUUID,
 		).Scan(&priorNonTrialCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 		}
