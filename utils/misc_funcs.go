@@ -55,10 +55,6 @@ func NormalizePhoneNumber(phone string) string {
 		phone = "62" + phone
 	}
 
-	if len(phone) < 10 || len(phone) > 14 {
-		return ""
-	}
-
 	return phone
 }
 
