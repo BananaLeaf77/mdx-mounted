@@ -274,21 +274,19 @@ func (r *studentRepository) BookClassTrial(
 		Where("id = ? AND deleted_at IS NULL", scheduleID).
 		First(&schedule).Error; err != nil {
 		tx.Rollback()
-
-		utils.PrintPretty(schedule)
-
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("jadwal tidak ditemukan")
 		}
 		return nil, fmt.Errorf("gagal mengambil jadwal: %w", err)
 	}
 
-	if schedule.IsBooked {
+	// ── 2a. Trial only allows 30 min ──────────────────────────────────────────
+	if schedule.Duration != 30 {
 		tx.Rollback()
-		return nil, errors.New("jadwal sudah dibooking")
+		return nil, errors.New("paket trial hanya bisa digunakan untuk kelas 30 menit")
 	}
 
-	// NEW — check if there's actually an active booking on the next class date
+	// ── 2b. Compute next class date ───────────────────────────────────────────
 	startTimeParsedEarly, _ := time.Parse("15:04", schedule.StartTime)
 	classDate := utils.GetNextClassDate(schedule.DayOfWeek, startTimeParsedEarly)
 
@@ -297,6 +295,7 @@ func (r *studentRepository) BookClassTrial(
 	dayStart := time.Date(dayInLoc.Year(), dayInLoc.Month(), dayInLoc.Day(), 0, 0, 0, 0, loc).UTC()
 	dayEnd := dayStart.Add(24 * time.Hour)
 
+	// ── 2c. Check actual active booking on next class date (replaces stale is_booked) ──
 	var activeBookingCount int64
 	if err := tx.Model(&domain.Booking{}).
 		Where("schedule_id = ?", scheduleID).
@@ -311,7 +310,7 @@ func (r *studentRepository) BookClassTrial(
 		return nil, errors.New("jadwal sudah dibooking")
 	}
 
-	// ── 2c. Teacher overlap conflict check ────────────────────────────────────
+	// ── 2d. Teacher overlap conflict check ────────────────────────────────────
 	teacherBusy, conflictErr := r.checkTeacherConflict(tx, schedule.TeacherUUID, schedule.StartTime, schedule.EndTime, classDate)
 	if conflictErr != nil {
 		tx.Rollback()
@@ -339,12 +338,6 @@ func (r *studentRepository) BookClassTrial(
 			"guru ini tidak mengajar instrumen yang dipilih. Guru hanya mengajar: %s",
 			strings.Join(teacherInstrumentNames, ", "),
 		)
-	}
-
-	// ── 4. Trial duration check (Only 30 minutes allowed) ─────────────────────
-	if schedule.Duration != 30 {
-		tx.Rollback()
-		return nil, errors.New("paket trial hanya dapat digunakan untuk jadwal berdurasi 30 menit")
 	}
 
 	// ── 5. Compute next class date + H-6 enforcement ──────────────────────────
