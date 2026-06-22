@@ -497,51 +497,65 @@ func (r *adminRepo) UpdateInstrument(ctx context.Context, instrument *domain.Ins
 }
 
 func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) error {
+    var existing domain.Package
+    if err := r.db.WithContext(ctx).
+        Where("id = ? AND deleted_at IS NULL", pkg.ID).
+        First(&existing).Error; err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            return errors.New("paket tidak ditemukan")
+        }
+        return errors.New(utils.TranslateDBError(err))
+    }
 
-	//check the name
-	var existing domain.Package
-	if err := r.db.WithContext(ctx).
-		Where("id = ? AND deleted_at IS NULL", pkg.ID).
-		First(&existing).Error; err != nil {
+    var nameExistStruct domain.Package
+    err := r.db.WithContext(ctx).Model(&domain.Package{}).
+        Where("name = ? AND id != ? AND deleted_at IS NULL", pkg.Name, pkg.ID).
+        First(&nameExistStruct).Error
+    if err == nil {
+        return errors.New("nama paket sudah digunakan")
+    } else if !errors.Is(err, gorm.ErrRecordNotFound) {
+        return errors.New(utils.TranslateDBError(err))
+    }
 
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("paket tidak ditemukan")
-		}
-		return errors.New(utils.TranslateDBError(err))
-	}
+    if !pkg.IsTrial {
+        var instrumentCount int64
+        err = r.db.WithContext(ctx).Model(&domain.Instrument{}).
+            Where("id = ? AND deleted_at IS NULL", pkg.InstrumentID).
+            Count(&instrumentCount).Error
+        if err != nil {
+            return errors.New(utils.TranslateDBError(err))
+        }
+        if instrumentCount == 0 {
+            return errors.New("instrumen tidak ditemukan")
+        }
+    } else {
+        pkg.InstrumentID = nil
+        pkg.Duration = 0
+    }
 
-	//check the name
-	var nameExistStruct domain.Package
-	err := r.db.WithContext(ctx).Model(&domain.Package{}).Where("name = ? AND id != ? AND deleted_at IS NULL", pkg.Name, pkg.ID).First(&nameExistStruct).Error
-	if err == nil {
+    // Use explicit map to avoid GORM zero-value issues
+    updates := map[string]interface{}{
+        "name":             pkg.Name,
+        "price":            pkg.Price,
+        "promo_price":      pkg.PromoPrice,
+        "is_promo_active":  pkg.IsPromoActive,
+        "is_trial":         pkg.IsTrial,
+        "quota":            pkg.Quota,
+        "duration":         pkg.Duration,
+        "description":      pkg.Description,
+        "instrument_id":    pkg.InstrumentID,
+        "expired_duration": pkg.ExpiredDuration,
+        "is_active":        existing.IsActive, // always preserve existing is_active
+    }
 
-		return errors.New("nama paket sudah digunakan")
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return errors.New(utils.TranslateDBError(err))
-	}
+    if err := r.db.WithContext(ctx).
+        Model(&domain.Package{}).
+        Where("id = ?", pkg.ID).
+        Updates(updates).Error; err != nil {
+        return errors.New(utils.TranslateDBError(err))
+    }
 
-	// check instrument id exists if not trial
-	if !pkg.IsTrial {
-		var instrumentCount int64
-		err = r.db.WithContext(ctx).Model(&domain.Instrument{}).
-			Where("id = ? AND deleted_at IS NULL", pkg.InstrumentID).
-			Count(&instrumentCount).Error
-		if err != nil {
-			return errors.New(utils.TranslateDBError(err))
-		}
-		if instrumentCount == 0 {
-			return errors.New("instrumen tidak ditemukan")
-		}
-	} else {
-		pkg.InstrumentID = nil
-		pkg.Duration = 0
-	}
-
-	if err := r.db.WithContext(ctx).Save(pkg).Error; err != nil {
-		return errors.New(utils.TranslateDBError(err))
-	}
-
-	return nil
+    return nil
 }
 
 func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUID string, packageID int, recordData *bool, proofImageURL *string, notes *string) (*domain.User, *domain.Package, error) {
