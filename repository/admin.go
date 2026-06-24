@@ -748,10 +748,15 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		expiredDuration = domain.DefaultPackageExpiredDuration
 	}
 
+	remainingQuota := pkg.Quota
+	if pkg.IsTrial {
+		remainingQuota = 1
+	}
+
 	newSub := domain.StudentPackage{
 		StudentUUID:    studentUUID,
 		PackageID:      packageID,
-		RemainingQuota: pkg.Quota,
+		RemainingQuota: remainingQuota,
 		PricePaid:      pricePaid,
 		StartDate:      time.Now(),
 		EndDate:        time.Now().AddDate(0, 0, expiredDuration),

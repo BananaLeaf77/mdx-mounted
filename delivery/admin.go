@@ -329,8 +329,9 @@ func (h *AdminHandler) CreatePackage(c *gin.Context) {
 	}
 
 	if req.IsTrial {
-		req.Duration = 30
+		req.Duration = 0
 		req.InstrumentID = nil
+		req.Quota = 1 // force quota 1 for trial
 	}
 
 	pkg := &domain.Package{
@@ -391,6 +392,7 @@ func (h *AdminHandler) UpdatePackage(c *gin.Context) {
 	if req.IsTrial {
 		req.Duration = 0
 		req.InstrumentID = nil
+		pkg.Quota = 1 // force quota 1 for trial
 	}
 
 	if req.ExpiredDuration != 0 {
