@@ -1357,24 +1357,31 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		//   3. Directly assigned student_packages (admin assign-package flow)
 		var trialPurchaseCount int64
 		if err := r.db.WithContext(ctx).Raw(`
-    SELECT COUNT(*) FROM (
-        SELECT payments.id
-        FROM payments
-        JOIN packages ON packages.id = payments.package_id
-        WHERE payments.student_uuid = ?
-          AND payments.status       = ?
-          AND packages.is_trial     = true
-        UNION ALL
-        SELECT manual_payments.id
-        FROM manual_payments
-        JOIN packages ON packages.id = manual_payments.package_id
-        WHERE manual_payments.student_uuid = ?
-          AND manual_payments.status       = ?
-          AND packages.is_trial            = true
-    ) combined
-`,
+        SELECT COUNT(*) FROM (
+            SELECT payments.id
+            FROM payments
+            JOIN packages ON packages.id = payments.package_id
+            WHERE payments.student_uuid = ?
+              AND payments.status       = ?
+              AND packages.is_trial     = true
+            UNION ALL
+            SELECT manual_payments.id
+            FROM manual_payments
+            JOIN packages ON packages.id = manual_payments.package_id
+            WHERE manual_payments.student_uuid = ?
+              AND manual_payments.status       = ?
+              AND packages.is_trial            = true
+            UNION ALL
+            SELECT student_packages.id
+            FROM student_packages
+            JOIN packages ON packages.id = student_packages.package_id
+            WHERE student_packages.student_uuid = ?
+              AND packages.is_trial              = true
+        ) combined
+    `,
 			*studentUUID, domain.PaymentStatusPaid,
 			*studentUUID, domain.ManualPaymentStatusConfirmed,
+			*studentUUID,
 		).Scan(&trialPurchaseCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat paket trial: %w", err)
 		}
@@ -1386,24 +1393,31 @@ func (r *studentRepository) GetAllAvailablePackages(ctx context.Context, student
 		// Count non-trial paid purchases to determine registration fee waiver.
 		var priorNonTrialCount int64
 		if err := r.db.WithContext(ctx).Raw(`
-    SELECT COUNT(*) FROM (
-        SELECT payments.id
-        FROM payments
-        JOIN packages ON packages.id = payments.package_id
-        WHERE payments.student_uuid = ?
-          AND payments.status       = ?
-          AND packages.is_trial     = false
-        UNION ALL
-        SELECT manual_payments.id
-        FROM manual_payments
-        JOIN packages ON packages.id = manual_payments.package_id
-        WHERE manual_payments.student_uuid = ?
-          AND manual_payments.status       = ?
-          AND packages.is_trial            = false
-    ) combined
-`,
+		SELECT COUNT(*) FROM (
+			SELECT payments.id
+			FROM payments
+			JOIN packages ON packages.id = payments.package_id
+			WHERE payments.student_uuid = ?
+			  AND payments.status       = ?
+			  AND packages.is_trial     = false
+			UNION ALL
+			SELECT manual_payments.id
+			FROM manual_payments
+			JOIN packages ON packages.id = manual_payments.package_id
+			WHERE manual_payments.student_uuid = ?
+			  AND manual_payments.status       = ?
+			  AND packages.is_trial            = false
+			UNION ALL
+			SELECT student_packages.id
+			FROM student_packages
+			JOIN packages ON packages.id = student_packages.package_id
+			WHERE student_packages.student_uuid = ?
+			  AND packages.is_trial              = false
+		) combined
+	`,
 			*studentUUID, domain.PaymentStatusPaid,
 			*studentUUID, domain.ManualPaymentStatusConfirmed,
+			*studentUUID,
 		).Scan(&priorNonTrialCount).Error; err != nil {
 			return nil, nil, fmt.Errorf("gagal memeriksa riwayat pembayaran: %w", err)
 		}

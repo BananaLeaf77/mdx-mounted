@@ -249,13 +249,13 @@ type CreatePackageRequest struct {
 	InstrumentID    *int    `json:"instrument_id" binding:"omitempty,gt=0"` // was: required,gt=0
 }
 type UpdatePackageRequest struct {
-	Name            string  `json:"name,omitempty" binding:"omitempty,min=3,max=50"`
-	Duration        int     `json:"duration" binding:"omitempty,oneof=30 60"`
+	Name            string  `json:"name,omitempty"`
+	Duration        int     `json:"duration"`
 	ExpiredDuration int     `json:"expired_duration"`
-	Quota           int     `json:"quota,omitempty" binding:"omitempty,gt=0"`
+	Quota           int     `json:"quota,omitempty"`
 	Description     string  `json:"description,omitempty"`
-	InstrumentID    *int    `json:"instrument_id,omitempty" binding:"omitempty,gt=0"`
-	Price           float64 `json:"price,omitempty" binding:"omitempty,gt=0"`
+	InstrumentID    *int    `json:"instrument_id,omitempty"`
+	Price           float64 `json:"price,omitempty"`
 	PromoPrice      float64 `json:"promo_price,omitempty"`
 	IsPromoActive   bool    `json:"is_promo_active,omitempty"`
 	IsTrial         bool    `json:"is_trial,omitempty"`
