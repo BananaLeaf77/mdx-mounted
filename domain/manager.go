@@ -6,6 +6,8 @@ import (
 )
 
 type ManagerUseCase interface {
+	GetAllBookedClasses(ctx context.Context) (*[]Booking, error)
+	CancelBookedClass(ctx context.Context, bookingID int, managerUUID string, reason *string) error
 	GetAllStudents(ctx context.Context) ([]User, error)
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	CreateStudent(ctx context.Context, student *User) (*User, error)
@@ -22,6 +24,8 @@ type ManagerUseCase interface {
 }
 
 type ManagerRepository interface {
+	GetAllBookedClasses(ctx context.Context) (*[]Booking, error)
+	CancelBookedClass(ctx context.Context, bookingID int, managerUUID string, reason *string) error
 	GetAllStudents(ctx context.Context) ([]User, error)
 	GetStudentByUUID(ctx context.Context, uuid string) (*User, error)
 	CreateStudent(ctx context.Context, student *User) (*User, error)

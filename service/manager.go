@@ -27,6 +27,126 @@ func NewManagerService(managerRepo domain.ManagerRepository, mgr *config.WAManag
 	}
 }
 
+func (s *managerService) GetAllBookedClasses(ctx context.Context) (*[]domain.Booking, error) {
+	return s.managerRepo.GetAllBookedClasses(ctx)
+}
+
+func (s *managerService) CancelBookedClass(ctx context.Context, bookingID int, managerUUID string, reason *string) error {
+	// Load booking first for notification
+	var bookings *[]domain.Booking
+	bookings, err := s.managerRepo.GetAllBookedClasses(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Find the specific booking for notification
+	var targetBooking *domain.Booking
+	for i := range *bookings {
+		if (*bookings)[i].ID == bookingID {
+			targetBooking = &(*bookings)[i]
+			break
+		}
+	}
+
+	if err := s.managerRepo.CancelBookedClass(ctx, bookingID, managerUUID, reason); err != nil {
+		return err
+	}
+
+	if targetBooking != nil && s.messenger != nil && s.messenger.IsLoggedIn() {
+		s.sendManagerCancelNotif(targetBooking, reason)
+	}
+
+	return nil
+}
+
+func (s *managerService) sendManagerCancelNotif(booking *domain.Booking, reason *string) {
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	classDate := booking.ClassDate.In(loc)
+	dayName := indonesianDayName(classDate.Weekday())
+	dateStr := classDate.Format("02/01/2006")
+	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
+	salutation := salutationFor(booking.Schedule.Teacher.Gender)
+
+	instrumentName := "-"
+	if booking.PackageUsed.Package != nil {
+		if booking.PackageUsed.Package.TrialInstrument != "" {
+			instrumentName = booking.PackageUsed.Package.TrialInstrument
+		} else if booking.PackageUsed.Package.Instrument != nil {
+			instrumentName = booking.PackageUsed.Package.Instrument.Name
+		}
+	}
+
+	cancelReason := "Dibatalkan oleh manajemen"
+	if reason != nil && *reason != "" {
+		cancelReason = *reason
+	}
+
+	appURL := "https://www.mdxmusiccourse.cloud/"
+	appName := os.Getenv("APP_NAME")
+
+	teacherMsg := fmt.Sprintf(`*PEMBATALAN KELAS OLEH MANAJEMEN*
+
+Halo %s %s,
+
+Kelas berikut telah dibatalkan oleh manajemen:
+👤 *Siswa:* %s
+📅 *Hari/Tanggal:* %s, %s
+⏰ *Waktu:* %s
+⏱️ *Durasi:* %d menit
+🎵 *Instrumen:* %s
+
+*Alasan:* %s
+
+Kuota siswa telah dikembalikan secara otomatis.
+
+🌐 %s
+🔔 %s Notification System`,
+		salutation, booking.Schedule.Teacher.Name,
+		booking.Student.Name,
+		dayName, dateStr, classTime,
+		booking.Schedule.Duration,
+		instrumentName,
+		cancelReason,
+		appURL, appName,
+	)
+
+	studentMsg := fmt.Sprintf(`*PEMBATALAN KELAS OLEH MANAJEMEN*
+
+Halo %s,
+
+⚠️ Kelas Anda telah dibatalkan oleh manajemen.
+
+*Detail Kelas:*
+👨‍🏫 *Guru:* %s
+📅 *Hari/Tanggal:* %s, %s
+⏰ *Waktu:* %s
+⏱️ *Durasi:* %d menit
+🎵 *Instrumen:* %s
+
+*Alasan:* %s
+
+✅ Kuota Anda telah dikembalikan dan dapat digunakan kembali.
+
+🌐 %s
+🔔 %s Notification System`,
+		booking.Student.Name,
+		booking.Schedule.Teacher.Name,
+		dayName, dateStr, classTime,
+		booking.Schedule.Duration,
+		instrumentName,
+		cancelReason,
+		appURL, appName,
+	)
+
+	mgr := s.messenger
+	tPhone := booking.Schedule.Teacher.Phone
+	sPhone := booking.Student.Phone
+	go func() {
+		sendWA(mgr, tPhone, teacherMsg)
+		sendWA(mgr, sPhone, studentMsg)
+	}()
+}
+
 func (s *managerService) GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]domain.TeacherSchedule, error) {
 	if teacherUUID == "" {
 		return nil, errors.New("UUID guru tidak boleh kosong")

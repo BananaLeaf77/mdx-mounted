@@ -19,6 +19,179 @@ func NewManagerRepository(db *gorm.DB) domain.ManagerRepository {
 	return &managerRepo{db: db}
 }
 
+func (r *managerRepo) GetAllBookedClasses(ctx context.Context) (*[]domain.Booking, error) {
+	var bookings []domain.Booking
+
+	if err := r.db.WithContext(ctx).
+		Preload("Student").
+		Preload("Schedule").
+		Preload("Schedule.Teacher").
+		Preload("Schedule.TeacherProfile.Instruments").
+		Preload("PackageUsed").
+		Preload("PackageUsed.Package").
+		Preload("PackageUsed.Package.Instrument").
+		Preload("ClassHistory").
+		Preload("CancelUser").
+		Where("status IN ?", []string{
+			domain.StatusBooked,
+			domain.StatusOngoing,
+			domain.StatusUpcoming,
+			domain.StatusRescheduled,
+			domain.StatusClassFinished,
+		}).
+		Order("class_date ASC").
+		Find(&bookings).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil data kelas: %w", err)
+	}
+	
+	loc, _ := time.LoadLocation("Asia/Makassar")
+	now := time.Now().In(loc)
+
+	for i := range bookings {
+		// Fix trial instrument
+		if bookings[i].PackageUsed.Package != nil && bookings[i].PackageUsed.Package.IsTrial {
+			var instrument domain.Instrument
+			r.db.WithContext(ctx).Where("id = ?", bookings[i].InstrumentID).First(&instrument)
+			packageCopy := *bookings[i].PackageUsed.Package
+			packageCopy.TrialInstrument = instrument.Name
+			bookings[i].PackageUsed.Package = &packageCopy
+		}
+
+		// Compute live status
+		parsedStart, _ := time.Parse("15:04", bookings[i].Schedule.StartTime)
+		parsedEnd, _ := time.Parse("15:04", bookings[i].Schedule.EndTime)
+		classDateLoc := bookings[i].ClassDate.In(loc)
+
+		classStart := time.Date(
+			classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day(),
+			parsedStart.Hour(), parsedStart.Minute(), 0, 0, loc,
+		)
+		classEnd := time.Date(
+			classDateLoc.Year(), classDateLoc.Month(), classDateLoc.Day(),
+			parsedEnd.Hour(), parsedEnd.Minute(), 0, 0, loc,
+		)
+
+		switch {
+		case now.Before(classStart):
+			bookings[i].Status = domain.StatusUpcoming
+		case now.After(classStart) && now.Before(classEnd):
+			bookings[i].Status = domain.StatusOngoing
+		case now.Equal(classEnd) || now.After(classEnd):
+			bookings[i].IsReadyToFinish = true
+			bookings[i].Status = domain.StatusClassFinished
+		}
+	}
+
+	return &bookings, nil
+}
+
+func (r *managerRepo) CancelBookedClass(ctx context.Context, bookingID int, managerUUID string, reason *string) error {
+	tx := r.db.WithContext(ctx).Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Load booking
+	var booking domain.Booking
+	if err := tx.
+		Preload("Schedule").
+		Preload("Schedule.Teacher").
+		Preload("Student").
+		Preload("PackageUsed").
+		Preload("PackageUsed.Package").
+		Preload("PackageUsed.Package.Instrument").
+		Where("id = ? AND status = ?", bookingID, domain.StatusBooked).
+		First(&booking).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("booking tidak ditemukan atau sudah dibatalkan")
+		}
+		return fmt.Errorf("gagal mengambil booking: %w", err)
+	}
+
+	cancelTime := time.Now()
+
+	// Update booking status
+	if err := tx.Model(&booking).
+		UpdateColumns(map[string]interface{}{
+			"status":       domain.StatusCancelled,
+			"cancelled_at": cancelTime,
+			"canceled_by":  managerUUID,
+			"notes":        reason,
+		}).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal membatalkan booking: %w", err)
+	}
+
+	// Refund quota
+	if err := tx.Model(&domain.StudentPackage{}).
+		Where("id = ?", booking.StudentPackageID).
+		Update("remaining_quota", gorm.Expr("remaining_quota + 1")).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal refund kuota: %w", err)
+	}
+
+	// Release overlapping schedules if no other active bookings
+	if err := tx.Exec(`
+		UPDATE teacher_schedules ts
+		SET is_booked = false
+		WHERE ts.teacher_uuid = ? AND ts.day_of_week = ?
+		  AND (ts.start_time::time, ts.end_time::time) OVERLAPS (?::time, ?::time)
+		  AND NOT EXISTS (
+		      SELECT 1 FROM bookings b
+		      JOIN teacher_schedules ts2 ON ts2.id = b.schedule_id
+		      WHERE b.status IN ('booked', 'rescheduled')
+		        AND ts2.teacher_uuid = ts.teacher_uuid
+		        AND ts2.day_of_week = ts.day_of_week
+		        AND (ts2.start_time::time, ts2.end_time::time) OVERLAPS (ts.start_time::time, ts.end_time::time)
+		  )
+	`, booking.Schedule.TeacherUUID, booking.Schedule.DayOfWeek,
+		booking.Schedule.StartTime, booking.Schedule.EndTime).Error; err != nil {
+		tx.Rollback()
+		return fmt.Errorf("gagal memperbarui status jadwal: %w", err)
+	}
+
+	// Upsert class history
+	var history domain.ClassHistory
+	err := tx.Where("booking_id = ?", booking.ID).First(&history).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if err := tx.Create(&domain.ClassHistory{
+			BookingID: booking.ID,
+			Status:    domain.StatusCancelled,
+			Notes:     reason,
+		}).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("gagal membuat riwayat kelas: %w", err)
+		}
+	} else if err == nil {
+		history.Status = domain.StatusCancelled
+		history.Notes = reason
+		if err := tx.Save(&history).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("gagal update class history: %w", err)
+		}
+	} else {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return fmt.Errorf("gagal menyimpan pembatalan: %w", err)
+	}
+
+	// Fix trial instrument for notification
+	if booking.PackageUsed.Package != nil && booking.PackageUsed.Package.Instrument == nil && booking.InstrumentID > 0 {
+		var inst domain.Instrument
+		if err := r.db.WithContext(ctx).Where("id = ?", booking.InstrumentID).First(&inst).Error; err == nil {
+			booking.PackageUsed.Package.Instrument = &inst
+		}
+	}
+
+	return nil
+}
+
 func (r *managerRepo) GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]domain.TeacherSchedule, error) {
 	var schedules []domain.TeacherSchedule
 	if err := r.db.WithContext(ctx).
@@ -433,9 +606,9 @@ func (r *managerRepo) CreateStudent(ctx context.Context, user *domain.User) (*do
 			return nil, errors.New("gagal mendapatkan UUID user")
 		}
 	}
-    
-    // Create StudentProfile
-    studentProfile := domain.StudentProfile{UserUUID: user.UUID}
+
+	// Create StudentProfile
+	studentProfile := domain.StudentProfile{UserUUID: user.UUID}
 	if err := tx.Create(&studentProfile).Error; err != nil {
 		tx.Rollback()
 		return nil, errors.New(utils.TranslateDBError(err))

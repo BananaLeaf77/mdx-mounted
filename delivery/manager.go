@@ -35,10 +35,89 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 		manager.PUT("/modify/student/:uuid", h.UpdateStudent)
 		manager.GET("/settings", h.GetSetting)
 		manager.PUT("/settings", h.UpdateSetting)
+		manager.GET("/booked-classes", h.GetAllBookedClasses)
+		manager.PUT("/booked-classes/:id/cancel", h.CancelBookedClass)
 
 		manager.GET("/class-histories/cancelled", h.GetCancelledClassHistories)
 		manager.POST("/rebook", h.RebookWithSubstitute)
 	}
+}
+
+func (h *ManagerHandler) GetAllBookedClasses(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	bookings, err := h.uc.GetAllBookedClasses(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetAllBookedClasses - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil data kelas",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetAllBookedClasses", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    bookings,
+		"total":   len(*bookings),
+		"message": "Data kelas berhasil diambil",
+	})
+}
+
+func (h *ManagerHandler) CancelBookedClass(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	managerUUID, exists := c.Get("userUUID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "konteks pengguna tidak ditemukan",
+		})
+		return
+	}
+
+	bookingID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || bookingID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "ID booking tidak valid",
+			"message": "Gagal membatalkan kelas",
+		})
+		return
+	}
+
+	var req dto.CancelBookingRequest
+	if err := c.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
+		utils.PrintLogInfo(&name, 400, "CancelBookedClass - BindJSON", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Body permintaan tidak valid",
+			"message": "Gagal membatalkan kelas",
+		})
+		return
+	}
+
+	if req.Reason != nil && len(*req.Reason) == 0 {
+		req.Reason = nil
+	}
+
+	if err := h.uc.CancelBookedClass(c.Request.Context(), bookingID, managerUUID.(string), req.Reason); err != nil {
+		utils.PrintLogInfo(&name, 500, "CancelBookedClass - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal membatalkan kelas",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "CancelBookedClass", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Kelas berhasil dibatalkan dan kuota telah dikembalikan",
+	})
 }
 
 func (h *ManagerHandler) GetTeacherSchedules(c *gin.Context) {
