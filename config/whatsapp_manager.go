@@ -90,7 +90,8 @@ func (m *WAManager) Connect() error {
 	// Clean up existing client properly
 	m.cleanupClientLocked()
 
-	m.client = whatsmeow.NewClient(deviceStore, nil)
+	clientLog := waLog.Stdout("Client", "DEBUG", true)
+	m.client = whatsmeow.NewClient(deviceStore, clientLog)
 	m.client.AutomaticMessageRerequestFromPhone = true
 	m.client.AutoTrustIdentity = true
 	m.client.UseRetryMessageStore = true
