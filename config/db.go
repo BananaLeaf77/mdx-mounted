@@ -69,9 +69,9 @@ func BootDB() (*gorm.DB, *string, error) {
 	}
 
 	// ✅ Configure connection pool with production-safe values
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
 
 	// ✅ Test connection with timeout
