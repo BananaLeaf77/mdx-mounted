@@ -67,13 +67,13 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 		log.Fatalf("❌ Failed to register daily reminder cron: %v", err)
 	}
 
-	_, err = c.AddFunc("0 5 * * *", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		if err := activateDuePackages(ctx, db, adminRepo, waMgr); err != nil {
-			log.Printf("❌ [CRON] activateDuePackages: %v", err)
-		}
-	})
+	// _, err = c.AddFunc("0 5 * * *", func() {
+	// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// 	defer cancel()
+	// 	if err := activateDuePackages(ctx, db, adminRepo, waMgr); err != nil {
+	// 		log.Printf("❌ [CRON] activateDuePackages: %v", err)
+	// 	}
+	// })
 
 	c.Start()
 	log.Println("✅ Cron Jobs started.")

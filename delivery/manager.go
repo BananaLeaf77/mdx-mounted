@@ -35,7 +35,7 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 		manager.PUT("/modify/student/:uuid", h.UpdateStudent)
 		manager.GET("/settings", h.GetSetting)
 		manager.PUT("/settings", h.UpdateSetting)
-		manager.GET("/booked-classes", h.GetAllBookedClasses)
+		manager.GET("/booked-classes", h.GetAllBookedClasses)	
 		manager.PUT("/booked-classes/:id/cancel", h.CancelBookedClass)
 
 		manager.GET("/class-histories/cancelled", h.GetCancelledClassHistories)
