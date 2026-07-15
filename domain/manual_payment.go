@@ -14,19 +14,19 @@ const (
 // ManualPayment tracks purchase requests that students initiate via WhatsApp.
 // Admin confirms (or rejects) them manually after receiving payment.
 type ManualPayment struct {
-	ID          int        `gorm:"primaryKey" json:"id"`
-	StudentUUID string     `gorm:"type:uuid;not null;index" json:"student_uuid"`
-	Student     User       `gorm:"foreignKey:StudentUUID;references:UUID" json:"student,omitempty"`
-	PackageID   int        `gorm:"not null" json:"package_id"`
-	Package     Package    `gorm:"foreignKey:PackageID" json:"package,omitempty"`
-	Status      string     `gorm:"size:20;default:'pending';index" json:"status"` // pending | confirmed | rejected
-	TotalAmount float64    `gorm:"not null;default:0" json:"total_amount"`
-	Notes         *string    `gorm:"type:text" json:"notes,omitempty"`            // admin notes on confirm/reject
+	ID            int        `gorm:"primaryKey" json:"id"`
+	StudentUUID   string     `gorm:"type:uuid;not null;index" json:"student_uuid"`
+	Student       User       `gorm:"foreignKey:StudentUUID;references:UUID" json:"student,omitempty"`
+	PackageID     int        `gorm:"not null" json:"package_id"`
+	Package       Package    `gorm:"foreignKey:PackageID" json:"package,omitempty"`
+	Status        string     `gorm:"size:20;default:'pending';index" json:"status"` // pending | confirmed | rejected
+	TotalAmount   float64    `gorm:"not null;default:0" json:"total_amount"`
+	Notes         *string    `gorm:"type:text" json:"notes,omitempty"`           // admin notes on confirm/reject
 	ProofImageURL *string    `gorm:"type:text" json:"proof_image_url,omitempty"` // optional payment proof (image URL)
 	ConfirmedBy   *string    `gorm:"type:uuid" json:"confirmed_by,omitempty"`    // admin UUID
-	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
-	CreatedAt   time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	ConfirmedAt   *time.Time `json:"confirmed_at,omitempty"`
+	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 
 	// Virtual — populated in service layer for the WA message preview
 	RegistrationFee float64 `gorm:"-" json:"registration_fee,omitempty"`
@@ -34,15 +34,28 @@ type ManualPayment struct {
 	IsFirstPurchase bool    `gorm:"-" json:"is_first_purchase,omitempty"`
 }
 
-// ManualPaymentConfirmRequest is the admin payload for confirming a payment.
-type ManualPaymentConfirmRequest struct {
-	ProofImageURL *string `json:"proof_image_url" binding:"omitempty,url"`
-	Notes         *string `json:"notes" binding:"omitempty,max=500"`
-}
-
 // ManualPaymentRejectRequest is the admin payload for rejecting a payment.
 type ManualPaymentRejectRequest struct {
 	Notes *string `json:"notes" binding:"omitempty,max=500"`
+}
+
+type PendingPackageActivation struct {
+	ID              int        `gorm:"primaryKey" json:"id"`
+	ManualPaymentID int        `gorm:"not null;index" json:"manual_payment_id"`
+	StudentUUID     string     `gorm:"type:uuid;not null;index" json:"student_uuid"`
+	PackageID       int        `gorm:"not null" json:"package_id"`
+	PricePaid       float64    `gorm:"not null" json:"price_paid"`
+	ActivateOn      time.Time  `gorm:"not null;index" json:"activate_on"`
+	Status          string     `gorm:"size:20;default:'scheduled';index" json:"status"` // scheduled | activated | cancelled
+	CreatedAt       time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	ActivatedAt     *time.Time `json:"activated_at,omitempty"`
+}
+
+// domain/manual_payment.go — extend the confirm request
+type ManualPaymentConfirmRequest struct {
+	ProofImageURL *string    `json:"proof_image_url" binding:"omitempty,url"`
+	Notes         *string    `json:"notes" binding:"omitempty,max=500"`
+	ActivateOn    *time.Time `json:"activate_on" binding:"omitempty"` // nil/today = activate now
 }
 
 // ManualPaymentUseCase is consumed by the delivery layer.
@@ -65,6 +78,8 @@ type ManualPaymentUseCase interface {
 	// RejectManualPayment marks a payment as rejected.
 	// Accessible by admin / manager.
 	RejectManualPayment(ctx context.Context, paymentID int, adminUUID string, req ManualPaymentRejectRequest) error
+
+	GetInvoicePDF(ctx context.Context, externalID string, requesterUUID string, isAdmin bool) ([]byte, error)
 }
 
 // ManualPaymentRepository handles persistence for manual payments.
@@ -74,6 +89,8 @@ type ManualPaymentRepository interface {
 	GetByStudent(ctx context.Context, studentUUID string) ([]ManualPayment, error)
 	GetByID(ctx context.Context, id int) (*ManualPayment, error)
 	UpdateStatus(ctx context.Context, id int, status string, adminUUID string, proofImageURL *string, notes *string, confirmedAt *time.Time) error
-	// HasPendingForPackage checks whether the student already has a pending request for the same package.
 	HasPendingForPackage(ctx context.Context, studentUUID string, packageID int) (bool, error)
+
+	CreatePendingActivation(ctx context.Context, pa *PendingPackageActivation) error
+	GetPaymentByExternalID(ctx context.Context, externalID string) (*Payment, error)
 }

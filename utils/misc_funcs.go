@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -143,4 +144,12 @@ func GetDayName(weekday time.Weekday) string {
 		time.Saturday:  "Sabtu",
 	}
 	return dayNames[weekday]
+}
+
+// utils/misc_funcs.go
+func GetAppName() string {
+	if name := os.Getenv("APP_NAME"); name != "" {
+		return name
+	}
+	return "MDX"
 }

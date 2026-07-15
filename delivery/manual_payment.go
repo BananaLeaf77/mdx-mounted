@@ -5,6 +5,7 @@ import (
 	"chronosphere/domain"
 	"chronosphere/middleware"
 	"chronosphere/utils"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -49,7 +50,32 @@ func NewManualPaymentHandler(
 		admin.GET("", h.GetAllManualPayments)
 		admin.PUT("/:id/confirm", h.ConfirmManualPayment)
 		admin.PUT("/:id/reject", h.RejectManualPayment)
+		admin.GET("/payment/invoice/:external_id", h.DownloadInvoice)
 	}
+}
+
+func (h *ManualPaymentHandler) DownloadInvoice(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+	externalID := c.Param("external_id")
+
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "Tidak terotorisasi"})
+		return
+	}
+	role, _ := c.Get("role") // however your middleware stores it — check config.AuthMiddleware for the exact key
+	isAdmin := role == "admin"
+
+	pdfBytes, err := h.uc.GetInvoicePDF(c.Request.Context(), externalID, userUUID.(string), isAdmin)
+	if err != nil {
+		utils.PrintLogInfo(&name, 404, "DownloadInvoice", &err)
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": err.Error(), "message": "Gagal mengambil invoice"})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "DownloadInvoice", nil)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=invoice-%s.pdf", externalID))
+	c.Data(http.StatusOK, "application/pdf", pdfBytes)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

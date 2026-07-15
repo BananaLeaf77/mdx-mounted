@@ -28,6 +28,30 @@ func (r *manualPaymentRepo) Create(ctx context.Context, mp *domain.ManualPayment
 	return nil
 }
 
+func (r *manualPaymentRepo) GetPaymentByExternalID(ctx context.Context, externalID string) (*domain.Payment, error) {
+	var payment domain.Payment
+	err := r.db.WithContext(ctx).
+		Preload("Student").
+		Preload("Package").
+		Preload("Package.Instrument").
+		Where("external_id = ?", externalID).
+		First(&payment).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("payment tidak ditemukan")
+		}
+		return nil, err
+	}
+	return &payment, nil
+}
+
+func (r *manualPaymentRepo) CreatePendingActivation(ctx context.Context, pa *domain.PendingPackageActivation) error {
+	if err := r.db.WithContext(ctx).Create(pa).Error; err != nil {
+		return fmt.Errorf("gagal menjadwalkan aktivasi paket: %w", err)
+	}
+	return nil
+}
+
 func (r *manualPaymentRepo) GetAll(ctx context.Context, status string) ([]domain.ManualPayment, error) {
 	var records []domain.ManualPayment
 

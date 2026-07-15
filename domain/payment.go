@@ -86,12 +86,11 @@ type PackageSummary struct {
 // ========================================================================
 
 type PaymentUseCase interface {
-	// Student
 	CreateInvoice(ctx context.Context, studentUUID string, packageID int) (*Payment, error)
 	HandleWebhook(ctx context.Context, payload XenditWebhookPayload) error
 	GetPaymentsByStudent(ctx context.Context, studentUUID string) ([]Payment, error)
+	GetInvoicePDF(ctx context.Context, externalID string, requesterUUID string, isAdmin bool) ([]byte, error) // NEW
 
-	// Admin Reporting
 	GetTotalProfit(ctx context.Context, filter ProfitFilter) (float64, error)
 	GetPaymentHistory(ctx context.Context, filter HistoryFilter) ([]Payment, int64, error)
 	GetPackageSummary(ctx context.Context) ([]PackageSummary, error)

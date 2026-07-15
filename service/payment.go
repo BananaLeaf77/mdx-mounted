@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"time"
 
@@ -199,6 +200,34 @@ func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, 
 	return payment, nil
 }
 
+func (s *paymentService) GetPaymentByExternalID(ctx context.Context, externalID string) (*domain.Payment, error) {
+	return s.paymentRepo.GetPaymentByExternalID(ctx, externalID)
+}
+
+func (s *paymentService) GetInvoicePDF(ctx context.Context, externalID string, requesterUUID string, isAdmin bool) ([]byte, error) {
+	payment, err := s.paymentRepo.GetPaymentByExternalID(ctx, externalID)
+	if err != nil {
+		return nil, fmt.Errorf("invoice tidak ditemukan: %w", err)
+	}
+	if payment.Status != domain.PaymentStatusPaid {
+		return nil, fmt.Errorf("invoice hanya tersedia untuk pembayaran yang sudah lunas")
+	}
+	if !isAdmin && payment.StudentUUID != requesterUUID {
+		return nil, fmt.Errorf("kamu tidak memiliki akses ke invoice ini")
+	}
+
+	student, err := s.adminRepo.GetStudentByUUID(ctx, payment.StudentUUID)
+	if err != nil {
+		return nil, fmt.Errorf("data siswa tidak ditemukan: %w", err)
+	}
+	pkg, err := s.adminRepo.GetPackagesByID(ctx, payment.PackageID)
+	if err != nil {
+		return nil, fmt.Errorf("data paket tidak ditemukan: %w", err)
+	}
+
+	return GenerateInvoicePDF(payment, student, pkg)
+}
+
 func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.XenditWebhookPayload) error {
 	payment, err := s.paymentRepo.GetPaymentByExternalID(ctx, payload.ExternalID)
 	if err != nil {
@@ -233,7 +262,7 @@ func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.Xendi
 				return err
 			}
 
-			if err := s.autoAssignPackage(ctx, payment.StudentUUID, payment.PackageID); err != nil {
+			if err := s.autoAssignPackage(ctx, payment.StudentUUID, payment.PackageID, payment.Amount, "payment", payment.ID); err != nil {
 				log.Printf("⚠️  Webhook auto-assign failed (admin can assign manually): %v", err)
 			}
 			return nil
@@ -271,12 +300,48 @@ func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.Xendi
 	return nil
 }
 
-func (s *paymentService) autoAssignPackage(ctx context.Context, studentUUID string, packageID int) error {
-	_, _, err := s.adminRepo.AssignPackageToStudent(ctx, studentUUID, packageID)
-	if err != nil {
+func BuildRecognitionRows(sourceType string, sourceID int, studentUUID string, packageID int,
+	total float64, months int, start time.Time) []domain.PaymentRecognition {
+
+	base := math.Floor(total / float64(months) / 1) // round down to whole rupiah
+	rows := make([]domain.PaymentRecognition, months)
+	running := 0.0
+	for i := 0; i < months; i++ {
+		d := start.AddDate(0, i, 0)
+		amt := base
+		if i == months-1 {
+			amt = total - running // last row absorbs the rounding remainder
+		}
+		running += amt
+		rows[i] = domain.PaymentRecognition{
+			SourceType: sourceType, SourceID: sourceID,
+			StudentUUID: studentUUID, PackageID: packageID,
+			PeriodYear: d.Year(), PeriodMonth: int(d.Month()), Amount: amt,
+		}
+	}
+	return rows
+}
+
+func (s *paymentService) autoAssignPackage(ctx context.Context, studentUUID string, packageID int, amount float64, sourceType string, sourceID int) error {
+	if _, _, err := s.adminRepo.AssignPackageToStudent(ctx, studentUUID, packageID); err != nil {
 		return fmt.Errorf("gagal mengaktifkan paket: %w", err)
 	}
 	log.Printf("✅ Auto-assigned package %d to student %s", packageID, studentUUID)
+
+	pkg, err := s.adminRepo.GetPackagesByID(ctx, packageID)
+	if err != nil {
+		log.Printf("⚠️ recognition rows skipped, package lookup failed: %v", err)
+		return nil // package is already assigned — don't fail the payment over a reporting side-effect
+	}
+	months := pkg.ExpiredMonths
+	if months <= 0 {
+		months = domain.DefaultPackageExpiredMonths
+	}
+
+	rows := BuildRecognitionRows(sourceType, sourceID, studentUUID, packageID, amount, months, time.Now())
+	if err := s.adminRepo.CreateRecognitionRows(ctx, rows); err != nil {
+		log.Printf("⚠️ failed to write recognition rows for %s #%d: %v", sourceType, sourceID, err)
+	}
 	return nil
 }
 
@@ -322,7 +387,7 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 🔗 https://mdxmusiccourse.cloud
 
 Terima kasih telah memilih MDX! 🌟`,
-		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredDuration,
+		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredMonths,
 	)
 
 	mgr := s.messenger

@@ -129,4 +129,7 @@ type AdminRepository interface {
 
 	// WhatsApp Cleanup
 	CleanupWhatsAppData(ctx context.Context, deviceJID string) error
+
+	// Payment
+	CreateRecognitionRows(ctx context.Context, rows []PaymentRecognition) error
 }

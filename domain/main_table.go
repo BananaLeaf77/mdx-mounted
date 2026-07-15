@@ -29,9 +29,10 @@ const (
 	RegularRoomLimit int64 = 8
 	DrumRoomLimit    int64 = 3
 
-	DefaultPackageExpiredDuration int = 30
-	PaymentMethodManual               = "Manual Assign"
-	PaymentMethodManualStatus         = "success"
+	PaymentMethodManual       = "Manual Assign"
+	PaymentMethodManualStatus = "success"
+
+	DefaultPackageExpiredMonths = 1
 )
 
 type User struct {
@@ -61,22 +62,22 @@ type StudentProfile struct {
 }
 
 type Package struct {
-	ID              int         `gorm:"primaryKey" json:"id"`
-	Name            string      `gorm:"not null" json:"name"`
-	Price           float64     `gorm:"not null" json:"price"`
-	PromoPrice      float64     `gorm:"default:0" json:"promo_price"`
-	IsPromoActive   bool        `gorm:"default:false" json:"is_promo_active"`
-	IsTrial         bool        `gorm:"default:false" json:"is_trial"`
-	IsActive        bool        `gorm:"default:true" json:"is_active"` // NEW
-	Quota           int         `gorm:"not null" json:"quota"`
-	Duration        int         `gorm:"not null" json:"duration"`
-	ExpiredDuration int         `json:"expired_duration"`
-	Description     string      `json:"description"`
-	InstrumentID    *int        `gorm:"default:null" json:"instrument_id"`
-	Instrument      *Instrument `gorm:"foreignKey:InstrumentID" json:"instrument,omitempty"`
-	CreatedAt       time.Time   `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt       time.Time   `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt       *time.Time  `gorm:"index" json:"deleted_at,omitempty"`
+	ID            int         `gorm:"primaryKey" json:"id"`
+	Name          string      `gorm:"not null" json:"name"`
+	Price         float64     `gorm:"not null" json:"price"`
+	PromoPrice    float64     `gorm:"default:0" json:"promo_price"`
+	IsPromoActive bool        `gorm:"default:false" json:"is_promo_active"`
+	IsTrial       bool        `gorm:"default:false" json:"is_trial"`
+	IsActive      bool        `gorm:"default:true" json:"is_active"` // NEW
+	Quota         int         `gorm:"not null" json:"quota"`
+	Duration      int         `gorm:"not null" json:"duration"`
+	ExpiredMonths int         `gorm:"not null;default:1" json:"expired_months"` // 1-12
+	Description   string      `json:"description"`
+	InstrumentID  *int        `gorm:"default:null" json:"instrument_id"`
+	Instrument    *Instrument `gorm:"foreignKey:InstrumentID" json:"instrument,omitempty"`
+	CreatedAt     time.Time   `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time   `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt     *time.Time  `gorm:"index" json:"deleted_at,omitempty"`
 
 	TrialInstrument string `gorm:"-" json:"trial_instrument"`
 }

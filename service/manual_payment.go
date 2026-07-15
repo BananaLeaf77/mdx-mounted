@@ -213,9 +213,29 @@ func (s *manualPaymentSvc) ConfirmManualPayment(
 		return err
 	}
 
-	// Auto-assign package — mirrors Xendit webhook behaviour
-	if _, _, err := s.adminRepo.AssignPackageToStudent(ctx, mp.StudentUUID, mp.PackageID); err != nil {
-		log.Printf("⚠️  ManualPayment #%d confirm: auto-assign failed (admin can assign manually): %v", paymentID, err)
+	if req.ActivateOn != nil && req.ActivateOn.After(time.Now().Truncate(24*time.Hour)) {
+		// Delayed activation — don't touch student_packages yet, the cron picks this up.
+		if err := s.repo.CreatePendingActivation(ctx, &domain.PendingPackageActivation{
+			ManualPaymentID: mp.ID, StudentUUID: mp.StudentUUID,
+			PackageID: mp.PackageID, PricePaid: mp.TotalAmount,
+			ActivateOn: req.ActivateOn.Truncate(24 * time.Hour),
+		}); err != nil {
+			log.Printf("⚠️ failed to schedule activation for #%d: %v", paymentID, err)
+		}
+	} else {
+		// Activate now — mirrors Xendit webhook behaviour.
+		if _, _, err := s.adminRepo.AssignPackageToStudent(ctx, mp.StudentUUID, mp.PackageID); err != nil {
+			log.Printf("⚠️  ManualPayment #%d confirm: auto-assign failed (admin can assign manually): %v", paymentID, err)
+		} else if pkg, err := s.adminRepo.GetPackagesByID(ctx, mp.PackageID); err == nil {
+			months := pkg.ExpiredMonths
+			if months <= 0 {
+				months = domain.DefaultPackageExpiredMonths
+			}
+			rows := BuildRecognitionRows("manual_payment", mp.ID, mp.StudentUUID, mp.PackageID, mp.TotalAmount, months, time.Now())
+			if err := s.adminRepo.CreateRecognitionRows(ctx, rows); err != nil {
+				log.Printf("⚠️ failed to write recognition rows for manual_payment #%d: %v", mp.ID, err)
+			}
+		}
 	}
 
 	mpCopy := *mp
@@ -326,7 +346,7 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 			"- Instrumen: %s\n"+
 			"- Durasi: %d Menit\n"+
 			"- Kuota: %d Sesi\n"+
-			"- Masa Berlaku: %s\n\n"+
+			"- Masa Berlaku: %d Bulan\n\n"+
 			"💰 *Rincian Biaya:*\n"+
 			"- Biaya Pendaftaran: %s\n"+
 			"- Harga Paket: Rp%.0f\n"+
@@ -337,7 +357,7 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 		os.Getenv("APP_NAME"),
 		mp.ID,
 		student.Name, student.Email, student.Phone,
-		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, manualFormatExpired(pkg.ExpiredDuration),
+		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, pkg.ExpiredMonths,
 		regFeeStr, mp.PackagePrice, mp.TotalAmount,
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"),
@@ -346,6 +366,30 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 	if err := s.messenger.SendMessage(normalized, msg); err != nil {
 		log.Printf("⚠️ WA admin manual-payment notify failed: %v", err)
 	}
+}
+
+func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string, requesterUUID string, isAdmin bool) ([]byte, error) {
+	payment, err := s.repo.GetPaymentByExternalID(ctx, externalID)
+	if err != nil {
+		return nil, fmt.Errorf("invoice tidak ditemukan: %w", err)
+	}
+	if payment.Status != domain.PaymentStatusPaid {
+		return nil, fmt.Errorf("invoice hanya tersedia untuk pembayaran yang sudah lunas")
+	}
+	if !isAdmin && payment.StudentUUID != requesterUUID {
+		return nil, fmt.Errorf("kamu tidak memiliki akses ke invoice ini")
+	}
+
+	student, err := s.adminRepo.GetStudentByUUID(ctx, payment.StudentUUID)
+	if err != nil {
+		return nil, fmt.Errorf("data siswa tidak ditemukan: %w", err)
+	}
+	pkg, err := s.adminRepo.GetPackagesByID(ctx, payment.PackageID)
+	if err != nil {
+		return nil, fmt.Errorf("data paket tidak ditemukan: %w", err)
+	}
+
+	return GenerateInvoicePDF(payment, student, pkg)
 }
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {

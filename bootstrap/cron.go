@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, waMgr *config.WAManager) *cron.Cron {
+func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, waMgr *config.WAManager, adminRepo domain.AdminRepository) *cron.Cron {
 	log.Println("⏰ Initializing Cron Jobs...")
 
 	c := cron.New(cron.WithLocation(time.Local))
@@ -67,9 +67,87 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 		log.Fatalf("❌ Failed to register daily reminder cron: %v", err)
 	}
 
+	_, err = c.AddFunc("0 5 * * *", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := activateDuePackages(ctx, db, adminRepo, waMgr); err != nil {
+			log.Printf("❌ [CRON] activateDuePackages: %v", err)
+		}
+	})
+
 	c.Start()
 	log.Println("✅ Cron Jobs started.")
 	return c
+}
+
+func activateDuePackages(ctx context.Context, db *gorm.DB, adminRepo domain.AdminRepository, waMgr *config.WAManager) error {
+	today := time.Now().Truncate(24 * time.Hour)
+
+	var due []domain.PendingPackageActivation
+	if err := db.WithContext(ctx).
+		Where("status = ? AND activate_on <= ?", "scheduled", today).
+		Find(&due).Error; err != nil {
+		return fmt.Errorf("gagal mengambil jadwal aktivasi: %w", err)
+	}
+
+	log.Printf("⏰ [CRON] %d package(s) due for activation", len(due))
+
+	for _, pa := range due {
+		if _, _, err := adminRepo.AssignPackageToStudent(ctx, pa.StudentUUID, pa.PackageID); err != nil {
+			log.Printf("❌ [CRON] activation failed for pending #%d: %v", pa.ID, err)
+			continue
+		}
+
+		now := time.Now()
+		if err := db.WithContext(ctx).
+			Model(&domain.PendingPackageActivation{}).
+			Where("id = ?", pa.ID).
+			Updates(map[string]interface{}{"status": "activated", "activated_at": &now}).Error; err != nil {
+			log.Printf("⚠️ [CRON] activated #%d but failed to update status: %v", pa.ID, err)
+		}
+
+		notifyPackageActivated(ctx, adminRepo, waMgr, pa.StudentUUID, pa.PackageID)
+	}
+
+	log.Printf("✅ [CRON] activateDuePackages done")
+	return nil
+}
+
+func notifyPackageActivated(ctx context.Context, adminRepo domain.AdminRepository, waMgr *config.WAManager, studentUUID string, packageID int) {
+	if waMgr == nil || !waMgr.IsLoggedIn() {
+		return
+	}
+	student, err := adminRepo.GetStudentByUUID(ctx, studentUUID)
+	if err != nil {
+		return
+	}
+	pkg, err := adminRepo.GetPackagesByID(ctx, packageID)
+	if err != nil {
+		return
+	}
+	phone := utils.NormalizePhoneNumber(student.Phone)
+	if phone == "" {
+		return
+	}
+
+	appURL := "https://www.mdxmusiccourse.cloud/"
+	appName := utils.GetAppName()
+
+	msg := fmt.Sprintf(
+		"🎉 Halo %s!\n\n"+
+			"✅ *Paket Aktif!*\n\n"+
+			"Paket *\"%s\"* kamu sekarang sudah aktif dan siap digunakan.\n\n"+
+			"📅 Kuota: %d sesi\n\n"+
+			"Silakan login untuk mulai booking sesi. Selamat belajar! 🎵\n\n"+
+			"🌐 %s\n"+
+			"🔔 %s Notification System",
+		student.Name, pkg.Name, pkg.Quota,
+		appURL, appName,
+	)
+
+	if err := waMgr.SendMessage(phone, msg); err != nil {
+		log.Printf("⚠️ WA activation notify failed for %s: %v", phone, err)
+	}
 }
 
 // Renamed from sendWeeklyBookingReminder to sendDailyBookingReminder

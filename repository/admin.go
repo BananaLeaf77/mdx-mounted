@@ -22,6 +22,16 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) CreateRecognitionRows(ctx context.Context, rows []domain.PaymentRecognition) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	if err := r.db.WithContext(ctx).Create(&rows).Error; err != nil {
+		return fmt.Errorf("gagal menyimpan data pengakuan pendapatan: %w", err)
+	}
+	return nil
+}
+
 func (r *adminRepo) TogglePackageActive(ctx context.Context, id int, isActive bool) error {
 	result := r.db.WithContext(ctx).
 		Model(&domain.Package{}).
@@ -535,17 +545,17 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 
 	// Use explicit map to avoid GORM zero-value issues
 	updates := map[string]interface{}{
-		"name":             pkg.Name,
-		"price":            pkg.Price,
-		"promo_price":      pkg.PromoPrice,
-		"is_promo_active":  pkg.IsPromoActive,
-		"is_trial":         pkg.IsTrial,
-		"quota":            pkg.Quota,
-		"duration":         pkg.Duration,
-		"description":      pkg.Description,
-		"instrument_id":    pkg.InstrumentID,
-		"expired_duration": pkg.ExpiredDuration,
-		"is_active":        existing.IsActive, // always preserve existing is_active
+		"name":            pkg.Name,
+		"price":           pkg.Price,
+		"promo_price":     pkg.PromoPrice,
+		"is_promo_active": pkg.IsPromoActive,
+		"is_trial":        pkg.IsTrial,
+		"quota":           pkg.Quota,
+		"duration":        pkg.Duration,
+		"description":     pkg.Description,
+		"instrument_id":   pkg.InstrumentID,
+		"expired_months":  pkg.ExpiredMonths,
+		"is_active":       existing.IsActive, // always preserve existing is_active
 	}
 
 	if err := r.db.WithContext(ctx).
@@ -632,9 +642,9 @@ func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUI
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDuration := pkg.ExpiredDuration
+	expiredDuration := pkg.ExpiredMonths
 	if expiredDuration <= 0 {
-		expiredDuration = domain.DefaultPackageExpiredDuration
+		expiredDuration = domain.DefaultPackageExpiredMonths
 	}
 
 	newSub := domain.StudentPackage{
@@ -754,9 +764,9 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDuration := pkg.ExpiredDuration
+	expiredDuration := pkg.ExpiredMonths
 	if expiredDuration <= 0 {
-		expiredDuration = domain.DefaultPackageExpiredDuration
+		expiredDuration = domain.DefaultPackageExpiredMonths
 	}
 
 	remainingQuota := pkg.Quota
@@ -764,13 +774,18 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		remainingQuota = 1
 	}
 
+	// repository/admin.go — AssignPackageToStudent
+	months := pkg.ExpiredMonths
+	if months <= 0 {
+		months = domain.DefaultPackageExpiredMonths
+	}
 	newSub := domain.StudentPackage{
 		StudentUUID:    studentUUID,
 		PackageID:      packageID,
 		RemainingQuota: remainingQuota,
 		PricePaid:      pricePaid,
 		StartDate:      time.Now(),
-		EndDate:        time.Now().AddDate(0, 0, expiredDuration),
+		EndDate:        time.Now().AddDate(0, months, 0), // calendar months, not *30
 	}
 
 	if err := tx.Create(&newSub).Error; err != nil {

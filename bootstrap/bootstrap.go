@@ -114,7 +114,7 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 	delivery.NewUploadHandler(app, authService.GetAccessTokenManager())
 	delivery.NewManualPaymentHandler(app, manualPaymentService, authService.GetAccessTokenManager())
 
-	c := InitCron(teacherPaymentService, db, waMgr)
+	c := InitCron(teacherPaymentService, db, waMgr, adminRepo)
 
 	return app, db, c
 }
