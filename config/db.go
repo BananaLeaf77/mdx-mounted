@@ -124,6 +124,7 @@ func runMigrations(db *gorm.DB) error {
 		&domain.ClassDocumentation{},
 		&domain.Setting{},
 		&domain.ManualPayment{},
+		&domain.PendingPackageActivation{},
 	}
 
 	for _, m := range models {
