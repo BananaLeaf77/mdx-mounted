@@ -40,6 +40,7 @@ func NewPaymentHandler(r *gin.Engine, uc domain.PaymentUseCase, jwtManager *util
 		admin.GET("/payment/profit", handler.GetTotalProfit)
 		admin.GET("/payment/history", handler.GetPaymentHistoryAdmin)
 		admin.GET("/payment/summary", handler.GetPackageSummary)
+		admin.GET("/payment/revenue-recognition", handler.GetMonthlyRecognizedRevenue)
 		admin.GET("/payment/invoice/:external_id", handler.DownloadInvoice)
 	}
 
@@ -301,6 +302,44 @@ func (h *PaymentHandler) GetPaymentHistoryAdmin(c *gin.Context) {
 			"total":       total,
 			"total_pages": int(math.Ceil(float64(total) / float64(filter.Limit))),
 		},
+	})
+}
+
+// GetMonthlyRecognizedRevenue returns revenue grouped by accounting period
+// (period_year/period_month), sourced from payment_recognitions. This is the
+// "spread across duration" view — e.g. a 3-month package confirmed in July
+// shows up as 1/3 in July, 1/3 in August, 1/3 in September — as opposed to
+// GetTotalProfit/GetPaymentHistory which show the full amount on paid_at.
+func (h *PaymentHandler) GetMonthlyRecognizedRevenue(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	var filter domain.MonthlyRevenueFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.PrintLogInfo(&name, 400, "GetMonthlyRecognizedRevenue - BindQuery", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Parameter filter tidak valid",
+			"message": "Gagal mengambil data pengakuan pendapatan",
+		})
+		return
+	}
+
+	revenue, err := h.uc.GetMonthlyRecognizedRevenue(c.Request.Context(), filter)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "GetMonthlyRecognizedRevenue", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil data pengakuan pendapatan",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetMonthlyRecognizedRevenue", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    revenue,
+		"filter":  filter,
 	})
 }
 

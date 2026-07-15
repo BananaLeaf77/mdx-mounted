@@ -81,6 +81,22 @@ type PackageSummary struct {
 	TotalRevenue float64 `json:"total_revenue"`
 }
 
+// MonthlyRevenueFilter scopes the recognized-revenue report to a period range.
+// Both bounds are optional and use "YYYY-MM" format (e.g. "2026-07").
+type MonthlyRevenueFilter struct {
+	StartPeriod string `form:"start_period"` // YYYY-MM
+	EndPeriod   string `form:"end_period"`   // YYYY-MM
+}
+
+// MonthlyRevenue is one row of recognized revenue for a given accounting period,
+// aggregated from payment_recognitions (i.e. already split across a package's
+// duration, not the lump sum paid on a single date).
+type MonthlyRevenue struct {
+	PeriodYear  int     `json:"period_year"`
+	PeriodMonth int     `json:"period_month"`
+	Amount      float64 `json:"amount"`
+}
+
 // ========================================================================
 // Interfaces
 // ========================================================================
@@ -94,6 +110,10 @@ type PaymentUseCase interface {
 	GetTotalProfit(ctx context.Context, filter ProfitFilter) (float64, error)
 	GetPaymentHistory(ctx context.Context, filter HistoryFilter) ([]Payment, int64, error)
 	GetPackageSummary(ctx context.Context) ([]PackageSummary, error)
+
+	// GetMonthlyRecognizedRevenue returns revenue grouped by accounting period,
+	// sourced from payment_recognitions (covers both Xendit and manual payments).
+	GetMonthlyRecognizedRevenue(ctx context.Context, filter MonthlyRevenueFilter) ([]MonthlyRevenue, error)
 }
 
 type PaymentRepository interface {
@@ -106,4 +126,5 @@ type PaymentRepository interface {
 	GetTotalProfit(ctx context.Context, filter ProfitFilter) (float64, error)
 	GetPaymentHistory(ctx context.Context, filter HistoryFilter) ([]Payment, int64, error)
 	GetPackageSummary(ctx context.Context) ([]PackageSummary, error)
+	GetMonthlyRecognizedRevenue(ctx context.Context, filter MonthlyRevenueFilter) ([]MonthlyRevenue, error)
 }

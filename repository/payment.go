@@ -155,3 +155,52 @@ func (r *paymentRepo) GetPackageSummary(ctx context.Context) ([]domain.PackageSu
 
 	return summaries, nil
 }
+
+// GetMonthlyRecognizedRevenue aggregates payment_recognitions by accounting
+// period (year + month), covering both Xendit payments and manual payments
+// since recognition rows are written for both source types on confirmation.
+// Unlike GetTotalProfit/GetPaymentHistory (which bucket by paid_at/created_at
+// and show the full lump sum on a single date), this reflects revenue spread
+// evenly across a package's duration — e.g. a 3-month 1.2jt package confirmed
+// in July shows 400k in July, 400k in August, 400k in September.
+func (r *paymentRepo) GetMonthlyRecognizedRevenue(ctx context.Context, filter domain.MonthlyRevenueFilter) ([]domain.MonthlyRevenue, error) {
+	var rows []domain.MonthlyRevenue
+
+	query := r.db.WithContext(ctx).
+		Table("payment_recognitions").
+		Select("period_year, period_month, COALESCE(SUM(amount), 0) as amount")
+
+	if filter.StartPeriod != "" {
+		year, month, err := parseRevenuePeriod(filter.StartPeriod)
+		if err != nil {
+			return nil, fmt.Errorf("start_period tidak valid, gunakan format YYYY-MM: %w", err)
+		}
+		query = query.Where("(period_year * 100 + period_month) >= ?", year*100+month)
+	}
+	if filter.EndPeriod != "" {
+		year, month, err := parseRevenuePeriod(filter.EndPeriod)
+		if err != nil {
+			return nil, fmt.Errorf("end_period tidak valid, gunakan format YYYY-MM: %w", err)
+		}
+		query = query.Where("(period_year * 100 + period_month) <= ?", year*100+month)
+	}
+
+	err := query.
+		Group("period_year, period_month").
+		Order("period_year ASC, period_month ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch monthly recognized revenue: %w", err)
+	}
+
+	return rows, nil
+}
+
+// parseRevenuePeriod parses a "YYYY-MM" string into its year/month parts.
+func parseRevenuePeriod(s string) (year, month int, err error) {
+	t, err := time.Parse("2006-01", s)
+	if err != nil {
+		return 0, 0, err
+	}
+	return t.Year(), int(t.Month()), nil
+}

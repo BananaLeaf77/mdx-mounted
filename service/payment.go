@@ -357,6 +357,10 @@ func (s *paymentService) GetPaymentHistory(ctx context.Context, filter domain.Hi
 	return s.paymentRepo.GetPaymentHistory(ctx, filter)
 }
 
+func (s *paymentService) GetMonthlyRecognizedRevenue(ctx context.Context, filter domain.MonthlyRevenueFilter) ([]domain.MonthlyRevenue, error) {
+	return s.paymentRepo.GetMonthlyRecognizedRevenue(ctx, filter)
+}
+
 func (s *paymentService) GetPackageSummary(ctx context.Context) ([]domain.PackageSummary, error) {
 	return s.paymentRepo.GetPackageSummary(ctx)
 }
