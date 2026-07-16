@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -369,27 +370,37 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 }
 
 func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string, requesterUUID string, isAdmin bool) ([]byte, error) {
-	payment, err := s.repo.GetPaymentByExternalID(ctx, externalID)
+	id, err := strconv.Atoi(externalID)
+	if err != nil {
+		return nil, fmt.Errorf("id invoice tidak valid")
+	}
+
+	mp, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("invoice tidak ditemukan: %w", err)
 	}
-	if payment.Status != domain.PaymentStatusPaid {
-		return nil, fmt.Errorf("invoice hanya tersedia untuk pembayaran yang sudah lunas")
+	if mp.Status != domain.ManualPaymentStatusConfirmed {
+		return nil, fmt.Errorf("invoice hanya tersedia untuk pembayaran yang sudah lunas/dikonfirmasi")
 	}
-	if !isAdmin && payment.StudentUUID != requesterUUID {
+	if !isAdmin && mp.StudentUUID != requesterUUID {
 		return nil, fmt.Errorf("kamu tidak memiliki akses ke invoice ini")
 	}
 
-	student, err := s.adminRepo.GetStudentByUUID(ctx, payment.StudentUUID)
+	student, err := s.adminRepo.GetStudentByUUID(ctx, mp.StudentUUID)
 	if err != nil {
 		return nil, fmt.Errorf("data siswa tidak ditemukan: %w", err)
 	}
-	pkg, err := s.adminRepo.GetPackagesByID(ctx, payment.PackageID)
+	pkg, err := s.adminRepo.GetPackagesByID(ctx, mp.PackageID)
 	if err != nil {
 		return nil, fmt.Errorf("data paket tidak ditemukan: %w", err)
 	}
 
-	return GenerateInvoicePDF(payment, student, pkg)
+	mockPayment := &domain.Payment{
+		ExternalID: fmt.Sprintf("INV-MP-%d", mp.ID),
+		Amount:     mp.TotalAmount,
+	}
+
+	return GenerateInvoicePDF(mockPayment, student, pkg)
 }
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
