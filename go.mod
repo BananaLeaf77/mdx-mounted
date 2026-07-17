@@ -71,3 +71,5 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace go.mau.fi/whatsmeow => github.com/madeu2100-ctrl/whatsmeow v0.0.0-20260717144527-ade5cdef0d12
