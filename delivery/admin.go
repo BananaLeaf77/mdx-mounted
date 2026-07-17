@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 // AdminHandler handles admin routes
@@ -961,13 +962,18 @@ func (h *AdminHandler) ConnectWhatsApp(c *gin.Context) {
 
 func (h *AdminHandler) DisconnectWhatsApp(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
+
+	log.Warn().Msg(fmt.Sprintf("WhatsApp disconnect triggered by %s", name))
+	utils.PrintLogInfo(&name, 200, "DisconnectWhatsApp - Hit", nil)
+
 	err := h.uc.DisconnectWhatsApp(c.Request.Context())
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "DisconnectWhatsApp - UseCase", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
-	utils.PrintLogInfo(&name, 200, "DisconnectWhatsApp", nil)
+
+	utils.PrintLogInfo(&name, 200, "DisconnectWhatsApp - Success", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "WhatsApp berhasil diputus"})
 }
 
