@@ -35,16 +35,6 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 		log.Fatal("❌ Failed to connect to database: ", err)
 	}
 
-	// ── WhatsApp ──────────────────────────────────────────────────────────────
-	var waMgr *config.WAManager
-	if waEnabled {
-		waMgr, err = config.InitWA(*dbAddr)
-		if err != nil {
-			// Non-fatal: log and continue without WhatsApp.
-			log.Printf("⚠️  WhatsApp init failed: %v", err)
-		}
-	}
-
 	// ── Redis ─────────────────────────────────────────────────────────────────
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
@@ -55,6 +45,16 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 		log.Fatal("❌ REDIS_PASSWORD not set")
 	}
 	redisClient := config.InitRedisDB(redisAddr, redisPass, 0)
+
+	// ── WhatsApp ──────────────────────────────────────────────────────────────
+	var waMgr *config.WAManager
+	if waEnabled {
+		waMgr, err = config.InitWA(*dbAddr)
+		if err != nil {
+			// Non-fatal: log and continue without WhatsApp.
+			log.Printf("⚠️  WhatsApp init failed: %v", err)
+		}
+	}
 
 	// ── JWT ───────────────────────────────────────────────────────────────────
 	jwtSecret := os.Getenv("JWT_SECRET")
