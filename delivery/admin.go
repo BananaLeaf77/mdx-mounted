@@ -956,6 +956,8 @@ func (h *AdminHandler) ConnectWhatsApp(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
+
+	log.Warn().Msg(fmt.Sprintf("WhatsApp connect triggered by: %s, Details: %v", name, status))
 	utils.PrintLogInfo(&name, 200, "ConnectWhatsApp", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
 }
@@ -963,10 +965,17 @@ func (h *AdminHandler) ConnectWhatsApp(c *gin.Context) {
 func (h *AdminHandler) DisconnectWhatsApp(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
 
-	log.Warn().Msg(fmt.Sprintf("WhatsApp disconnect triggered by %s", name))
+	status, err := h.uc.GetWhatsAppStatus(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "GetWhatsAppStatus - UseCase", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	log.Warn().Msg(fmt.Sprintf("WhatsApp disconnect triggered by: %s, Details: %v", name, status))
 	utils.PrintLogInfo(&name, 200, "DisconnectWhatsApp - Hit", nil)
 
-	err := h.uc.DisconnectWhatsApp(c.Request.Context())
+	err = h.uc.DisconnectWhatsApp(c.Request.Context())
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "DisconnectWhatsApp - UseCase", &err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
