@@ -956,6 +956,8 @@ func (h *AdminHandler) ConnectWhatsApp(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
+
+	log.Warn().Msg(fmt.Sprintf("WhatsApp connect triggered by: %s, Details: %v", name, status))
 	utils.PrintLogInfo(&name, 200, "ConnectWhatsApp", nil)
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": status})
 }
