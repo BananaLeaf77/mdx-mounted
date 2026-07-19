@@ -46,8 +46,8 @@ func (r *adminRepo) GetRecognitionRows(ctx context.Context, filter domain.Recogn
 		Joins("LEFT JOIN users u ON u.uuid = pr.student_uuid").
 		Joins("LEFT JOIN packages p ON p.id = pr.package_id")
 
-	if filter.StudentUUID != "" {
-		base = base.Where("pr.student_uuid = ?", filter.StudentUUID)
+	if filter.StudentName != "" {
+		base = base.Where("u.name ILIKE ?", "%"+filter.StudentName+"%")
 	}
 	if filter.PackageID != 0 {
 		base = base.Where("pr.package_id = ?", filter.PackageID)

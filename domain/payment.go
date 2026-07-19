@@ -26,7 +26,7 @@ type BackfillResult struct {
 
 // RecognitionRowFilter scopes a detailed, paginated recognition-row query.
 type RecognitionRowFilter struct {
-	StudentUUID string `form:"student_uuid"`
+	StudentName string `form:"student_name"`
 	PackageID   int    `form:"package_id"`
 	StartPeriod string `form:"start_period"` // YYYY-MM
 	EndPeriod   string `form:"end_period"`   // YYYY-MM
