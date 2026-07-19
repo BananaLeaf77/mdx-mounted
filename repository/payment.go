@@ -22,6 +22,16 @@ func (r *paymentRepo) CreatePayment(ctx context.Context, payment *domain.Payment
 	return r.db.WithContext(ctx).Create(payment).Error
 }
 
+func (r *paymentRepo) GetAllPaidPayments(ctx context.Context) ([]domain.Payment, error) {
+	var payments []domain.Payment
+	if err := r.db.WithContext(ctx).
+		Where("status = ?", domain.PaymentStatusPaid).
+		Find(&payments).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch paid payments: %w", err)
+	}
+	return payments, nil
+}
+
 func (r *paymentRepo) GetPaymentByExternalID(ctx context.Context, externalID string) (*domain.Payment, error) {
 	var payment domain.Payment
 	err := r.db.WithContext(ctx).

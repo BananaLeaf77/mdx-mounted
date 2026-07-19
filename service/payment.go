@@ -38,6 +38,103 @@ func NewPaymentService(paymentRepo domain.PaymentRepository, adminRepo domain.Ad
 	}
 }
 
+func (s *paymentService) BackfillPaymentRecognitions(ctx context.Context) (*domain.BackfillResult, error) {
+	result := &domain.BackfillResult{}
+
+	recognizedPayments, err := s.adminRepo.GetExistingRecognitionSourceIDs(ctx, "payment")
+	if err != nil {
+		return nil, err
+	}
+	recognizedManual, err := s.adminRepo.GetExistingRecognitionSourceIDs(ctx, "manual_payment")
+	if err != nil {
+		return nil, err
+	}
+
+	pkgCache := make(map[int]*domain.Package)
+	getPkg := func(id int) (*domain.Package, error) {
+		if p, ok := pkgCache[id]; ok {
+			return p, nil
+		}
+		p, err := s.adminRepo.GetPackagesByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		pkgCache[id] = p
+		return p, nil
+	}
+
+	var newRows []domain.PaymentRecognition
+
+	// ── Xendit payments ──────────────────────────────────────────────
+	payments, err := s.paymentRepo.GetAllPaidPayments(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result.PaymentsScanned = len(payments)
+
+	for _, p := range payments {
+		if recognizedPayments[p.ID] {
+			result.Skipped++
+			continue
+		}
+		if p.PaidAt == nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("payment #%d: no paid_at, skipped", p.ID))
+			continue
+		}
+		pkg, err := getPkg(p.PackageID)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("payment #%d: package lookup failed: %v", p.ID, err))
+			continue
+		}
+		months := pkg.ExpiredDays / 30
+		if months <= 0 {
+			months = 1
+		}
+		newRows = append(newRows, BuildRecognitionRows("payment", p.ID, p.StudentUUID, p.PackageID, p.Amount, months, *p.PaidAt)...)
+	}
+
+	// ── Manual payments ──────────────────────────────────────────────
+	var manualPayments []domain.ManualPayment
+	if err := s.db.WithContext(ctx).
+		Where("status = ?", domain.ManualPaymentStatusConfirmed).
+		Find(&manualPayments).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch confirmed manual payments: %w", err)
+	}
+	result.ManualPaymentsScanned = len(manualPayments)
+
+	for _, mp := range manualPayments {
+		if recognizedManual[mp.ID] {
+			result.Skipped++
+			continue
+		}
+		if mp.ConfirmedAt == nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("manual_payment #%d: no confirmed_at, skipped", mp.ID))
+			continue
+		}
+		pkg, err := getPkg(mp.PackageID)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("manual_payment #%d: package lookup failed: %v", mp.ID, err))
+			continue
+		}
+		months := pkg.ExpiredDays / 30
+		if months <= 0 {
+			months = 1
+		}
+		newRows = append(newRows, BuildRecognitionRows("manual_payment", mp.ID, mp.StudentUUID, mp.PackageID, mp.TotalAmount, months, *mp.ConfirmedAt)...)
+	}
+
+	if err := s.adminRepo.CreateRecognitionRows(ctx, newRows); err != nil {
+		return nil, err
+	}
+	result.RowsCreated = len(newRows)
+
+	return result, nil
+}
+
+func (s *paymentService) GetRecognitionRows(ctx context.Context, filter domain.RecognitionRowFilter) ([]domain.RecognitionRowDetail, int64, error) {
+	return s.adminRepo.GetRecognitionRows(ctx, filter)
+}
+
 func (s *paymentService) CreateInvoice(ctx context.Context, studentUUID string, packageID int) (*domain.Payment, error) {
 	student, err := s.adminRepo.GetStudentByUUID(ctx, studentUUID)
 	if err != nil {

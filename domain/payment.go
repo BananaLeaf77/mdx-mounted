@@ -15,6 +15,41 @@ const (
 	PaymentMethodManualConfirm = "Manual Confirmation"
 )
 
+// BackfillResult reports what the one-time recognition backfill did.
+type BackfillResult struct {
+	PaymentsScanned       int      `json:"payments_scanned"`
+	ManualPaymentsScanned int      `json:"manual_payments_scanned"`
+	RowsCreated           int      `json:"rows_created"`
+	Skipped               int      `json:"skipped_already_recognized"`
+	Errors                []string `json:"errors,omitempty"`
+}
+
+// RecognitionRowFilter scopes a detailed, paginated recognition-row query.
+type RecognitionRowFilter struct {
+	StudentUUID string `form:"student_uuid"`
+	PackageID   int    `form:"package_id"`
+	StartPeriod string `form:"start_period"` // YYYY-MM
+	EndPeriod   string `form:"end_period"`   // YYYY-MM
+	Page        int    `form:"page,default=1"`
+	Limit       int    `form:"limit,default=20"`
+}
+
+// RecognitionRowDetail is one payment_recognitions row enriched with
+// human-readable student/package names, for admin & finance auditing.
+type RecognitionRowDetail struct {
+	ID          int       `json:"id"`
+	SourceType  string    `json:"source_type"`
+	SourceID    int       `json:"source_id"`
+	StudentUUID string    `json:"student_uuid"`
+	StudentName string    `json:"student_name"`
+	PackageID   int       `json:"package_id"`
+	PackageName string    `json:"package_name"`
+	PeriodYear  int       `json:"period_year"`
+	PeriodMonth int       `json:"period_month"`
+	Amount      float64   `json:"amount"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type Payment struct {
 	ID              int        `gorm:"primaryKey" json:"id"`
 	StudentUUID     string     `gorm:"type:uuid;not null" json:"student_uuid"`
@@ -114,6 +149,8 @@ type PaymentUseCase interface {
 	// GetMonthlyRecognizedRevenue returns revenue grouped by accounting period,
 	// sourced from payment_recognitions (covers both Xendit and manual payments).
 	GetMonthlyRecognizedRevenue(ctx context.Context, filter MonthlyRevenueFilter) ([]MonthlyRevenue, error)
+	BackfillPaymentRecognitions(ctx context.Context) (*BackfillResult, error)
+	GetRecognitionRows(ctx context.Context, filter RecognitionRowFilter) ([]RecognitionRowDetail, int64, error)
 }
 
 type PaymentRepository interface {
@@ -127,4 +164,5 @@ type PaymentRepository interface {
 	GetPaymentHistory(ctx context.Context, filter HistoryFilter) ([]Payment, int64, error)
 	GetPackageSummary(ctx context.Context) ([]PackageSummary, error)
 	GetMonthlyRecognizedRevenue(ctx context.Context, filter MonthlyRevenueFilter) ([]MonthlyRevenue, error)
+	GetAllPaidPayments(ctx context.Context) ([]Payment, error)
 }

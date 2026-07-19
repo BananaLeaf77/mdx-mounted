@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"chronosphere/config"
 	"chronosphere/domain"
+	"chronosphere/service"
 	"context"
 	"fmt"
 	"log"
@@ -67,13 +68,17 @@ func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, w
 		log.Fatalf("❌ Failed to register daily reminder cron: %v", err)
 	}
 
-	// _, err = c.AddFunc("0 5 * * *", func() {
-	// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	// 	defer cancel()
-	// 	if err := activateDuePackages(ctx, db, adminRepo, waMgr); err != nil {
-	// 		log.Printf("❌ [CRON] activateDuePackages: %v", err)
-	// 	}
-	// })
+	// Every day at 05:00 — activate manual payments with a scheduled future date
+	_, err = c.AddFunc("0 5 * * *", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := activateDuePackages(ctx, db, adminRepo, waMgr); err != nil {
+			log.Printf("❌ [CRON] activateDuePackages: %v", err)
+		}
+	})
+	if err != nil {
+		log.Fatalf("❌ Failed to register activateDuePackages cron: %v", err)
+	}
 
 	c.Start()
 	log.Println("✅ Cron Jobs started.")
@@ -104,6 +109,21 @@ func activateDuePackages(ctx context.Context, db *gorm.DB, adminRepo domain.Admi
 			Where("id = ?", pa.ID).
 			Updates(map[string]interface{}{"status": "activated", "activated_at": &now}).Error; err != nil {
 			log.Printf("⚠️ [CRON] activated #%d but failed to update status: %v", pa.ID, err)
+		}
+
+		// Write recognition rows now that the package is actually live —
+		// mirrors what ConfirmManualPayment does for immediate activations.
+		if pkg, err := adminRepo.GetPackagesByID(ctx, pa.PackageID); err == nil {
+			months := pkg.ExpiredDays / 30
+			if months <= 0 {
+				months = 1
+			}
+			rows := service.BuildRecognitionRows("manual_payment", pa.ManualPaymentID, pa.StudentUUID, pa.PackageID, pa.PricePaid, months, now)
+			if err := adminRepo.CreateRecognitionRows(ctx, rows); err != nil {
+				log.Printf("⚠️ [CRON] failed to write recognition rows for pending #%d: %v", pa.ID, err)
+			}
+		} else {
+			log.Printf("⚠️ [CRON] recognition rows skipped for pending #%d, package lookup failed: %v", pa.ID, err)
 		}
 
 		notifyPackageActivated(ctx, adminRepo, waMgr, pa.StudentUUID, pa.PackageID)

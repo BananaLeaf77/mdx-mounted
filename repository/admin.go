@@ -22,6 +22,79 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) GetExistingRecognitionSourceIDs(ctx context.Context, sourceType string) (map[int]bool, error) {
+	var ids []int
+	if err := r.db.WithContext(ctx).
+		Model(&domain.PaymentRecognition{}).
+		Where("source_type = ?", sourceType).
+		Distinct().
+		Pluck("source_id", &ids).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil data pengakuan yang sudah ada: %w", err)
+	}
+	set := make(map[int]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set, nil
+}
+
+func (r *adminRepo) GetRecognitionRows(ctx context.Context, filter domain.RecognitionRowFilter) ([]domain.RecognitionRowDetail, int64, error) {
+	var rows []domain.RecognitionRowDetail
+
+	base := r.db.WithContext(ctx).
+		Table("payment_recognitions AS pr").
+		Joins("LEFT JOIN users u ON u.uuid = pr.student_uuid").
+		Joins("LEFT JOIN packages p ON p.id = pr.package_id")
+
+	if filter.StudentUUID != "" {
+		base = base.Where("pr.student_uuid = ?", filter.StudentUUID)
+	}
+	if filter.PackageID != 0 {
+		base = base.Where("pr.package_id = ?", filter.PackageID)
+	}
+	if filter.StartPeriod != "" {
+		y, m, err := parseRevenuePeriod(filter.StartPeriod)
+		if err != nil {
+			return nil, 0, fmt.Errorf("start_period tidak valid, gunakan format YYYY-MM: %w", err)
+		}
+		base = base.Where("(pr.period_year * 100 + pr.period_month) >= ?", y*100+m)
+	}
+	if filter.EndPeriod != "" {
+		y, m, err := parseRevenuePeriod(filter.EndPeriod)
+		if err != nil {
+			return nil, 0, fmt.Errorf("end_period tidak valid, gunakan format YYYY-MM: %w", err)
+		}
+		base = base.Where("(pr.period_year * 100 + pr.period_month) <= ?", y*100+m)
+	}
+
+	var total int64
+	if err := base.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("gagal menghitung total data pengakuan: %w", err)
+	}
+
+	page := filter.Page
+	if page < 1 {
+		page = 1
+	}
+	limit := filter.Limit
+	if limit < 1 {
+		limit = 20
+	}
+
+	err := base.
+		Select(`pr.id, pr.source_type, pr.source_id, pr.student_uuid, u.name AS student_name,
+			pr.package_id, p.name AS package_name, pr.period_year, pr.period_month,
+			pr.amount, pr.created_at`).
+		Order("pr.period_year DESC, pr.period_month DESC, pr.id DESC").
+		Limit(limit).Offset((page - 1) * limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, 0, fmt.Errorf("gagal mengambil data pengakuan: %w", err)
+	}
+
+	return rows, total, nil
+}
+
 func (r *adminRepo) CreateRecognitionRows(ctx context.Context, rows []domain.PaymentRecognition) error {
 	if len(rows) == 0 {
 		return nil

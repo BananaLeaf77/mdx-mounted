@@ -42,10 +42,58 @@ func NewPaymentHandler(r *gin.Engine, uc domain.PaymentUseCase, jwtManager *util
 		admin.GET("/payment/summary", handler.GetPackageSummary)
 		admin.GET("/payment/revenue-recognition", handler.GetMonthlyRecognizedRevenue)
 		admin.GET("/payment/invoice/:external_id", handler.DownloadInvoice)
+		admin.POST("/payment/backfill-recognition", handler.BackfillPaymentRecognitions)
+		admin.GET("/payment/recognition-rows", handler.GetRecognitionRows)
 	}
 
 	// Webhook route (public, verified by callback token)
 	r.POST("/payment/webhook/xendit", handler.HandleXenditWebhook)
+}
+
+// BackfillPaymentRecognitions is a one-time/on-demand admin action that backfills
+// payment_recognitions for packages sold before this feature existed.
+// Safe to re-run — already-recognized payments/manual_payments are skipped.
+func (h *PaymentHandler) BackfillPaymentRecognitions(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	result, err := h.uc.BackfillPaymentRecognitions(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "BackfillPaymentRecognitions", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal menjalankan backfill data pengakuan pendapatan",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "BackfillPaymentRecognitions", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    result,
+		"message": "Backfill data pengakuan pendapatan selesai",
+	})
+}
+
+func (h *PaymentHandler) GetRecognitionRows(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	var filter domain.RecognitionRowFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.PrintLogInfo(&name, 400, "GetRecognitionRows - BindQuery", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Parameter filter tidak valid"})
+		return
+	}
+
+	rows, total, err := h.uc.GetRecognitionRows(c.Request.Context(), filter)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "GetRecognitionRows", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetRecognitionRows", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows, "total": total, "filter": filter})
 }
 
 func (h *PaymentHandler) DownloadInvoice(c *gin.Context) {

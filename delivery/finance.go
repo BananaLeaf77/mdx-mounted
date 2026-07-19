@@ -79,13 +79,45 @@ func NewFinanceHandler(
 		reports.GET("/profit", h.GetTotalProfit)
 		reports.GET("/history", h.GetPaymentHistoryFinance)
 		reports.GET("/summary", h.GetPackageSummary)
+		reports.GET("/revenue-recognition", h.GetMonthlyRecognizedRevenue)
+		reports.GET("/recognition-rows", h.GetRecognitionRows)
 	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Admin: Create Finance User
-// POST /admin/finance
-// ─────────────────────────────────────────────────────────────────────────────
+
+func (h *FinanceHandler) GetMonthlyRecognizedRevenue(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	var filter domain.MonthlyRevenueFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.PrintLogInfo(&name, 400, "GetMonthlyRecognizedRevenue - BindQuery", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Parameter filter tidak valid",
+			"message": "Gagal mengambil data pengakuan pendapatan",
+		})
+		return
+	}
+
+	revenue, err := h.paymentUC.GetMonthlyRecognizedRevenue(c.Request.Context(), filter)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "GetMonthlyRecognizedRevenue", &err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+			"message": "Gagal mengambil data pengakuan pendapatan",
+		})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetMonthlyRecognizedRevenue", nil)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    revenue,
+		"filter":  filter,
+	})
+}
 
 type createFinanceRequest struct {
 	Name     string  `json:"name"     binding:"required,min=3,max=50"`
@@ -94,6 +126,27 @@ type createFinanceRequest struct {
 	Password string  `json:"password" binding:"required,min=8"`
 	Gender   string  `json:"gender"   binding:"required,oneof=male female"`
 	Image    *string `json:"image"    binding:"omitempty,url"`
+}
+
+func (h *FinanceHandler) GetRecognitionRows(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	var filter domain.RecognitionRowFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.PrintLogInfo(&name, 400, "GetRecognitionRows - BindQuery", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Parameter filter tidak valid"})
+		return
+	}
+
+	rows, total, err := h.paymentUC.GetRecognitionRows(c.Request.Context(), filter)
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "GetRecognitionRows", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetRecognitionRows", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": rows, "total": total, "filter": filter})
 }
 
 func (h *FinanceHandler) CreateFinance(c *gin.Context) {

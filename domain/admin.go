@@ -132,4 +132,6 @@ type AdminRepository interface {
 
 	// Payment
 	CreateRecognitionRows(ctx context.Context, rows []PaymentRecognition) error
+	GetExistingRecognitionSourceIDs(ctx context.Context, sourceType string) (map[int]bool, error)
+	GetRecognitionRows(ctx context.Context, filter RecognitionRowFilter) ([]RecognitionRowDetail, int64, error)
 }
