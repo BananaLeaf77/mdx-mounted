@@ -333,9 +333,9 @@ func (s *paymentService) autoAssignPackage(ctx context.Context, studentUUID stri
 		log.Printf("⚠️ recognition rows skipped, package lookup failed: %v", err)
 		return nil // package is already assigned — don't fail the payment over a reporting side-effect
 	}
-	months := pkg.ExpiredMonths
+	months := pkg.ExpiredDays / 30
 	if months <= 0 {
-		months = domain.DefaultPackageExpiredMonths
+		months = 1
 	}
 
 	rows := BuildRecognitionRows(sourceType, sourceID, studentUUID, packageID, amount, months, time.Now())
@@ -391,7 +391,7 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 🔗 https://mdxmusiccourse.cloud
 
 Terima kasih telah memilih MDX! 🌟`,
-		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredMonths,
+		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredDays,
 	)
 
 	mgr := s.messenger

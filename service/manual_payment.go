@@ -228,9 +228,9 @@ func (s *manualPaymentSvc) ConfirmManualPayment(
 		if _, _, err := s.adminRepo.AssignPackageToStudent(ctx, mp.StudentUUID, mp.PackageID); err != nil {
 			log.Printf("⚠️  ManualPayment #%d confirm: auto-assign failed (admin can assign manually): %v", paymentID, err)
 		} else if pkg, err := s.adminRepo.GetPackagesByID(ctx, mp.PackageID); err == nil {
-			months := pkg.ExpiredMonths
+			months := pkg.ExpiredDays / 30
 			if months <= 0 {
-				months = domain.DefaultPackageExpiredMonths
+				months = 1
 			}
 			rows := BuildRecognitionRows("manual_payment", mp.ID, mp.StudentUUID, mp.PackageID, mp.TotalAmount, months, time.Now())
 			if err := s.adminRepo.CreateRecognitionRows(ctx, rows); err != nil {
@@ -347,7 +347,7 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 			"- Instrumen: %s\n"+
 			"- Durasi: %d Menit\n"+
 			"- Kuota: %d Sesi\n"+
-			"- Masa Berlaku: %d Bulan\n\n"+
+			"- Masa Berlaku: %d Hari\n\n"+
 			"💰 *Rincian Biaya:*\n"+
 			"- Biaya Pendaftaran: %s\n"+
 			"- Harga Paket: Rp%.0f\n"+
@@ -358,7 +358,7 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 		os.Getenv("APP_NAME"),
 		mp.ID,
 		student.Name, student.Email, student.Phone,
-		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, pkg.ExpiredMonths,
+		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, pkg.ExpiredDays,
 		regFeeStr, mp.PackagePrice, mp.TotalAmount,
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"),

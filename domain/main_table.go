@@ -32,7 +32,7 @@ const (
 	PaymentMethodManual       = "Manual Assign"
 	PaymentMethodManualStatus = "success"
 
-	DefaultPackageExpiredMonths = 1
+	DefaultPackageExpiredDays = 30
 )
 
 type User struct {
@@ -71,7 +71,7 @@ type Package struct {
 	IsActive      bool        `gorm:"default:true" json:"is_active"` // NEW
 	Quota         int         `gorm:"not null" json:"quota"`
 	Duration      int         `gorm:"not null" json:"duration"`
-	ExpiredMonths int         `gorm:"not null;default:1" json:"expired_months"` // 1-12
+	ExpiredDays   int         `gorm:"not null;default:30" json:"expired_days"` // e.g. 30, 60, 90
 	Description   string      `json:"description"`
 	InstrumentID  *int        `gorm:"default:null" json:"instrument_id"`
 	Instrument    *Instrument `gorm:"foreignKey:InstrumentID" json:"instrument,omitempty"`

@@ -554,7 +554,7 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 		"duration":        pkg.Duration,
 		"description":     pkg.Description,
 		"instrument_id":   pkg.InstrumentID,
-		"expired_months":  pkg.ExpiredMonths,
+		"expired_days":  pkg.ExpiredDays,
 		"is_active":       existing.IsActive, // always preserve existing is_active
 	}
 
@@ -642,9 +642,9 @@ func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUI
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDuration := pkg.ExpiredMonths
+	expiredDuration := pkg.ExpiredDays
 	if expiredDuration <= 0 {
-		expiredDuration = domain.DefaultPackageExpiredMonths
+		expiredDuration = domain.DefaultPackageExpiredDays
 	}
 
 	newSub := domain.StudentPackage{
@@ -764,9 +764,9 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDuration := pkg.ExpiredMonths
+	expiredDuration := pkg.ExpiredDays
 	if expiredDuration <= 0 {
-		expiredDuration = domain.DefaultPackageExpiredMonths
+		expiredDuration = domain.DefaultPackageExpiredDays
 	}
 
 	remainingQuota := pkg.Quota
@@ -774,10 +774,9 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		remainingQuota = 1
 	}
 
-	// repository/admin.go — AssignPackageToStudent
-	months := pkg.ExpiredMonths
-	if months <= 0 {
-		months = domain.DefaultPackageExpiredMonths
+	expiredDays := pkg.ExpiredDays
+	if expiredDays <= 0 {
+		expiredDays = domain.DefaultPackageExpiredDays
 	}
 	newSub := domain.StudentPackage{
 		StudentUUID:    studentUUID,
@@ -785,7 +784,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		RemainingQuota: remainingQuota,
 		PricePaid:      pricePaid,
 		StartDate:      time.Now(),
-		EndDate:        time.Now().AddDate(0, months, 0), // calendar months, not *30
+		EndDate:        time.Now().AddDate(0, 0, expiredDays),
 	}
 
 	if err := tx.Create(&newSub).Error; err != nil {

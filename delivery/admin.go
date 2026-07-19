@@ -240,7 +240,7 @@ func (h *AdminHandler) UpdateAdmin(c *gin.Context) {
 type CreatePackageRequest struct {
 	Name          string  `json:"name" binding:"required,min=3,max=50"`
 	Duration      int     `json:"duration" binding:"omitempty,oneof=30 60"`
-	ExpiredMonths int     `json:"expired_months" binding:"required,min=1,max=12"`
+	ExpiredDays   int     `json:"expired_days" binding:"required,gt=0"`
 	Price         float64 `json:"price" binding:"required,gt=0"`
 	PromoPrice    float64 `json:"promo_price,omitempty"`
 	IsPromoActive bool    `json:"is_promo_active,omitempty"`
@@ -252,7 +252,7 @@ type CreatePackageRequest struct {
 type UpdatePackageRequest struct {
 	Name          string  `json:"name,omitempty"`
 	Duration      int     `json:"duration"`
-	ExpiredMonths int     `json:"expired_months" binding:"required,min=1,max=12"`
+	ExpiredDays   int     `json:"expired_days" binding:"required,gt=0"`
 	Quota         int     `json:"quota,omitempty"`
 	Description   string  `json:"description,omitempty"`
 	InstrumentID  *int    `json:"instrument_id,omitempty"`
@@ -345,7 +345,7 @@ func (h *AdminHandler) CreatePackage(c *gin.Context) {
 		Duration:      req.Duration,
 		Description:   req.Description,
 		InstrumentID:  req.InstrumentID,
-		ExpiredMonths: req.ExpiredMonths,
+		ExpiredDays:   req.ExpiredDays,
 	}
 
 	created, err := h.uc.CreatePackage(c.Request.Context(), pkg)
@@ -396,8 +396,8 @@ func (h *AdminHandler) UpdatePackage(c *gin.Context) {
 		pkg.Quota = 1 // force quota 1 for trial
 	}
 
-	if req.ExpiredMonths != 0 {
-		pkg.ExpiredMonths = req.ExpiredMonths
+	if req.ExpiredDays != 0 {
+		pkg.ExpiredDays = req.ExpiredDays
 	}
 
 	pkg.Duration = req.Duration
