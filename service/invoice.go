@@ -40,12 +40,15 @@ func formatRupiah(amount float64) string {
 	return "Rp " + result
 }
 
-// drawLogo places the MDX brand logo image inside the given square area.
 func drawLogo(pdf *fpdf.Fpdf, x, y, size float64) {
 	pdf.ImageOptions("invoice_logo.jpg", x, y, size, size, false, fpdf.ImageOptions{
 		ImageType: "",
 		ReadDpi:   true,
 	}, 0, "")
+	if pdf.Err() {
+		log.Printf("⚠️ invoice logo failed to load, continuing without it: %v", pdf.Error())
+		pdf.SetError(nil) // clear fpdf's error state so later calls aren't corrupted
+	}
 }
 
 // statusBadge draws a small rounded, filled pill with the payment status.

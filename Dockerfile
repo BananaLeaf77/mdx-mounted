@@ -22,7 +22,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 # Stage 2: Final Image
 FROM alpine:latest  
 
-# Install ca-certificates untuk kebutuhan SSL/TLS (misal saat request HTTPS atau SMTP SSL)
 RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
@@ -30,9 +29,9 @@ WORKDIR /root/
 # Copy binary dari stage builder
 COPY --from=builder /app/main .
 
+# Copy invoice logo used by PDF generation
+COPY --from=builder /app/invoice_logo.jpg .
 
-# Expose port aplikasi Go Anda (misal: 8080)
 EXPOSE 8080
 
-# Jalankan binary
 CMD ["./main"]
