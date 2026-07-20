@@ -333,7 +333,17 @@ func (s *paymentService) GetInvoicePDF(ctx context.Context, externalID string, r
 
 	jid = utils.FormatJID(jid)
 
-	return GenerateInvoicePDF(payment, student, pkg, jid)
+	// Calculate registration fee from the amount breakdown
+	itemPrice := pkg.Price
+	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
+		itemPrice = pkg.PromoPrice
+	}
+	regFee := payment.Amount - itemPrice
+	if regFee < 0 {
+		regFee = 0
+	}
+
+	return GenerateInvoicePDF(payment, student, pkg, jid, regFee)
 }
 
 func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.XenditWebhookPayload) error {

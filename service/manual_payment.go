@@ -404,12 +404,45 @@ func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string,
 		return nil, fmt.Errorf("data paket tidak ditemukan: %w", err)
 	}
 
-	mockPayment := &domain.Payment{
-		ExternalID: fmt.Sprintf("INV-MP-%d", mp.ID),
-		Amount:     mp.TotalAmount,
+	statusMapped := mp.Status
+	switch statusMapped {
+	case domain.ManualPaymentStatusConfirmed:
+		statusMapped = domain.PaymentStatusPaid
+	case domain.ManualPaymentStatusPending:
+		statusMapped = domain.PaymentStatusPending
+	case domain.ManualPaymentStatusRejected:
+		statusMapped = domain.PaymentStatusFailed
 	}
 
-	return GenerateInvoicePDF(mockPayment, student, pkg, jid)
+	// Use admin notes as payment method if recorded (e.g. "Transfer BCA"),
+	// otherwise fall back to the generic "Manual Confirmation"
+	paymentMethod := mp.Notes
+	if paymentMethod == nil || *paymentMethod == "" {
+		m := domain.PaymentMethodManualConfirm
+		paymentMethod = &m
+	}
+
+	mockPayment := &domain.Payment{
+		ExternalID:    fmt.Sprintf("INV-MP-%d", mp.ID),
+		Amount:        mp.TotalAmount,
+		Status:        statusMapped,
+		PaymentMethod: paymentMethod,
+		PaidAt:        mp.ConfirmedAt,
+		StudentUUID:   mp.StudentUUID,
+		PackageID:     mp.PackageID,
+	}
+
+	// Recalculate registration fee (RegistrationFee is gorm:"-" virtual field)
+	itemPrice := pkg.Price
+	if pkg.IsPromoActive && pkg.PromoPrice > 0 {
+		itemPrice = pkg.PromoPrice
+	}
+	regFee := mp.TotalAmount - itemPrice
+	if regFee < 0 {
+		regFee = 0
+	}
+
+	return GenerateInvoicePDF(mockPayment, student, pkg, jid, regFee)
 }
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
