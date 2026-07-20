@@ -6,7 +6,9 @@ import (
 	"chronosphere/middleware"
 	"chronosphere/utils"
 	"fmt"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -55,6 +57,12 @@ func NewManualPaymentHandler(
 }
 
 func (h *ManualPaymentHandler) DownloadInvoice(c *gin.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("🔥 DownloadInvoice panic: %v\n%s", r, debug.Stack())
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "internal error"})
+		}
+	}()
 	name := utils.GetAPIHitter(c)
 	externalID := c.Param("external_id")
 

@@ -4,6 +4,7 @@ package service
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -98,6 +99,9 @@ func GenerateInvoicePDF(payment *domain.Payment, student *domain.User, pkg *doma
 
 	// ── Header: logo + company info (left) ─────────────────────────────
 	drawLogo(pdf, 15, 15, 16)
+	if pdf.Err() {
+		log.Printf("fpdf error after logo: %v", pdf.Error())
+	}
 
 	pdf.SetXY(15, 34)
 	pdf.SetFont("Arial", "B", 12)
