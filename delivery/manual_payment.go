@@ -64,7 +64,7 @@ func (h *ManualPaymentHandler) DownloadInvoice(c *gin.Context) {
 		return
 	}
 	role, _ := c.Get("role") // however your middleware stores it — check config.AuthMiddleware for the exact key
-	isAdmin := role == "admin"
+	isAdmin := role == "admin" || role == "manager"
 
 	pdfBytes, err := h.uc.GetInvoicePDF(c.Request.Context(), externalID, userUUID.(string), isAdmin)
 	if err != nil {

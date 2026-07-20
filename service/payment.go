@@ -322,7 +322,18 @@ func (s *paymentService) GetInvoicePDF(ctx context.Context, externalID string, r
 		return nil, fmt.Errorf("data paket tidak ditemukan: %w", err)
 	}
 
-	return GenerateInvoicePDF(payment, student, pkg)
+	if s.messenger == nil {
+		return nil, fmt.Errorf("admin telephone numbers is not set")
+	}
+
+	jid := s.messenger.GetJID()
+	if jid == "" {
+		return nil, fmt.Errorf("admin telephone numbers is not set")
+	}
+
+	jid = utils.FormatJID(jid)
+
+	return GenerateInvoicePDF(payment, student, pkg, jid)
 }
 
 func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.XenditWebhookPayload) error {

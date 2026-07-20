@@ -39,7 +39,7 @@ func formatRupiah(amount float64) string {
 	return "Rp" + result
 }
 
-func GenerateInvoicePDF(payment *domain.Payment, student *domain.User, pkg *domain.Package) ([]byte, error) {
+func GenerateInvoicePDF(payment *domain.Payment, student *domain.User, pkg *domain.Package, adminTelephone string) ([]byte, error) {
 	const (
 		companyName = "MDX Music Course"
 		companyAddr = "Bali, Indonesia"
@@ -148,7 +148,7 @@ func GenerateInvoicePDF(payment *domain.Payment, student *domain.User, pkg *doma
 	pdf.SetY(-30)
 	pdf.SetFont("Arial", "", 9)
 	pdf.SetTextColor(grayText[0], grayText[1], grayText[2])
-	pdf.CellFormat(0, 5, fmt.Sprintf("Contact: %s", "admin@mdxmusiccourse.cloud"), "", 1, "L", false, 0, "")
+	pdf.CellFormat(0, 5, fmt.Sprintf("Contact: %s (MDX Admin)", adminTelephone), "", 1, "L", false, 0, "")
 
 	var buf bytes.Buffer
 	if err := pdf.Output(&buf); err != nil {

@@ -8,6 +8,33 @@ import (
 	"time"
 )
 
+// formatJID converts a WhatsApp JID like "6289529539993:49@s.whatsapp.net"
+// into a readable Indonesian phone number like "+62 89529539993".
+func FormatJID(jid string) string {
+	jid = strings.TrimSpace(jid)
+
+	// strip device suffix after "@" -> "6289529539993:49"
+	if i := strings.Index(jid, "@"); i != -1 {
+		jid = jid[:i]
+	}
+
+	// strip device id after ":" -> "6289529539993"
+	if i := strings.Index(jid, ":"); i != -1 {
+		jid = jid[:i]
+	}
+
+	if jid == "" {
+		return ""
+	}
+
+	// insert a space after the country code
+	if strings.HasPrefix(jid, "62") {
+		return "+62 " + jid[2:]
+	}
+
+	return "+" + jid
+}
+
 func TranslateDayOfWeek(dayOfWeek string) string {
 	dayOfWeek = strings.ToLower(dayOfWeek)
 	switch dayOfWeek {

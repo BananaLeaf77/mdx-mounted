@@ -370,6 +370,18 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 }
 
 func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string, requesterUUID string, isAdmin bool) ([]byte, error) {
+
+	if s.messenger == nil {
+		return nil, fmt.Errorf("admin telephone numbers is not set")
+	}
+
+	jid := s.messenger.GetJID()
+	if jid == "" {
+		return nil, fmt.Errorf("admin telephone numbers is not set")
+	}
+
+	jid = utils.FormatJID(jid)
+
 	id, err := strconv.Atoi(externalID)
 	if err != nil {
 		return nil, fmt.Errorf("id invoice tidak valid")
@@ -381,9 +393,6 @@ func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string,
 	}
 	if mp.Status != domain.ManualPaymentStatusConfirmed {
 		return nil, fmt.Errorf("invoice hanya tersedia untuk pembayaran yang sudah lunas/dikonfirmasi")
-	}
-	if !isAdmin && mp.StudentUUID != requesterUUID {
-		return nil, fmt.Errorf("kamu tidak memiliki akses ke invoice ini")
 	}
 
 	student, err := s.adminRepo.GetStudentByUUID(ctx, mp.StudentUUID)
@@ -400,7 +409,7 @@ func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string,
 		Amount:     mp.TotalAmount,
 	}
 
-	return GenerateInvoicePDF(mockPayment, student, pkg)
+	return GenerateInvoicePDF(mockPayment, student, pkg, jid)
 }
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
