@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	zlog "github.com/rs/zerolog/log"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -432,6 +433,7 @@ func (m *WAManager) SendMessage(phone, text string) error {
 		}
 	}
 
+	zlog.Warn().Msg(fmt.Sprintf("Error send whatsapp %s : %v, msg: %s", phone, sendErr, text))
 	return sendErr
 }
 
