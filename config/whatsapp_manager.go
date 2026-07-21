@@ -429,7 +429,7 @@ func (m *WAManager) SendMessage(phone, text string) error {
 	_, sendErr := client.SendMessage(sendCtx, jid, msg)
 	if sendErr != nil {
 		if strings.Contains(sendErr.Error(), "463") {
-			zlog.Warn().Msg(fmt.Sprintf("WA reachout-timelocked (cold contact, expected for new numbers): %s", phone))
+			zlog.Warn().Msg(fmt.Sprintf("WA reachout-timelocked (cold contact, expected for new numbers): %s, msg: %s", phone, text))
 			return sendErr // no point retrying — device refresh won't fix this
 		}
 
