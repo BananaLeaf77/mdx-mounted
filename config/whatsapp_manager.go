@@ -40,6 +40,8 @@ type WAManager struct {
 	mu        sync.RWMutex
 	connectMu sync.Mutex
 
+	onInboundMessage func(senderPhone string)
+
 	client          *whatsmeow.Client
 	dbAddress       string
 	status          WAStatus
@@ -60,6 +62,12 @@ func NewWAManager(dbAddress string) *WAManager {
 
 func (m *WAManager) getNextConnectionID() uint64 {
 	return atomic.AddUint64(&m.connectionID, 1)
+}
+
+func (m *WAManager) SetInboundMessageHandler(fn func(senderPhone string)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onInboundMessage = fn
 }
 
 func (m *WAManager) Connect() error {
@@ -572,6 +580,19 @@ func (m *WAManager) handleEvent(evt interface{}, connID uint64) {
 	case *events.StreamReplaced:
 		log.Printf("🔄 WhatsApp stream replaced [connID: %d]", connID)
 		// Connection is still valid, just the stream was replaced
+	case *events.Message:
+		if v.Info.IsFromMe {
+			return
+		}
+		phone := v.Info.Sender.User // digits only, e.g. "6289529539993"
+
+		m.mu.RLock()
+		handler := m.onInboundMessage
+		m.mu.RUnlock()
+
+		if handler != nil {
+			go handler(phone)
+		}
 	}
 }
 

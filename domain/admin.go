@@ -28,6 +28,7 @@ const (
 )
 
 type AdminUseCase interface {
+	GetWhatsAppWarmupStatus(ctx context.Context, userUUID string) (bool, error)
 	GetAdminWhatsAppNumber(ctx context.Context) (*WANumberInfo, error)
 	// Self
 	UpdateAdmin(ctx context.Context, payload User) error

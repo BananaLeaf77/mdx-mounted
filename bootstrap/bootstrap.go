@@ -3,12 +3,14 @@ package bootstrap
 import (
 	"chronosphere/config"
 	"chronosphere/delivery"
+	"chronosphere/domain"
 	"chronosphere/middleware"
 	"chronosphere/repository"
 	"chronosphere/service"
 	"chronosphere/utils"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -54,6 +56,17 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 			// Non-fatal: log and continue without WhatsApp.
 			log.Printf("⚠️  WhatsApp init failed: %v", err)
 		}
+
+		if waMgr != nil {
+			waMgr.SetInboundMessageHandler(func(phone string) {
+				now := time.Now()
+				if err := db.Model(&domain.User{}).
+					Where("phone = ? AND whatsapp_warmed_at IS NULL", phone).
+					Update("whatsapp_warmed_at", &now).Error; err != nil {
+					log.Printf("⚠️ failed to mark WA warmup for %s: %v", phone, err)
+				}
+			})
+		}
 	}
 
 	// ── JWT ───────────────────────────────────────────────────────────────────
@@ -83,7 +96,7 @@ func initApp(waEnabled, limiterEnabled bool) (*gin.Engine, *gorm.DB, *cron.Cron)
 	// *config.WAManager (nil-safe — they guard with IsLoggedIn() checks).
 	studentService := service.NewStudentUseCase(studentRepo, waMgr)
 	managementService := service.NewManagerService(managerRepo, waMgr)
-	adminService := service.NewAdminService(adminRepo, waMgr)
+	adminService := service.NewAdminService(adminRepo, waMgr, db)
 	teacherService := service.NewTeacherService(teacherRepo, waMgr)
 	authService := service.NewAuthService(authRepo, otpRepo, jwtSecret)
 	paymentService := service.NewPaymentService(paymentRepo, adminRepo, db, waMgr)

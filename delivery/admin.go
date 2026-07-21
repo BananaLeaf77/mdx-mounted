@@ -88,6 +88,23 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 	wa := app.Group("/wa")
 	wa.Use(config.AuthMiddleware(jwtManager))
 	wa.GET("/getloggedadminwanumber", h.GetAdminWhatsAppNumber)
+	wa.GET("/warmup-status", h.GetWhatsAppWarmupStatus)
+}
+
+func (h *AdminHandler) GetWhatsAppWarmupStatus(c *gin.Context) {
+	userUUID, exists := c.Get("userUUID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"success": false, "error": "unauthorized"})
+		return
+	}
+
+	warmed, err := h.uc.GetWhatsAppWarmupStatus(c.Request.Context(), userUUID.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"warmed": warmed}})
 }
 
 func (h *AdminHandler) GetAdminWhatsAppNumber(c *gin.Context) {

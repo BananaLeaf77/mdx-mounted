@@ -12,18 +12,32 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 type adminService struct {
+	db        *gorm.DB
 	adminRepo domain.AdminRepository
 	messenger *config.WAManager
 }
 
-func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager) domain.AdminUseCase {
+func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager, database *gorm.DB) domain.AdminUseCase {
 	return &adminService{
 		adminRepo: adminRepo,
 		messenger: mgr,
+		db: database,
 	}
+}
+
+func (s *adminService) GetWhatsAppWarmupStatus(ctx context.Context, userUUID string) (bool, error) {
+	var user domain.User
+	if err := s.db.WithContext(ctx).
+		Select("whatsapp_warmed_at").
+		Where("uuid = ?", userUUID).
+		First(&user).Error; err != nil {
+		return false, err
+	}
+	return user.WhatsappWarmedAt != nil, nil
 }
 
 func (s *adminService) TogglePackageActive(ctx context.Context, id int, isActive bool) error {
