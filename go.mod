@@ -17,7 +17,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/xendit/xendit-go/v6 v6.4.0
-	go.mau.fi/whatsmeow v0.0.0-20260716095330-85d99080dee8
+	go.mau.fi/whatsmeow v0.0.0-20260720135917-a2381054887e
 	golang.org/x/crypto v0.54.0
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0
@@ -72,5 +72,3 @@ require (
 	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace go.mau.fi/whatsmeow => github.com/madeu2100-ctrl/whatsmeow v0.0.0-20260721035726-7cff80bfd138
