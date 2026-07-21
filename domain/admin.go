@@ -2,6 +2,17 @@ package domain
 
 import "context"
 
+// WANumberInfo is the school's WhatsApp number, formatted for both display
+// and wa.me linking — used to get new students/teachers to message the
+// school's number first (WhatsApp requires an inbound message before a
+// business account can message a "cold" contact, otherwise sends fail
+// with a 463 reachout-timelock error).
+type WANumberInfo struct {
+	Raw    string `json:"raw"`     // 6289529539993
+	Local  string `json:"local"`   // 089529539993
+	WALink string `json:"wa_link"` // https://wa.me/6289529539993
+}
+
 // StudentActivityFilter defines the status filter for student listing
 type StudentActivityFilter string
 
@@ -17,7 +28,7 @@ const (
 )
 
 type AdminUseCase interface {
-
+	GetAdminWhatsAppNumber(ctx context.Context) (*WANumberInfo, error)
 	// Self
 	UpdateAdmin(ctx context.Context, payload User) error
 	GetBookedClasses(ctx context.Context) ([]Booking, error)

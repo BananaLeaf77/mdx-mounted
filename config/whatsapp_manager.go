@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -427,13 +428,21 @@ func (m *WAManager) SendMessage(phone, text string) error {
 
 	_, sendErr := client.SendMessage(sendCtx, jid, msg)
 	if sendErr != nil {
-		// One retry after device refresh.
+		if strings.Contains(sendErr.Error(), "463") {
+			zlog.Warn().Msg(fmt.Sprintf("WA reachout-timelocked (cold contact, expected for new numbers): %s", phone))
+			return sendErr // no point retrying — device refresh won't fix this
+		}
+
+		// only retry for other error classes (device staleness etc.)
 		if _, refreshErr := client.GetUserDevicesContext(sendCtx, []types.JID{jid}); refreshErr == nil {
 			_, sendErr = client.SendMessage(sendCtx, jid, msg)
 		}
+
+		if sendErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("Error send whatsapp %s : %v, msg: %s", phone, sendErr, text))
+		}
 	}
 
-	zlog.Warn().Msg(fmt.Sprintf("Error send whatsapp %s : %v, msg: %s", phone, sendErr, text))
 	return sendErr
 }
 

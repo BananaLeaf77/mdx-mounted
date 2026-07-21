@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -407,4 +408,37 @@ func (s *adminService) PingWhatsApp(_ context.Context, phone string) error {
 		return errors.New("nomor telepon tidak valid")
 	}
 	return s.messenger.SendMessage(normalized, "Ping dari sistem MDX. Tes koneksi berhasil.")
+}
+
+func (s *adminService) GetAdminWhatsAppNumber(_ context.Context) (*domain.WANumberInfo, error) {
+	if !s.messenger.IsLoggedIn() {
+		return nil, errors.New("whatsapp admin belum login")
+	}
+
+	jid := s.messenger.GetJID()
+	if jid == "" {
+		return nil, errors.New("nomor whatsapp admin tidak ditemukan")
+	}
+
+	raw := jid
+	if i := strings.Index(raw, "@"); i != -1 {
+		raw = raw[:i]
+	}
+	if i := strings.Index(raw, ":"); i != -1 {
+		raw = raw[:i]
+	}
+	if raw == "" {
+		return nil, errors.New("nomor whatsapp admin tidak valid")
+	}
+
+	local := raw
+	if strings.HasPrefix(raw, "62") {
+		local = "0" + raw[2:]
+	}
+
+	return &domain.WANumberInfo{
+		Raw:    raw,
+		Local:  local,
+		WALink: fmt.Sprintf("https://wa.me/%s", raw),
+	}, nil
 }

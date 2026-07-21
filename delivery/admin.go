@@ -85,6 +85,23 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
 	}
+	wa := app.Group("/wa")
+	wa.Use(config.AuthMiddleware(jwtManager))
+	wa.GET("/getloggedadminwanumber", h.GetAdminWhatsAppNumber)
+}
+
+func (h *AdminHandler) GetAdminWhatsAppNumber(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	info, err := h.uc.GetAdminWhatsAppNumber(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 400, "GetAdminWhatsAppNumber", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "GetAdminWhatsAppNumber", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": info})
 }
 
 func (h *AdminHandler) TogglePackageActive(c *gin.Context) {
