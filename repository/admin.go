@@ -627,7 +627,7 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 		"duration":        pkg.Duration,
 		"description":     pkg.Description,
 		"instrument_id":   pkg.InstrumentID,
-		"expired_days":  pkg.ExpiredDays,
+		"expired_duration":    pkg.ExpiredDuration,
 		"is_active":       existing.IsActive, // always preserve existing is_active
 	}
 
@@ -715,7 +715,7 @@ func (r *adminRepo) AssignPackageToStudentManual(ctx context.Context, studentUUI
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDuration := pkg.ExpiredDays
+	expiredDuration := pkg.ExpiredDuration
 	if expiredDuration <= 0 {
 		expiredDuration = domain.DefaultPackageExpiredDays
 	}
@@ -837,7 +837,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 	}
 
 	// 5. Assign new package with snapshotted price
-	expiredDuration := pkg.ExpiredDays
+	expiredDuration := pkg.ExpiredDuration
 	if expiredDuration <= 0 {
 		expiredDuration = domain.DefaultPackageExpiredDays
 	}
@@ -847,7 +847,7 @@ func (r *adminRepo) AssignPackageToStudent(ctx context.Context, studentUUID stri
 		remainingQuota = 1
 	}
 
-	expiredDays := pkg.ExpiredDays
+	expiredDays := pkg.ExpiredDuration
 	if expiredDays <= 0 {
 		expiredDays = domain.DefaultPackageExpiredDays
 	}

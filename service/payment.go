@@ -86,7 +86,7 @@ func (s *paymentService) BackfillPaymentRecognitions(ctx context.Context) (*doma
 			result.Errors = append(result.Errors, fmt.Sprintf("payment #%d: package lookup failed: %v", p.ID, err))
 			continue
 		}
-		months := pkg.ExpiredDays / 30
+		months := pkg.ExpiredDuration / 30
 		if months <= 0 {
 			months = 1
 		}
@@ -116,7 +116,7 @@ func (s *paymentService) BackfillPaymentRecognitions(ctx context.Context) (*doma
 			result.Errors = append(result.Errors, fmt.Sprintf("manual_payment #%d: package lookup failed: %v", mp.ID, err))
 			continue
 		}
-		months := pkg.ExpiredDays / 30
+		months := pkg.ExpiredDuration / 30
 		if months <= 0 {
 			months = 1
 		}
@@ -451,7 +451,7 @@ func (s *paymentService) autoAssignPackage(ctx context.Context, studentUUID stri
 		log.Printf("⚠️ recognition rows skipped, package lookup failed: %v", err)
 		return nil // package is already assigned — don't fail the payment over a reporting side-effect
 	}
-	months := pkg.ExpiredDays / 30
+	months := pkg.ExpiredDuration / 30
 	if months <= 0 {
 		months = 1
 	}
@@ -509,7 +509,7 @@ Paket *"%s"* kamu sudah aktif dan siap digunakan.
 🔗 https://mdxmusiccourse.cloud
 
 Terima kasih telah memilih MDX! 🌟`,
-		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredDays,
+		student.Name, pkg.Name, pkg.Name, pkg.Quota, pkg.ExpiredDuration,
 	)
 
 	mgr := s.messenger

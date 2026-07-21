@@ -114,7 +114,7 @@ func activateDuePackages(ctx context.Context, db *gorm.DB, adminRepo domain.Admi
 		// Write recognition rows now that the package is actually live —
 		// mirrors what ConfirmManualPayment does for immediate activations.
 		if pkg, err := adminRepo.GetPackagesByID(ctx, pa.PackageID); err == nil {
-			months := pkg.ExpiredDays / 30
+			months := pkg.ExpiredDuration / 30
 			if months <= 0 {
 				months = 1
 			}

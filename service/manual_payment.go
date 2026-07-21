@@ -228,7 +228,7 @@ func (s *manualPaymentSvc) ConfirmManualPayment(
 		if _, _, err := s.adminRepo.AssignPackageToStudent(ctx, mp.StudentUUID, mp.PackageID); err != nil {
 			log.Printf("⚠️  ManualPayment #%d confirm: auto-assign failed (admin can assign manually): %v", paymentID, err)
 		} else if pkg, err := s.adminRepo.GetPackagesByID(ctx, mp.PackageID); err == nil {
-			months := pkg.ExpiredDays / 30
+			months := pkg.ExpiredDuration / 30
 			if months <= 0 {
 				months = 1
 			}
@@ -358,7 +358,7 @@ func (s *manualPaymentSvc) notifyAdmin(student *domain.User, pkg *domain.Package
 		os.Getenv("APP_NAME"),
 		mp.ID,
 		student.Name, student.Email, student.Phone,
-		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, pkg.ExpiredDays,
+		pkg.Name, instrumentName, pkg.Duration, pkg.Quota, pkg.ExpiredDuration,
 		regFeeStr, mp.PackagePrice, mp.TotalAmount,
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"),

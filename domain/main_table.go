@@ -62,22 +62,22 @@ type StudentProfile struct {
 }
 
 type Package struct {
-	ID            int         `gorm:"primaryKey" json:"id"`
-	Name          string      `gorm:"not null" json:"name"`
-	Price         float64     `gorm:"not null" json:"price"`
-	PromoPrice    float64     `gorm:"default:0" json:"promo_price"`
-	IsPromoActive bool        `gorm:"default:false" json:"is_promo_active"`
-	IsTrial       bool        `gorm:"default:false" json:"is_trial"`
-	IsActive      bool        `gorm:"default:true" json:"is_active"` // NEW
-	Quota         int         `gorm:"not null" json:"quota"`
-	Duration      int         `gorm:"not null" json:"duration"`
-	ExpiredDays   int         `gorm:"not null;default:30" json:"expired_days"` // e.g. 30, 60, 90
-	Description   string      `json:"description"`
-	InstrumentID  *int        `gorm:"default:null" json:"instrument_id"`
-	Instrument    *Instrument `gorm:"foreignKey:InstrumentID" json:"instrument,omitempty"`
-	CreatedAt     time.Time   `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt     time.Time   `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt     *time.Time  `gorm:"index" json:"deleted_at,omitempty"`
+	ID              int         `gorm:"primaryKey" json:"id"`
+	Name            string      `gorm:"not null" json:"name"`
+	Price           float64     `gorm:"not null" json:"price"`
+	PromoPrice      float64     `gorm:"default:0" json:"promo_price"`
+	IsPromoActive   bool        `gorm:"default:false" json:"is_promo_active"`
+	IsTrial         bool        `gorm:"default:false" json:"is_trial"`
+	IsActive        bool        `gorm:"default:true" json:"is_active"` // NEW
+	Quota           int         `gorm:"not null" json:"quota"`
+	Duration        int         `gorm:"not null" json:"duration"`
+	ExpiredDuration int         `gorm:"not null;default:30" json:"expired_duration"` // e.g. 30, 60, 90
+	Description     string      `json:"description"`
+	InstrumentID    *int        `gorm:"default:null" json:"instrument_id"`
+	Instrument      *Instrument `gorm:"foreignKey:InstrumentID" json:"instrument,omitempty"`
+	CreatedAt       time.Time   `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt       time.Time   `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt       *time.Time  `gorm:"index" json:"deleted_at,omitempty"`
 
 	TrialInstrument string `gorm:"-" json:"trial_instrument"`
 }
