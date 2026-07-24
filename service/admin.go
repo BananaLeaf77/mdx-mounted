@@ -510,24 +510,19 @@ func (s *adminService) GetWhatsAppWarmupInfo(ctx context.Context, userUUID strin
 
 	info := &domain.WAWarmupInfo{Warmed: warmed}
 
+	adminNumber, err := s.GetAdminWhatsAppNumber(ctx)
+	if err != nil {
+		log.Printf("⚠️ GetWhatsAppWarmupInfo: failed to fetch admin number: %v", err)
+	} else {
+		info.AdminNumber = adminNumber
+	}
+
 	if warmed {
 		now := time.Now()
 		_ = s.db.WithContext(ctx).Model(&domain.User{}).
 			Where("uuid = ? AND whatsapp_warmed_at IS NULL", userUUID).
 			Update("whatsapp_warmed_at", &now).Error
-		return info, nil // skip the admin-number lookup entirely — not needed
 	}
-
-	// not warmed — frontend needs the admin number to render the modal
-	adminNumber, err := s.GetAdminWhatsAppNumber(ctx)
-	if err != nil {
-		// don't fail the whole call just because this part hit a transient
-		// WA blip — frontend can still act on `warmed`, just without the
-		// number this one time; it'll retry on next mount.
-		log.Printf("⚠️ GetWhatsAppWarmupInfo: failed to fetch admin number: %v", err)
-		return info, nil
-	}
-	info.AdminNumber = adminNumber
 
 	return info, nil
 }
