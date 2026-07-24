@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -25,19 +26,37 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager, da
 	return &adminService{
 		adminRepo: adminRepo,
 		messenger: mgr,
-		db: database,
+		db:        database,
 	}
 }
 
 func (s *adminService) GetWhatsAppWarmupStatus(ctx context.Context, userUUID string) (bool, error) {
 	var user domain.User
 	if err := s.db.WithContext(ctx).
-		Select("whatsapp_warmed_at").
+		Select("phone").
 		Where("uuid = ?", userUUID).
 		First(&user).Error; err != nil {
 		return false, err
 	}
-	return user.WhatsappWarmedAt != nil, nil
+
+	normalized := utils.NormalizePhoneNumber(user.Phone)
+	if normalized == "" {
+		return false, errors.New("nomor telepon tidak valid")
+	}
+
+	warmed, err := s.messenger.HasPrivacyToken(normalized)
+	if err != nil {
+		return false, err
+	}
+
+	if warmed {
+		now := time.Now()
+		_ = s.db.WithContext(ctx).Model(&domain.User{}).
+			Where("uuid = ? AND whatsapp_warmed_at IS NULL", userUUID).
+			Update("whatsapp_warmed_at", &now).Error
+	}
+
+	return warmed, nil
 }
 
 func (s *adminService) TogglePackageActive(ctx context.Context, id int, isActive bool) error {
@@ -425,7 +444,20 @@ func (s *adminService) PingWhatsApp(_ context.Context, phone string) error {
 }
 
 func (s *adminService) GetAdminWhatsAppNumber(_ context.Context) (*domain.WANumberInfo, error) {
-	if !s.messenger.IsLoggedIn() {
+	loggedIn := s.messenger.IsLoggedIn()
+	if !loggedIn {
+		// give a brief self-heal window before giving up — mirrors the
+		// reconnect-wait behavior in SendMessage, since IsLoggedIn() can
+		// trip on a momentary stale-state blip that resolves itself.
+		for i := 0; i < 10; i++ {
+			time.Sleep(200 * time.Millisecond)
+			if s.messenger.IsLoggedIn() {
+				loggedIn = true
+				break
+			}
+		}
+	}
+	if !loggedIn {
 		return nil, errors.New("whatsapp admin belum login")
 	}
 
@@ -455,4 +487,47 @@ func (s *adminService) GetAdminWhatsAppNumber(_ context.Context) (*domain.WANumb
 		Local:  local,
 		WALink: fmt.Sprintf("https://wa.me/%s", raw),
 	}, nil
+}
+
+func (s *adminService) GetWhatsAppWarmupInfo(ctx context.Context, userUUID string) (*domain.WAWarmupInfo, error) {
+	var user domain.User
+	if err := s.db.WithContext(ctx).
+		Select("phone").
+		Where("uuid = ?", userUUID).
+		First(&user).Error; err != nil {
+		return nil, err
+	}
+
+	normalized := utils.NormalizePhoneNumber(user.Phone)
+	if normalized == "" {
+		return nil, errors.New("nomor telepon tidak valid")
+	}
+
+	warmed, err := s.messenger.HasPrivacyToken(normalized)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &domain.WAWarmupInfo{Warmed: warmed}
+
+	if warmed {
+		now := time.Now()
+		_ = s.db.WithContext(ctx).Model(&domain.User{}).
+			Where("uuid = ? AND whatsapp_warmed_at IS NULL", userUUID).
+			Update("whatsapp_warmed_at", &now).Error
+		return info, nil // skip the admin-number lookup entirely — not needed
+	}
+
+	// not warmed — frontend needs the admin number to render the modal
+	adminNumber, err := s.GetAdminWhatsAppNumber(ctx)
+	if err != nil {
+		// don't fail the whole call just because this part hit a transient
+		// WA blip — frontend can still act on `warmed`, just without the
+		// number this one time; it'll retry on next mount.
+		log.Printf("⚠️ GetWhatsAppWarmupInfo: failed to fetch admin number: %v", err)
+		return info, nil
+	}
+	info.AdminNumber = adminNumber
+
+	return info, nil
 }

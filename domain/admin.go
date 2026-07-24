@@ -13,6 +13,11 @@ type WANumberInfo struct {
 	WALink string `json:"wa_link"` // https://wa.me/6289529539993
 }
 
+type WAWarmupInfo struct {
+	Warmed      bool          `json:"warmed"`
+	AdminNumber *WANumberInfo `json:"admin_number,omitempty"` // only present when warmed == false
+}
+
 // StudentActivityFilter defines the status filter for student listing
 type StudentActivityFilter string
 
@@ -28,6 +33,7 @@ const (
 )
 
 type AdminUseCase interface {
+	GetWhatsAppWarmupInfo(ctx context.Context, userUUID string) (*WAWarmupInfo, error)
 	GetWhatsAppWarmupStatus(ctx context.Context, userUUID string) (bool, error)
 	GetAdminWhatsAppNumber(ctx context.Context) (*WANumberInfo, error)
 	// Self

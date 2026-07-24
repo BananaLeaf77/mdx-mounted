@@ -64,6 +64,32 @@ func (m *WAManager) getNextConnectionID() uint64 {
 	return atomic.AddUint64(&m.connectionID, 1)
 }
 
+// HasPrivacyToken checks whatsmeow's local store for an existing trust
+// token — no network call, reflects ALL known-warm contacts including
+// ones established before this feature existed.
+func (m *WAManager) HasPrivacyToken(phone string) (bool, error) {
+	m.mu.RLock()
+	client := m.client
+	m.mu.RUnlock()
+
+	if client == nil {
+		return false, errors.New("whatsapp client not initialised")
+	}
+
+	jid, err := types.ParseJID(phone + "@s.whatsapp.net")
+	if err != nil {
+		return false, fmt.Errorf("invalid phone %s: %w", phone, err)
+	}
+
+	fmt.Println(phone)
+
+	token, err := client.Store.PrivacyTokens.GetPrivacyToken(context.Background(), jid)
+	if err != nil {
+		return false, fmt.Errorf("failed to check privacy token: %w", err)
+	}
+	return token != nil, nil
+}
+
 func (m *WAManager) SetInboundMessageHandler(fn func(senderPhone string)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
