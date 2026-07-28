@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -84,10 +85,35 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/connect", h.ConnectWhatsApp)
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
+
+		// pengakuan
+		admin.GET("/payment/recognition-rows/export", h.ExportRecognitionRows)
 	}
 	wa := app.Group("/wa")
 	wa.Use(config.AuthMiddleware(jwtManager))
 	wa.GET("/warmup-status", h.GetWhatsAppWarmupStatus)
+}
+
+func (h *AdminHandler) ExportRecognitionRows(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	var filter domain.RecognitionRowFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.PrintLogInfo(&name, 400, "ExportRecognitionRows - BindQuery", &err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "Parameter filter tidak valid"})
+		return
+	}
+
+	fileBytes, err := h.uc.ExportRecognitionRows(c.Request.Context(), filter)
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "ExportRecognitionRows", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("pengakuan-pendapatan-%s.xlsx", time.Now().Format("20060102"))
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileBytes)
 }
 
 func (h *AdminHandler) GetWhatsAppWarmupStatus(c *gin.Context) {

@@ -33,6 +33,8 @@ const (
 )
 
 type AdminUseCase interface {
+	ExportRecognitionRows(ctx context.Context, filter RecognitionRowFilter) ([]byte, error)
+
 	GetWhatsAppWarmupInfo(ctx context.Context, userUUID string) (*WAWarmupInfo, error)
 	GetWhatsAppWarmupStatus(ctx context.Context, userUUID string) (bool, error)
 	GetAdminWhatsAppNumber(ctx context.Context) (*WANumberInfo, error)
@@ -95,6 +97,8 @@ type AdminUseCase interface {
 }
 
 type AdminRepository interface {
+	GetAllRecognitionRowsForExport(ctx context.Context, filter RecognitionRowFilter) ([]RecognitionRowDetail, error)
+
 	// Self
 	UpdateAdmin(ctx context.Context, payload User) error
 	GetBookedClasses(ctx context.Context) ([]Booking, error)

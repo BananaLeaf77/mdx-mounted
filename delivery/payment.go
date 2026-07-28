@@ -44,6 +44,7 @@ func NewPaymentHandler(r *gin.Engine, uc domain.PaymentUseCase, jwtManager *util
 		admin.GET("/payment/invoice/:external_id", handler.DownloadInvoice)
 		admin.POST("/payment/backfill-recognition", handler.BackfillPaymentRecognitions)
 		admin.GET("/payment/recognition-rows", handler.GetRecognitionRows)
+
 	}
 
 	// Webhook route (public, verified by callback token)

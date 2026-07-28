@@ -37,17 +37,18 @@ type RecognitionRowFilter struct {
 // RecognitionRowDetail is one payment_recognitions row enriched with
 // human-readable student/package names, for admin & finance auditing.
 type RecognitionRowDetail struct {
-	ID          int       `json:"id"`
-	SourceType  string    `json:"source_type"`
-	SourceID    int       `json:"source_id"`
-	StudentUUID string    `json:"student_uuid"`
-	StudentName string    `json:"student_name"`
-	PackageID   int       `json:"package_id"`
-	PackageName string    `json:"package_name"`
-	PeriodYear  int       `json:"period_year"`
-	PeriodMonth int       `json:"period_month"`
-	Amount      float64   `json:"amount"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID            int       `json:"id"`
+	SourceType    string    `json:"source_type"`
+	SourceID      int       `json:"source_id"`
+	StudentUUID   string    `json:"student_uuid"`
+	StudentName   string    `json:"student_name"`
+	PackageID     int       `json:"package_id"`
+	PackageName   string    `json:"package_name"`
+	PeriodYear    int       `json:"period_year"`
+	PeriodMonth   int       `json:"period_month"`
+	Amount        float64   `json:"amount"`
+	PaymentMethod string    `json:"payment_method"` // Transfer/QRIS/Cash (manual) or Xendit's method (payment)
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type Payment struct {

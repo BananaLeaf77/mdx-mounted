@@ -44,7 +44,9 @@ func (r *adminRepo) GetRecognitionRows(ctx context.Context, filter domain.Recogn
 	base := r.db.WithContext(ctx).
 		Table("payment_recognitions AS pr").
 		Joins("LEFT JOIN users u ON u.uuid = pr.student_uuid").
-		Joins("LEFT JOIN packages p ON p.id = pr.package_id")
+		Joins("LEFT JOIN packages p ON p.id = pr.package_id").
+		Joins("LEFT JOIN manual_payments mp ON mp.id = pr.source_id AND pr.source_type = 'manual_payment'").
+		Joins("LEFT JOIN payments pay ON pay.id = pr.source_id AND pr.source_type = 'payment'")
 
 	if filter.StudentName != "" {
 		base = base.Where("u.name ILIKE ?", "%"+filter.StudentName+"%")
@@ -84,7 +86,7 @@ func (r *adminRepo) GetRecognitionRows(ctx context.Context, filter domain.Recogn
 	err := base.
 		Select(`pr.id, pr.source_type, pr.source_id, pr.student_uuid, u.name AS student_name,
 			pr.package_id, p.name AS package_name, pr.period_year, pr.period_month,
-			pr.amount, pr.created_at`).
+			pr.amount, COALESCE(mp.notes, pay.payment_method, '-') AS payment_method, pr.created_at`).
 		Order("pr.period_year DESC, pr.period_month DESC, pr.id DESC").
 		Limit(limit).Offset((page - 1) * limit).
 		Scan(&rows).Error
@@ -93,6 +95,50 @@ func (r *adminRepo) GetRecognitionRows(ctx context.Context, filter domain.Recogn
 	}
 
 	return rows, total, nil
+}
+
+func (r *adminRepo) GetAllRecognitionRowsForExport(ctx context.Context, filter domain.RecognitionRowFilter) ([]domain.RecognitionRowDetail, error) {
+	var rows []domain.RecognitionRowDetail
+
+	base := r.db.WithContext(ctx).
+		Table("payment_recognitions AS pr").
+		Joins("LEFT JOIN users u ON u.uuid = pr.student_uuid").
+		Joins("LEFT JOIN packages p ON p.id = pr.package_id").
+		Joins("LEFT JOIN manual_payments mp ON mp.id = pr.source_id AND pr.source_type = 'manual_payment'").
+		Joins("LEFT JOIN payments pay ON pay.id = pr.source_id AND pr.source_type = 'payment'")
+
+	if filter.StudentName != "" {
+		base = base.Where("u.name ILIKE ?", "%"+filter.StudentName+"%")
+	}
+	if filter.PackageID != 0 {
+		base = base.Where("pr.package_id = ?", filter.PackageID)
+	}
+	if filter.StartPeriod != "" {
+		y, m, err := parseRevenuePeriod(filter.StartPeriod)
+		if err != nil {
+			return nil, fmt.Errorf("start_period tidak valid, gunakan format YYYY-MM: %w", err)
+		}
+		base = base.Where("(pr.period_year * 100 + pr.period_month) >= ?", y*100+m)
+	}
+	if filter.EndPeriod != "" {
+		y, m, err := parseRevenuePeriod(filter.EndPeriod)
+		if err != nil {
+			return nil, fmt.Errorf("end_period tidak valid, gunakan format YYYY-MM: %w", err)
+		}
+		base = base.Where("(pr.period_year * 100 + pr.period_month) <= ?", y*100+m)
+	}
+
+	err := base.
+		Select(`pr.id, pr.source_type, pr.source_id, pr.student_uuid, u.name AS student_name,
+			pr.package_id, p.name AS package_name, pr.period_year, pr.period_month,
+			pr.amount, COALESCE(mp.notes, pay.payment_method, '-') AS payment_method, pr.created_at`).
+		Order("pr.period_year ASC, pr.period_month ASC, pr.id ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("gagal mengambil data pengakuan untuk export: %w", err)
+	}
+
+	return rows, nil
 }
 
 func (r *adminRepo) CreateRecognitionRows(ctx context.Context, rows []domain.PaymentRecognition) error {
@@ -618,17 +664,17 @@ func (r *adminRepo) UpdatePackage(ctx context.Context, pkg *domain.Package) erro
 
 	// Use explicit map to avoid GORM zero-value issues
 	updates := map[string]interface{}{
-		"name":            pkg.Name,
-		"price":           pkg.Price,
-		"promo_price":     pkg.PromoPrice,
-		"is_promo_active": pkg.IsPromoActive,
-		"is_trial":        pkg.IsTrial,
-		"quota":           pkg.Quota,
-		"duration":        pkg.Duration,
-		"description":     pkg.Description,
-		"instrument_id":   pkg.InstrumentID,
-		"expired_duration":    pkg.ExpiredDuration,
-		"is_active":       existing.IsActive, // always preserve existing is_active
+		"name":             pkg.Name,
+		"price":            pkg.Price,
+		"promo_price":      pkg.PromoPrice,
+		"is_promo_active":  pkg.IsPromoActive,
+		"is_trial":         pkg.IsTrial,
+		"quota":            pkg.Quota,
+		"duration":         pkg.Duration,
+		"description":      pkg.Description,
+		"instrument_id":    pkg.InstrumentID,
+		"expired_duration": pkg.ExpiredDuration,
+		"is_active":        existing.IsActive, // always preserve existing is_active
 	}
 
 	if err := r.db.WithContext(ctx).

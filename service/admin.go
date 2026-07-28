@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xuri/excelize/v2"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -28,6 +29,56 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager, da
 		messenger: mgr,
 		db:        database,
 	}
+}
+
+func (s *adminService) ExportRecognitionRows(ctx context.Context, filter domain.RecognitionRowFilter) ([]byte, error) {
+	rows, err := s.adminRepo.GetAllRecognitionRowsForExport(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheet := "Pengakuan Pendapatan"
+	f.SetSheetName("Sheet1", sheet)
+
+	headers := []string{"Siswa", "Paket", "Periode", "Amount", "Metode Pembayaran", "Source", "Tgl Dibuat"}
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheet, cell, h)
+	}
+	headerStyle, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	f.SetCellStyle(sheet, "A1", "G1", headerStyle)
+
+	for i, row := range rows {
+		r := i + 2
+		period := fmt.Sprintf("%04d-%02d", row.PeriodYear, row.PeriodMonth)
+		source := "MANUAL"
+		if row.SourceType == "payment" {
+			source = "XENDIT"
+		}
+
+		f.SetCellValue(sheet, fmt.Sprintf("A%d", r), row.StudentName)
+		f.SetCellValue(sheet, fmt.Sprintf("B%d", r), row.PackageName)
+		f.SetCellValue(sheet, fmt.Sprintf("C%d", r), period)
+		f.SetCellValue(sheet, fmt.Sprintf("D%d", r), row.Amount)
+		f.SetCellValue(sheet, fmt.Sprintf("E%d", r), row.PaymentMethod)
+		f.SetCellValue(sheet, fmt.Sprintf("F%d", r), source)
+		f.SetCellValue(sheet, fmt.Sprintf("G%d", r), row.CreatedAt.Format("02 Jan 2006"))
+	}
+
+	f.SetColWidth(sheet, "A", "B", 25)
+	f.SetColWidth(sheet, "C", "C", 12)
+	f.SetColWidth(sheet, "D", "D", 15)
+	f.SetColWidth(sheet, "E", "G", 18)
+
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, fmt.Errorf("gagal membuat file excel: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 func (s *adminService) GetWhatsAppWarmupStatus(ctx context.Context, userUUID string) (bool, error) {
