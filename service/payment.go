@@ -418,25 +418,28 @@ func (s *paymentService) HandleWebhook(ctx context.Context, payload domain.Xendi
 	return nil
 }
 
-func BuildRecognitionRows(sourceType string, sourceID int, studentUUID string, packageID int,
-	total float64, months int, start time.Time) []domain.PaymentRecognition {
+func BuildRecognitionRows(sourceType string, sourceID int, studentUUID string, packageID int, total float64, months int, start time.Time) []domain.PaymentRecognition {
+	base := math.Floor(total / float64(months))
+	var rows []domain.PaymentRecognition
 
-	base := math.Floor(total / float64(months) / 1) // round down to whole rupiah
-	rows := make([]domain.PaymentRecognition, months)
-	running := 0.0
 	for i := 0; i < months; i++ {
-		d := start.AddDate(0, i, 0)
-		amt := base
+		periodDate := start.AddDate(0, i, 0)
+		amount := base
 		if i == months-1 {
-			amt = total - running // last row absorbs the rounding remainder
+			amount = total - base*float64(months-1)
 		}
-		running += amt
-		rows[i] = domain.PaymentRecognition{
-			SourceType: sourceType, SourceID: sourceID,
-			StudentUUID: studentUUID, PackageID: packageID,
-			PeriodYear: d.Year(), PeriodMonth: int(d.Month()), Amount: amt,
-		}
+		rows = append(rows, domain.PaymentRecognition{
+			SourceType:  sourceType,
+			SourceID:    sourceID,
+			StudentUUID: studentUUID,
+			PackageID:   packageID,
+			PeriodYear:  periodDate.Year(),
+			PeriodMonth: int(periodDate.Month()),
+			Amount:      amount,
+			CreatedAt:   start, // anchor to the original confirm/paid date, not insert time
+		})
 	}
+
 	return rows
 }
 
