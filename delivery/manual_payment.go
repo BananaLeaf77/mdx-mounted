@@ -45,9 +45,9 @@ func NewManualPaymentHandler(
 		student.GET("", h.GetMyManualPayments)
 	}
 
-	// ── Admin / Manager routes ────────────────────────────────────────────────
+	// ── Admin / Manager / Finance routes ──────────────────────────────────────
 	admin := app.Group("/admin/manual-payments")
-	admin.Use(config.AuthMiddleware(jwtManager), middleware.ManagerAndAdminOnly())
+	admin.Use(config.AuthMiddleware(jwtManager), middleware.FinanceAndManagerOnly())
 	{
 		admin.GET("", h.GetAllManualPayments)
 		admin.PUT("/:id/confirm", h.ConfirmManualPayment)
@@ -72,9 +72,9 @@ func (h *ManualPaymentHandler) DownloadInvoice(c *gin.Context) {
 		return
 	}
 	role, _ := c.Get("role") // however your middleware stores it — check config.AuthMiddleware for the exact key
-	isAdmin := role == "admin" || role == "manager"
+	isAdminOrFinance := role == "admin" || role == "manager" || role == "finance"
 
-	pdfBytes, err := h.uc.GetInvoicePDF(c.Request.Context(), externalID, userUUID.(string), isAdmin)
+	pdfBytes, err := h.uc.GetInvoicePDF(c.Request.Context(), externalID, userUUID.(string), isAdminOrFinance)
 	if err != nil {
 		utils.PrintLogInfo(&name, 404, "DownloadInvoice", &err)
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": err.Error(), "message": "Gagal mengambil invoice"})

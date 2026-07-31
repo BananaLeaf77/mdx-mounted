@@ -1067,7 +1067,10 @@ func (r *adminRepo) GetFilteredStudents(ctx context.Context, filter domain.Stude
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	nowLoc := now.In(loc)
 
-	baseQuery := r.db.WithContext(ctx).Where("role = ? AND deleted_at IS NULL", domain.RoleStudent)
+	baseQuery := r.db.WithContext(ctx).
+		Preload("StudentProfile.Packages", "end_date >= ?", time.Now()).
+		Preload("StudentProfile.Packages.Package.Instrument").
+		Where("role = ? AND deleted_at IS NULL", domain.RoleStudent)
 
 	switch filter {
 	case domain.StudentFilterActive:

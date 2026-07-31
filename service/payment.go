@@ -422,8 +422,9 @@ func BuildRecognitionRows(sourceType string, sourceID int, studentUUID string, p
 	base := math.Floor(total / float64(months))
 	var rows []domain.PaymentRecognition
 
+	anchor := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, start.Location())
 	for i := 0; i < months; i++ {
-		periodDate := start.AddDate(0, i, 0)
+		periodDate := anchor.AddDate(0, i, 0)
 		amount := base
 		if i == months-1 {
 			amount = total - base*float64(months-1)
@@ -436,7 +437,7 @@ func BuildRecognitionRows(sourceType string, sourceID int, studentUUID string, p
 			PeriodYear:  periodDate.Year(),
 			PeriodMonth: int(periodDate.Month()),
 			Amount:      amount,
-			CreatedAt:   start, // anchor to the original confirm/paid date, not insert time
+			CreatedAt:   start,
 		})
 	}
 

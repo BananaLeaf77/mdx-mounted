@@ -34,9 +34,6 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		// Teacher
 		admin.POST("/teachers", h.CreateTeacher)
 		admin.PUT("/teachers/modify/:uuid", h.UpdateTeacher)
-		admin.GET("/teachers", h.GetAllTeachers)
-		admin.GET("/teachers/:uuid", h.GetTeacherByUUID)
-		admin.GET("/teachers/:uuid/classes", h.GetTeacherAllClasses)
 
 		// Manager
 		admin.POST("/managers", h.CreateManager)
@@ -46,9 +43,6 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 
 		// Student
 		admin.POST("/students", h.CreateStudent)
-		admin.GET("/students", h.GetAllStudents)
-		admin.GET("/students/filter", h.GetFilteredStudents)
-		admin.GET("/students/:uuid", h.GetStudentByUUID)
 
 		// Users
 		admin.GET("/users", h.GetAllUsers)
@@ -61,7 +55,6 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.PUT("/packages/modify/:id", h.UpdatePackage)
 		admin.GET("/packages/:id", h.GetPackagesByID) // NOTE: get all packages, not by id
 		admin.DELETE("/packages/:id", h.DeletePackage)
-		admin.GET("/packages", h.GetAllPackages)
 
 		// Instruments
 		admin.POST("/instruments", h.CreateInstrument)
@@ -76,9 +69,8 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		// Assign package to student
 		admin.POST("/assign-package", h.AssignPackageToStudent)
 
+
 		// Class Histories
-		admin.GET("/booked-classes", h.GetBookedClasses)
-		admin.GET("/class-histories", h.GetAllClassHistories)
 
 		// WhatsApp
 		admin.GET("/whatsapp/status", h.GetWhatsAppStatus)
@@ -86,8 +78,30 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
 
-		// pengakuan
-		admin.GET("/payment/recognition-rows/export", h.ExportRecognitionRows)
+	}
+
+	adminFinance := app.Group("/admin")
+	adminFinance.Use(config.AuthMiddleware(jwtManager), middleware.AdminAndFinanceOnly())
+	{
+		adminFinance.GET("/payment/recognition-rows/export", h.ExportRecognitionRows)
+	}
+
+	// Finance+Manager+Admin: student & teacher data.
+	// Finance needs student context (name, email, phone, package) when reviewing
+	// manual payments & payment history, so student detail is opened to them too.
+	// (ManagerAndFinanceOnly also permits admin as the super-role.)
+	adminManager := app.Group("/admin")
+	adminManager.Use(config.AuthMiddleware(jwtManager), middleware.ManagerAndFinanceOnly())
+	{
+		adminManager.GET("/students/filter", h.GetFilteredStudents)
+		adminManager.GET("/students", h.GetAllStudents)
+		adminManager.GET("/students/:uuid", h.GetStudentByUUID)
+		adminManager.GET("/teachers", h.GetAllTeachers)
+		adminManager.GET("/teachers/:uuid", h.GetTeacherByUUID)
+		adminManager.GET("/teachers/:uuid/classes", h.GetTeacherAllClasses)
+		adminManager.GET("/packages", h.GetAllPackages)
+		adminManager.GET("/class-histories", h.GetAllClassHistories)
+		adminManager.GET("/booked-classes", h.GetBookedClasses)
 	}
 	wa := app.Group("/wa")
 	wa.Use(config.AuthMiddleware(jwtManager))

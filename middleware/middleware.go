@@ -79,6 +79,61 @@ func AdminOnly() gin.HandlerFunc {
 	}
 }
 
+func AdminAndFinanceOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := utils.GetAPIHitter(c)
+		role, exists := c.Get("role")
+		if !exists {
+			utils.PrintLogInfo(&name, 403, "Admin and Finance only Middleware - Role Check", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses admin dan finance diperlukan",
+			})
+			c.Abort()
+			return
+		}
+
+		if role != domain.RoleAdmin && role != domain.RoleFinance {
+			utils.PrintLogInfo(&name, 403, "Admin and Finance only Middleware - Role Check", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses admin dan finance diperlukan",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func ManagerAndFinanceOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		name := utils.GetAPIHitter(c)
+		role, exists := c.Get("role")
+		if !exists {
+			utils.PrintLogInfo(&name, 403, "Manager and Finance only Middleware - Role Check", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses manajer dan finance diperlukan",
+			})
+			c.Abort()
+			return
+		}
+
+		// Allow manager, finance, and admin (admin as super-role)
+		if role != domain.RoleManagement && role != domain.RoleFinance && role != domain.RoleAdmin {
+			utils.PrintLogInfo(&name, 403, "Manager and Finance only Middleware - Role Check", nil)
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "Akses manajer dan finance diperlukan",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func TeacherAndAdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := utils.GetAPIHitter(c)

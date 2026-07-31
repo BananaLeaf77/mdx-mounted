@@ -29,17 +29,22 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 		manager.GET("/teachers", h.GetAllTeachers)
 		manager.GET("/students", h.GetAllStudents)
 		manager.POST("/students", h.CreateStudent)
-		manager.GET("/students/:uuid", h.GetStudentByUUID)
 		manager.PUT("/students/:uuid/packages/:package_id/quota", h.ModifyStudentPackageQuota)
 		manager.PUT("/modify", h.UpdateManager)
 		manager.PUT("/modify/student/:uuid", h.UpdateStudent)
-		manager.GET("/settings", h.GetSetting)
-		manager.PUT("/settings", h.UpdateSetting)
 		manager.GET("/booked-classes", h.GetAllBookedClasses)	
 		manager.PUT("/booked-classes/:id/cancel", h.CancelBookedClass)
 
 		manager.GET("/class-histories/cancelled", h.GetCancelledClassHistories)
 		manager.POST("/rebook", h.RebookWithSubstitute)
+	}
+
+	financeAndManager := app.Group("/manager")
+	financeAndManager.Use(config.AuthMiddleware(jwtManager), middleware.FinanceAndManagerOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
+	{
+		financeAndManager.GET("/settings", h.GetSetting)
+		financeAndManager.PUT("/settings", h.UpdateSetting)
+		financeAndManager.GET("/students/:uuid", h.GetStudentByUUID)
 	}
 }
 

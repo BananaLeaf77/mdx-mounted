@@ -31,7 +31,6 @@ const (
 
 	PaymentMethodManual       = "Manual Assign"
 	PaymentMethodManualStatus = "success"
-
 	DefaultPackageExpiredDays = 30
 )
 

@@ -42,18 +42,24 @@ func NewTeacherPaymentHandler(app *gin.Engine, uc domain.TeacherPaymentUseCase, 
 	managerOnly := app.Group("/finance/teacher-payments")
 	managerOnly.Use(config.AuthMiddleware(jwtManager), middleware.ManagerAndAdminOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
 	{
-		// POST /admin/teacher-payments/generate?year=2025&month=1
+		// POST /finance/teacher-payments/generate?year=2025&month=1
 		// Calculates earnings for all teachers for the given month and inserts
 		// unpaid payment records. Idempotent — safe to call multiple times.
+		// NOTE: Generate is Manager/Admin ONLY — Finance can view & mark paid but
+		// cannot create payouts (per role definition).
 		managerOnly.POST("/generate", h.GenerateMonthlyPayments)
+	}
 
-		// GET /admin/teacher-payments/teacher/:uuid?status=unpaid
+	financeAndManagerActions := app.Group("/finance/teacher-payments")
+	financeAndManagerActions.Use(config.AuthMiddleware(jwtManager), middleware.FinanceAndManagerOnly(), middleware.ValidateTurnedOffUserMiddleware(db))
+	{
+		// GET /finance/teacher-payments/teacher/:uuid?status=unpaid
 		// Payment history for a specific teacher.
-		managerOnly.GET("/teacher/:uuid", h.GetPaymentsByTeacher)
+		financeAndManagerActions.GET("/teacher/:uuid", h.GetPaymentsByTeacher)
 
-		// PUT /admin/teacher-payments/:id/mark-paid
+		// PUT /finance/teacher-payments/:id/mark-paid
 		// Body: { proof_image_url, notes }
-		managerOnly.PUT("/:id/mark-paid", h.MarkAsPaid)
+		financeAndManagerActions.PUT("/:id/mark-paid", h.MarkAsPaid)
 	}
 }
 

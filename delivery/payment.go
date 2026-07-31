@@ -33,9 +33,9 @@ func NewPaymentHandler(r *gin.Engine, uc domain.PaymentUseCase, jwtManager *util
 		student.GET("/payment/history", handler.GetPaymentHistory)
 	}
 
-	// Admin routes (requires auth + admin only)
+	// Admin routes (requires auth + admin/finance only)
 	admin := r.Group("/admin")
-	admin.Use(config.AuthMiddleware(jwtManager), middleware.AdminOnly())
+	admin.Use(config.AuthMiddleware(jwtManager), middleware.AdminAndFinanceOnly())
 	{
 		admin.GET("/payment/profit", handler.GetTotalProfit)
 		admin.GET("/payment/history", handler.GetPaymentHistoryAdmin)
@@ -107,9 +107,9 @@ func (h *PaymentHandler) DownloadInvoice(c *gin.Context) {
 		return
 	}
 	role, _ := c.Get("role") // however your middleware stores it — check config.AuthMiddleware for the exact key
-	isAdmin := role == "admin"
+	isAdminOrFinance := role == "admin" || role == "finance"
 
-	pdfBytes, err := h.uc.GetInvoicePDF(c.Request.Context(), externalID, userUUID.(string), isAdmin)
+	pdfBytes, err := h.uc.GetInvoicePDF(c.Request.Context(), externalID, userUUID.(string), isAdminOrFinance)
 	if err != nil {
 		utils.PrintLogInfo(&name, 404, "DownloadInvoice", &err)
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": err.Error(), "message": "Gagal mengambil invoice"})

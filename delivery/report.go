@@ -36,7 +36,7 @@ func NewReportHandler(
 	{
 		// GET /admin/reports/student/:uuid/class-history
 		// Returns full class history for the given student UUID.
-		// Accessible by admin and manager.
+		// Accessible by admin, manager, and finance.
 		adminGroup.GET("/student/:uuid/class-history", h.GetStudentClassHistory)
 
 		// admin get all student and preload all of their class history, maybe add querry for filter data limit and page
