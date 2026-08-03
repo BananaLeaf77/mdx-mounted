@@ -43,7 +43,7 @@ func (s *adminService) ExportRecognitionRows(ctx context.Context, filter domain.
 	sheet := "Pengakuan Pendapatan"
 	f.SetSheetName("Sheet1", sheet)
 
-	headers := []string{"Siswa", "Paket", "Periode", "Amount", "Metode Pembayaran", "Source", "Tgl Dibuat"}
+	headers := []string{"Siswa", "Paket", "Periode", "Amount", "Metode Pembayaran", "Source", "Paket Aktif"}
 	for i, h := range headers {
 		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
 		f.SetCellValue(sheet, cell, h)
