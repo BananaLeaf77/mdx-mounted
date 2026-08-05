@@ -110,9 +110,9 @@ func (m *WAManager) Connect() error {
 	dbCtx, dbCancel := context.WithTimeout(context.Background(), waDBTimeout)
 	defer dbCancel()
 
-	dbLog := waLog.Stdout("Database", "WARN", true)
+	// dbLog := waLog.Stdout("Database", "WARN", true)
 
-	container, err := sqlstore.New(dbCtx, "pgx", m.dbAddress, dbLog)
+	container, err := sqlstore.New(dbCtx, "pgx", m.dbAddress, nil)
 	if err != nil {
 		return fmt.Errorf("whatsapp sqlstore: %w", err)
 	}
