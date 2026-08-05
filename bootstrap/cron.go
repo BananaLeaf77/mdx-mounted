@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"chronosphere/utils"
 
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
+
+	zlog "github.com/rs/zerolog/log"
 )
 
 func InitCron(teacherPaymentService domain.TeacherPaymentUseCase, db *gorm.DB, waMgr *config.WAManager, adminRepo domain.AdminRepository) *cron.Cron {
@@ -134,19 +137,39 @@ func activateDuePackages(ctx context.Context, db *gorm.DB, adminRepo domain.Admi
 }
 
 func notifyPackageActivated(ctx context.Context, adminRepo domain.AdminRepository, waMgr *config.WAManager, studentUUID string, packageID int) {
-	if waMgr == nil || !waMgr.IsLoggedIn() {
-		return
-	}
 	student, err := adminRepo.GetStudentByUUID(ctx, studentUUID)
 	if err != nil {
+		zlog.Warn().Msg(fmt.Sprintf("notifyPackageActivated: failed to load student %s: %v", studentUUID, err))
 		return
 	}
+
 	pkg, err := adminRepo.GetPackagesByID(ctx, packageID)
 	if err != nil {
+		zlog.Warn().Msg(fmt.Sprintf("notifyPackageActivated: failed to load package %d for student %s: %v", packageID, student.Name, err))
 		return
 	}
+
+	if waMgr == nil || !waMgr.IsLoggedIn() {
+		msg := fmt.Sprintf(
+			"🔕 *Paket Aktif (Pending Activation)*\nSiswa: %s\nPaket: %s\n\nNotifikasi WA dilewati (tidak terhubung)",
+			student.Name, pkg.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram package-activated notif: %v", telegramErr))
+		}
+		return
+	}
+
 	phone := utils.NormalizePhoneNumber(student.Phone)
 	if phone == "" {
+		zlog.Warn().Msg(fmt.Sprintf("notifyPackageActivated: invalid phone for student %s, skipping WA", student.Name))
+		summary := fmt.Sprintf(
+			"📦 *Paket Aktif (Pending Activation)*\nSiswa: %s\nPaket: %s\nWA: ⚠️ Nomor telepon tidak valid",
+			student.Name, pkg.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram package-activated notif: %v", telegramErr))
+		}
 		return
 	}
 
@@ -165,8 +188,18 @@ func notifyPackageActivated(ctx context.Context, adminRepo domain.AdminRepositor
 		appURL, appName,
 	)
 
+	waStatus := "✅ Terkirim"
 	if err := waMgr.SendMessage(phone, msg); err != nil {
-		log.Printf("⚠️ WA activation notify failed for %s: %v", phone, err)
+		zlog.Warn().Msg(fmt.Sprintf("WA activation notify failed for %s: %v", phone, err))
+		waStatus = fmt.Sprintf("❌ Gagal: %v", err)
+	}
+
+	summary := fmt.Sprintf(
+		"📦 *Paket Aktif (Pending Activation)*\nSiswa: %s\nPaket: %s\nWA: %s",
+		student.Name, pkg.Name, waStatus,
+	)
+	if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+		zlog.Warn().Msg(fmt.Sprintf("failed to send telegram package-activated notif: %v", telegramErr))
 	}
 }
 
@@ -203,9 +236,19 @@ func sendDailyBookingReminder(ctx context.Context, db *gorm.DB, waMgr *config.WA
 		return fmt.Errorf("gagal mengambil data siswa: %w", err)
 	}
 
-	log.Printf("🔔 [CRON] Found %d students to remind", len(students))
+	zlog.Info().Msg(fmt.Sprintf("[CRON] Found %d students to remind", len(students)))
+
+	if waMgr == nil || !waMgr.IsLoggedIn() {
+		msg := fmt.Sprintf("🔕 *Daily Booking Reminder*\nDilewati — WhatsApp tidak terhubung.\n%d siswa seharusnya menerima pengingat.", len(students))
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cron notif: %v", telegramErr))
+		}
+		return nil
+	}
 
 	sent := 0
+	var failures []string
+
 	for _, s := range students {
 		phone := utils.NormalizePhoneNumber(s.Phone)
 		if phone == "" {
@@ -228,25 +271,30 @@ Buka aplikasi → Pilih jadwal → Konfirmasi pemesanan
 			appName,
 		)
 
-		if waMgr == nil || !waMgr.IsLoggedIn() {
-			log.Printf("🔕 WhatsApp not connected, skipping reminder")
-			return nil
-		}
-
 		if err := waMgr.SendMessage(phone, msg); err != nil {
-			log.Printf("⚠️  [CRON] Failed to send reminder to %s (%s): %v", s.Name, phone, err)
+			zlog.Warn().Msg(fmt.Sprintf("[CRON] Failed to send reminder to %s (%s): %v", s.Name, phone, err))
+			failures = append(failures, fmt.Sprintf("%s: %v", s.Name, err))
 		} else {
 			sent++
 		}
 
 		select {
 		case <-ctx.Done():
-			log.Printf("⚠️  [CRON] Context cancelled after %d reminders", sent)
+			zlog.Warn().Msg(fmt.Sprintf("[CRON] Context cancelled after %d reminders", sent))
 			return ctx.Err()
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
 
-	log.Printf("✅ [CRON] Daily reminder sent to %d/%d students", sent, len(students))
+	zlog.Info().Msg(fmt.Sprintf("[CRON] Daily reminder sent to %d/%d students", sent, len(students)))
+
+	summary := fmt.Sprintf("🔔 *Daily Booking Reminder*\nTerkirim: %d/%d siswa", sent, len(students))
+	if len(failures) > 0 {
+		summary += fmt.Sprintf("\n\n⚠️ Gagal (%d):\n%s", len(failures), strings.Join(failures, "\n"))
+	}
+	if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+		zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cron summary: %v", telegramErr))
+	}
+
 	return nil
 }

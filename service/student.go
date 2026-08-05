@@ -6,10 +6,11 @@ import (
 	"chronosphere/utils"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"time"
+
+	zlog "github.com/rs/zerolog/log"
 )
 
 type studentUseCase struct {
@@ -103,10 +104,20 @@ func (s *studentUseCase) CancelBookedClass(ctx context.Context, bookingID int, s
 	if err != nil {
 		return err
 	}
+
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping cancel notification (CancelBookedClass)")
+		if data != nil {
+			msg := fmt.Sprintf(
+				"❌ *Kelas Dibatalkan Siswa*\nSiswa: %s\nGuru: %s\nAlasan: %s\n\n🔕 Notifikasi WA dilewati (tidak terhubung)",
+				data.Student.Name, data.Schedule.Teacher.Name, *reason,
+			)
+			if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+				zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
+			}
+		}
 		return nil
 	}
+
 	s.sendCancelClassNotif(data, reason)
 	return nil
 }
@@ -116,18 +127,30 @@ func (s *studentUseCase) BookClass(ctx context.Context, studentUUID string, sche
 	if err != nil {
 		return nil, err
 	}
+
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping book notification (BookClass)")
+		if data != nil {
+			msg := fmt.Sprintf(
+				"📅 *Booking Baru*\nSiswa: %s\nGuru: %s\nTanggal: %s\nJam: %s\nNotifikasi WA: 🔕 Dilewati (WhatsApp tidak terhubung)",
+				data.Student.Name,
+				data.Schedule.Teacher.Name,
+				data.ClassDate.Format("Mon, 02 Jan 2006"),
+				data.ClassDate.Format("15:04"),
+			)
+			if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+				zlog.Warn().Msg(fmt.Sprintf("failed to send telegram booking notif: %v", telegramErr))
+			}
+		}
 	} else {
 		s.sendBookClassNotif(data)
 	}
+
 	if data != nil {
 		data.Schedule.Teacher.Email = ""
 		data.Schedule.Teacher.Phone = ""
 	}
 	return data, nil
 }
-
 func (s *studentUseCase) GetAvailableSchedules(ctx context.Context, studentUUID string, instrumentID int) (*[]domain.ScheduleAvailabilityResult, error) {
 	res, err := s.repo.GetAvailableSchedules(ctx, studentUUID, instrumentID)
 	if err != nil {
@@ -166,10 +189,25 @@ func (s *studentUseCase) BookClassTrial(ctx context.Context, studentUUID string,
 		return nil, err
 	}
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping book notification (BookClassTrial)")
+		zlog.Warn().Msg("WhatsApp not connected, skipping book notification (BookClassTrial)")
 	} else {
 		s.sendBookClassNotif(data)
 	}
+
+	if data != nil {
+		teacherName := data.Schedule.Teacher.Name
+		msg := fmt.Sprintf(
+			"📅 *Booking Baru*\nSiswa: %s\nGuru: %s\nTanggal: %s\nJam: %s",
+			data.Student.Name,
+			teacherName,
+			data.ClassDate.Format("Mon, 02 Jan 2006"),
+			data.ClassDate.Format("15:04"),
+		)
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram booking notif: %v", telegramErr))
+		}
+	}
+
 	if data != nil {
 		data.Schedule.Teacher.Email = ""
 		data.Schedule.Teacher.Phone = ""
@@ -215,7 +253,6 @@ func (s *studentUseCase) sendCancelClassNotif(booking *domain.Booking, reason *s
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
 
-	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
 	instrumentName := "-"
 	if booking.PackageUsed.Package != nil {
 		if booking.PackageUsed.Package.TrialInstrument != "" {
@@ -280,9 +317,35 @@ Halo %s,
 	mgr := s.messenger
 	tPhone := booking.Schedule.Teacher.Phone
 	sPhone := booking.Student.Phone
+	tName := booking.Schedule.Teacher.Name
+	sName := booking.Student.Name
+
 	go func() {
-		sendWA(mgr, tPhone, teacherMsg)
-		sendWA(mgr, sPhone, studentMsg)
+		teacherErr := sendWA(mgr, tPhone, teacherMsg)
+		studentErr := sendWA(mgr, sPhone, studentMsg)
+
+		status := func(err error) string {
+			if err != nil {
+				return "❌ Gagal"
+			}
+			return "✅ Terkirim"
+		}
+
+		summary := fmt.Sprintf(
+			"❌ *Kelas Dibatalkan Siswa*\nSiswa: %s\nGuru: %s\nTanggal: %s, %s\nJam: %s\nAlasan: %s\n\nWA Guru: %s\nWA Siswa: %s",
+			sName, tName, dayName, dateStr, classTime, *reason,
+			status(teacherErr), status(studentErr),
+		)
+		if teacherErr != nil {
+			summary += fmt.Sprintf("\n\n⚠️ Error Guru: %v", teacherErr)
+		}
+		if studentErr != nil {
+			summary += fmt.Sprintf("\n⚠️ Error Siswa: %v", studentErr)
+		}
+
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
+		}
 	}()
 }
 
@@ -294,7 +357,6 @@ func (s *studentUseCase) sendBookClassNotif(booking *domain.Booking) {
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
 
-	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
 	instrumentName := "-"
 	if booking.PackageUsed.Package != nil {
 		if booking.PackageUsed.Package.TrialInstrument != "" {
@@ -343,8 +405,8 @@ Halo %s,
 🎵 *Instrumen:* %s
 
 *Jika ada perubahan:*
-• Hubungi guru atau admin
-• Batalkan minimal 1 hari (24 jam) sebelum kelas
+- Hubungi guru atau admin
+- Batalkan minimal 1 hari (24 jam) sebelum kelas
 
 _Selamat belajar! 🎶_
 
@@ -361,23 +423,51 @@ _Selamat belajar! 🎶_
 	mgr := s.messenger
 	tPhone := booking.Schedule.Teacher.Phone
 	sPhone := booking.Student.Phone
+	tName := booking.Schedule.Teacher.Name
+	sName := booking.Student.Name
+
 	go func() {
-		sendWA(mgr, tPhone, teacherMsg)
-		sendWA(mgr, sPhone, studentMsg)
+		teacherErr := sendWA(mgr, tPhone, teacherMsg)
+		studentErr := sendWA(mgr, sPhone, studentMsg)
+
+		status := func(err error) string {
+			if err != nil {
+				return "❌ Gagal"
+			}
+			return "✅ Terkirim"
+		}
+
+		summary := fmt.Sprintf(
+			"📅 *Booking Baru*\nSiswa: %s\nGuru: %s\nTanggal: %s, %s\nJam: %s\n\nWA Guru: %s\nWA Siswa: %s",
+			sName, tName, dayName, dateStr, classTime,
+			status(teacherErr), status(studentErr),
+		)
+		if teacherErr != nil {
+			summary += fmt.Sprintf("\n\n⚠️ Error Guru: %v", teacherErr)
+		}
+		if studentErr != nil {
+			summary += fmt.Sprintf("\n⚠️ Error Siswa: %v", studentErr)
+		}
+
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram booking notif: %v", telegramErr))
+		}
 	}()
 }
 
 // sendWA is a fire-and-forget helper shared across student service.
-func sendWA(mgr *config.WAManager, phone, msg string) {
+func sendWA(mgr *config.WAManager, phone, msg string) error {
 	normalized := utils.NormalizePhoneNumber(phone)
 	if normalized == "" {
-		return
+		zlog.Warn().Msg(fmt.Sprintf("WA send skipped, invalid phone: %s", phone))
+		return fmt.Errorf("invalid phone number: %s", phone)
 	}
 	if err := mgr.SendMessage(normalized, msg); err != nil {
-		log.Printf("🔕 WA send failed to %s: %v", phone, err)
-	} else {
-		log.Printf("🔔 WA notification sent to: %s", phone)
+		zlog.Warn().Msg(fmt.Sprintf("WA send failed to %s: %v", phone, err))
+		return err
 	}
+	zlog.Info().Msg(fmt.Sprintf("WA notification sent to: %s", phone))
+	return nil
 }
 
 func indonesianDayName(wd time.Weekday) string {

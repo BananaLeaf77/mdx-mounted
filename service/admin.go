@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	zlog "github.com/rs/zerolog/log"
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -216,34 +217,52 @@ func (s *adminService) AssignPackageToStudent(ctx context.Context, studentUUID s
 		instrumentName = dataPackage.Instrument.Name
 	}
 
-	if s.messenger != nil && s.messenger.IsLoggedIn() {
-
-		phoneNormalized := utils.NormalizePhoneNumber(dataStudent.Phone)
-		if phoneNormalized != "" {
-			msgToStudent := fmt.Sprintf(
-				"Halo %s,\n\nPaket les Anda telah aktif!\n• Paket: %s (%s)\n• Instrument: %s\n• Kuota: %d sesi\n\nSilakan login ke aplikasi untuk mulai booking sesi.\n\nTerima kasih,\n\n🌐 Website: %s\n🔔 %s Notification System\n",
-				dataStudent.Name,
-				dataPackage.Name,
-				dataPackage.Description,
-				instrumentName,
-				dataPackage.Quota,
-				"https://www.mdxmusiccourse.cloud/",
-				os.Getenv("APP_NAME"),
-			)
-			if s.messenger == nil || !s.messenger.IsLoggedIn() {
-				log.Printf("🔕 WhatsApp not connected, skipping cancel notification (AssignPackageToStudent) Student Name: %s", dataStudent.Name)
-				return nil
-			}
-			go func() {
-				if err := s.messenger.SendMessage(phoneNormalized, msgToStudent); err != nil {
-					log.Printf("🔕 WA to student %s failed: %v", phoneNormalized, err)
-				}
-			}()
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		msg := fmt.Sprintf(
+			"🔕 *Paket Diaktifkan*\nSiswa: %s\nPaket: %s\n\nNotifikasi WA dilewati (tidak terhubung)",
+			dataStudent.Name, dataPackage.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram assign-package notif: %v", telegramErr))
 		}
+		return nil
 	}
+
+	phoneNormalized := utils.NormalizePhoneNumber(dataStudent.Phone)
+	if phoneNormalized == "" {
+		zlog.Warn().Msg(fmt.Sprintf("AssignPackageToStudent: invalid phone for student %s, skipping WA", dataStudent.Name))
+		return nil
+	}
+
+	msgToStudent := fmt.Sprintf(
+		"Halo %s,\n\nPaket les Anda telah aktif!\n• Paket: %s (%s)\n• Instrument: %s\n• Kuota: %d sesi\n\nSilakan login ke aplikasi untuk mulai booking sesi.\n\nTerima kasih,\n\n🌐 Website: %s\n🔔 %s Notification System\n",
+		dataStudent.Name,
+		dataPackage.Name,
+		dataPackage.Description,
+		instrumentName,
+		dataPackage.Quota,
+		"https://www.mdxmusiccourse.cloud/",
+		os.Getenv("APP_NAME"),
+	)
+
+	go func() {
+		waStatus := "✅ Terkirim"
+		if err := s.messenger.SendMessage(phoneNormalized, msgToStudent); err != nil {
+			zlog.Warn().Msg(fmt.Sprintf("WA to student %s failed: %v", phoneNormalized, err))
+			waStatus = fmt.Sprintf("❌ Gagal: %v", err)
+		}
+
+		summary := fmt.Sprintf(
+			"📦 *Paket Diaktifkan*\nSiswa: %s\nPaket: %s\nWA: %s",
+			dataStudent.Name, dataPackage.Name, waStatus,
+		)
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram assign-package notif: %v", telegramErr))
+		}
+	}()
+
 	return nil
 }
-
 func (s *adminService) CreatePackage(ctx context.Context, pkg *domain.Package) (*domain.Package, error) {
 	if pkg == nil {
 		return nil, errors.New("paket tidak boleh kosong")

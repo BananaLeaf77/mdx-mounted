@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	zlog "github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -221,12 +222,22 @@ func (s *manualPaymentSvc) ConfirmManualPayment(
 			PackageID: mp.PackageID, PricePaid: mp.TotalAmount,
 			ActivateOn: req.ActivateOn.Truncate(24 * time.Hour),
 		}); err != nil {
-			log.Printf("⚠️ failed to schedule activation for #%d: %v", paymentID, err)
+			zlog.Warn().Msg(fmt.Sprintf("failed to schedule activation for #%d: %v", paymentID, err))
+			if telegramErr := utils.NotifyTelegram(fmt.Sprintf(
+				"⚠️ *Gagal Jadwalkan Aktivasi* (Manual #%d)\n%v", paymentID, err,
+			)); telegramErr != nil {
+				zlog.Warn().Msg(fmt.Sprintf("failed to send telegram error notif: %v", telegramErr))
+			}
 		}
 	} else {
 		// Activate now — mirrors Xendit webhook behaviour.
 		if _, _, err := s.adminRepo.AssignPackageToStudent(ctx, mp.StudentUUID, mp.PackageID); err != nil {
-			log.Printf("⚠️  ManualPayment #%d confirm: auto-assign failed (admin can assign manually): %v", paymentID, err)
+			zlog.Warn().Msg(fmt.Sprintf("ManualPayment #%d confirm: auto-assign failed (admin can assign manually): %v", paymentID, err))
+			if telegramErr := utils.NotifyTelegram(fmt.Sprintf(
+				"⚠️ *Gagal Auto-Assign Paket* (Manual #%d)\nAdmin perlu assign manual.\n%v", paymentID, err,
+			)); telegramErr != nil {
+				zlog.Warn().Msg(fmt.Sprintf("failed to send telegram error notif: %v", telegramErr))
+			}
 		} else if pkg, err := s.adminRepo.GetPackagesByID(ctx, mp.PackageID); err == nil {
 			months := pkg.ExpiredDuration / 30
 			if months <= 0 {
@@ -234,7 +245,12 @@ func (s *manualPaymentSvc) ConfirmManualPayment(
 			}
 			rows := BuildRecognitionRows("manual_payment", mp.ID, mp.StudentUUID, mp.PackageID, mp.TotalAmount, months, time.Now())
 			if err := s.adminRepo.CreateRecognitionRows(ctx, rows); err != nil {
-				log.Printf("⚠️ failed to write recognition rows for manual_payment #%d: %v", mp.ID, err)
+				zlog.Warn().Msg(fmt.Sprintf("failed to write recognition rows for manual_payment #%d: %v", mp.ID, err))
+				if telegramErr := utils.NotifyTelegram(fmt.Sprintf(
+					"⚠️ *Gagal Buat Recognition Rows* (Manual #%d)\n%v", mp.ID, err,
+				)); telegramErr != nil {
+					zlog.Warn().Msg(fmt.Sprintf("failed to send telegram error notif: %v", telegramErr))
+				}
 			}
 		}
 	}
@@ -244,10 +260,12 @@ func (s *manualPaymentSvc) ConfirmManualPayment(
 		bgCtx := context.Background()
 		student, err := s.adminRepo.GetStudentByUUID(bgCtx, mpCopy.StudentUUID)
 		if err != nil {
+			zlog.Warn().Msg(fmt.Sprintf("notifyStudentConfirmed: failed to load student %s: %v", mpCopy.StudentUUID, err))
 			return
 		}
 		pkg, err := s.adminRepo.GetPackagesByID(bgCtx, mpCopy.PackageID)
 		if err != nil {
+			zlog.Warn().Msg(fmt.Sprintf("notifyStudentConfirmed: failed to load package %d: %v", mpCopy.PackageID, err))
 			return
 		}
 		s.notifyStudentConfirmed(student, pkg, &mpCopy)
@@ -447,10 +465,25 @@ func (s *manualPaymentSvc) GetInvoicePDF(ctx context.Context, externalID string,
 
 func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *domain.Package, mp *domain.ManualPayment) {
 	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		msg := fmt.Sprintf(
+			"🔕 *Pembayaran Dikonfirmasi (Manual #%d)*\nSiswa: %s\nPaket: %s\n\nNotifikasi WA dilewati (tidak terhubung)",
+			mp.ID, student.Name, pkg.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram confirm-payment notif: %v", telegramErr))
+		}
 		return
 	}
+
 	normalized := utils.NormalizePhoneNumber(student.Phone)
 	if normalized == "" {
+		summary := fmt.Sprintf(
+			"💰 *Pembayaran Dikonfirmasi (Manual #%d)*\nSiswa: %s\nPaket: %s\nWA: ⚠️ Nomor telepon tidak valid",
+			mp.ID, student.Name, pkg.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram confirm-payment notif: %v", telegramErr))
+		}
 		return
 	}
 
@@ -469,8 +502,18 @@ func (s *manualPaymentSvc) notifyStudentConfirmed(student *domain.User, pkg *dom
 		os.Getenv("APP_NAME"),
 	)
 
+	waStatus := "✅ Terkirim"
 	if err := s.messenger.SendMessage(normalized, msg); err != nil {
-		log.Printf("⚠️ WA student confirm notify failed: %v", err)
+		zlog.Warn().Msg(fmt.Sprintf("WA student confirm notify failed: %v", err))
+		waStatus = fmt.Sprintf("❌ Gagal: %v", err)
+	}
+
+	summary := fmt.Sprintf(
+		"💰 *Pembayaran Dikonfirmasi (Manual #%d)*\nSiswa: %s\nPaket: %s\nTotal: Rp%.0f\nWA: %s",
+		mp.ID, student.Name, pkg.Name, mp.TotalAmount, waStatus,
+	)
+	if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+		zlog.Warn().Msg(fmt.Sprintf("failed to send telegram confirm-payment notif: %v", telegramErr))
 	}
 }
 

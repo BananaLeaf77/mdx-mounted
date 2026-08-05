@@ -6,9 +6,10 @@ import (
 	"chronosphere/utils"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
+
+	zlog "github.com/rs/zerolog/log"
 )
 
 type teacherService struct {
@@ -51,10 +52,20 @@ func (s *teacherService) CancelBookedClass(ctx context.Context, bookingID int, t
 	if err != nil {
 		return err
 	}
-	if !s.messenger.IsLoggedIn() {
-		log.Printf("🔕 WhatsApp not connected, skipping cancel notification (CancelBookedClass)")
+
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		if data != nil {
+			msg := fmt.Sprintf(
+				"❌ *Kelas Dibatalkan Guru*\nSiswa: %s\nGuru: %s\nAlasan: %s\n\n🔕 Notifikasi WA dilewati (tidak terhubung)",
+				data.Student.Name, data.Schedule.Teacher.Name, *reason,
+			)
+			if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+				zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
+			}
+		}
 		return nil
 	}
+
 	s.sendCancelClassByTeacherNotif(data, reason)
 	return nil
 }
@@ -96,7 +107,6 @@ func (s *teacherService) DeleteAvailability(ctx context.Context, scheduleID int,
 // ─────────────────────────────────────────────────────────────────────────────
 // Notification helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
 func (s *teacherService) sendCancelClassByTeacherNotif(booking *domain.Booking, reason *string) {
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	classDate := booking.ClassDate.In(loc)
@@ -114,7 +124,6 @@ func (s *teacherService) sendCancelClassByTeacherNotif(booking *domain.Booking, 
 		salutation = "Ibu"
 	}
 
-	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
 	instrumentName := "-"
 	if booking.PackageUsed.Package != nil {
 		if booking.PackageUsed.Package.TrialInstrument != "" {
@@ -151,7 +160,6 @@ Pembatalan kelas berhasil:
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"))
 
-
 	studentMsg := fmt.Sprintf(`*PEMBATALAN KELAS*
 
 Halo %s,
@@ -178,21 +186,37 @@ Halo %s,
 		"https://www.mdxmusiccourse.cloud/",
 		os.Getenv("APP_NAME"))
 
-
 	mgr := s.messenger
 	tPhone := booking.Schedule.Teacher.Phone
 	sPhone := booking.Student.Phone
+	tName := booking.Schedule.Teacher.Name
+	sName := booking.Student.Name
+
 	go func() {
-		for _, pair := range [][2]string{{tPhone, teacherMsg}, {sPhone, studentMsg}} {
-			normalized := utils.NormalizePhoneNumber(pair[0])
-			if normalized == "" {
-				continue
+		teacherErr := sendWA(mgr, tPhone, teacherMsg)
+		studentErr := sendWA(mgr, sPhone, studentMsg)
+
+		status := func(err error) string {
+			if err != nil {
+				return "❌ Gagal"
 			}
-			if err := mgr.SendMessage(normalized, pair[1]); err != nil {
-				log.Printf("🔕 WA send to %s failed: %v, (Teacher CancelBookedClass)", pair[0], err)
-			} else {
-				log.Printf("🔔 WA notification sent to: %s, (Teacher CancelBookedClass)", pair[0])
-			}
+			return "✅ Terkirim"
+		}
+
+		summary := fmt.Sprintf(
+			"❌ *Kelas Dibatalkan Guru*\nSiswa: %s\nGuru: %s\nTanggal: %s, %s\nJam: %s\nAlasan: %s\n\nWA Guru: %s\nWA Siswa: %s",
+			sName, tName, dayName, dateStr, classTime, *reason,
+			status(teacherErr), status(studentErr),
+		)
+		if teacherErr != nil {
+			summary += fmt.Sprintf("\n\n⚠️ Error Guru: %v", teacherErr)
+		}
+		if studentErr != nil {
+			summary += fmt.Sprintf("\n⚠️ Error Siswa: %v", studentErr)
+		}
+
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
 		}
 	}()
 }
