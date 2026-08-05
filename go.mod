@@ -18,7 +18,7 @@ require (
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/xendit/xendit-go/v6 v6.4.0
 	github.com/xuri/excelize/v2 v2.11.0
-	go.mau.fi/whatsmeow v0.0.0-20260730092514-662ad1dc6900
+	go.mau.fi/whatsmeow v0.0.0-20260804144817-1494ba731cb0
 	golang.org/x/crypto v0.54.0
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0
