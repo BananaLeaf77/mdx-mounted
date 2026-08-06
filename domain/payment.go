@@ -42,6 +42,7 @@ type RecognitionRowDetail struct {
 	SourceID      int       `json:"source_id"`
 	StudentUUID   string    `json:"student_uuid"`
 	StudentName   string    `json:"student_name"`
+	StudentImage  string    `json:"student_image"`
 	PackageID     int       `json:"package_id"`
 	PackageName   string    `json:"package_name"`
 	PeriodYear    int       `json:"period_year"`

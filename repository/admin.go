@@ -85,6 +85,7 @@ func (r *adminRepo) GetRecognitionRows(ctx context.Context, filter domain.Recogn
 
 	err := base.
 		Select(`pr.id, pr.source_type, pr.source_id, pr.student_uuid, u.name AS student_name,
+			u.image AS student_image,
 			pr.package_id, p.name AS package_name, pr.period_year, pr.period_month,
 			pr.amount, COALESCE(mp.notes, pay.payment_method, '-') AS payment_method, pr.created_at`).
 		Order("pr.period_year DESC, pr.period_month DESC, pr.id DESC").
@@ -130,6 +131,7 @@ func (r *adminRepo) GetAllRecognitionRowsForExport(ctx context.Context, filter d
 
 	err := base.
 		Select(`pr.id, pr.source_type, pr.source_id, pr.student_uuid, u.name AS student_name,
+			u.image AS student_image,
 			pr.package_id, p.name AS package_name, pr.period_year, pr.period_month,
 			pr.amount, COALESCE(mp.notes, pay.payment_method, '-') AS payment_method, pr.created_at`).
 		Order("pr.period_year ASC, pr.period_month ASC, pr.id ASC").
