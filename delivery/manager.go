@@ -32,7 +32,7 @@ func NewManagerHandler(app *gin.Engine, uc domain.ManagerUseCase, jwtManager *ut
 		manager.PUT("/students/:uuid/packages/:package_id/quota", h.ModifyStudentPackageQuota)
 		manager.PUT("/modify", h.UpdateManager)
 		manager.PUT("/modify/student/:uuid", h.UpdateStudent)
-		manager.GET("/booked-classes", h.GetAllBookedClasses)	
+		manager.GET("/booked-classes", h.GetAllBookedClasses)
 		manager.PUT("/booked-classes/:id/cancel", h.CancelBookedClass)
 
 		manager.GET("/class-histories/cancelled", h.GetCancelledClassHistories)
@@ -129,24 +129,22 @@ func (h *ManagerHandler) GetTeacherSchedules(c *gin.Context) {
 	name := utils.GetAPIHitter(c)
 	teacherUUID := c.Param("uuid")
 
-	schedules, err := h.uc.GetTeacherSchedules(c.Request.Context(), teacherUUID)
+	requiredDuration := 0
+	if d := c.Query("required_duration"); d != "" {
+		if parsed, err := strconv.Atoi(d); err == nil {
+			requiredDuration = parsed
+		}
+	}
+
+	schedules, err := h.uc.GetTeacherSchedules(c.Request.Context(), teacherUUID, requiredDuration)
 	if err != nil {
 		utils.PrintLogInfo(&name, 500, "GetTeacherSchedules - UseCase", &err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   err.Error(),
-			"message": "Gagal mengambil jadwal guru",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
 		return
 	}
 
 	utils.PrintLogInfo(&name, 200, "GetTeacherSchedules", nil)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    schedules,
-		"total":   len(schedules),
-		"message": "Jadwal guru berhasil diambil",
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": schedules})
 }
 
 func (h *ManagerHandler) GetAllTeachers(c *gin.Context) {

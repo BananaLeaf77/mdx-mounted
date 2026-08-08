@@ -2,12 +2,14 @@ package repository
 
 import (
 	"chronosphere/domain"
+	"chronosphere/utils"
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"strings"
 	"time"
 
+	zlog "github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -36,24 +38,14 @@ func (r *teacherPaymentRepo) GenerateMonthlyPayments(
 	commissionRate float64,
 ) ([]domain.TeacherPaymentDetail, error) {
 
-	// Period boundaries (full calendar month, UTC)
 	periodStart := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Nanosecond) // last nanosecond of the month
+	periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Nanosecond)
 
-	// ── 1. Aggregate classes per teacher for the period ──────────────────────
-	// Two sources are combined via UNION ALL:
-	//   a) Formally completed classes (teacher called FinishClass → class_history exists)
-	//   b) Stale bookings: class_date is in the period and already past, but the teacher
-	//      never finished the class (no class_history). Teacher still owes notes/docs,
-	//      but should still be paid for the class.
-	// Period is based on b.class_date so a late-finished Feb class still counts for Feb.
 	type aggRow struct {
 		TeacherUUID    string
 		ClassCount     int
 		TotalPricePaid float64
 	}
-
-	// In repository/teacher_payment.go, GenerateMonthlyPayments rawSQL
 
 	rawSQL := `
 SELECT
@@ -77,20 +69,28 @@ GROUP BY teacher_uuid`
 
 	var rows []aggRow
 	err := r.db.WithContext(ctx).
-		Raw(rawSQL,
-			domain.StatusCompleted, periodStart, periodEnd,
-		).
+		Raw(rawSQL, domain.StatusCompleted, periodStart, periodEnd).
 		Scan(&rows).Error
 
 	if err != nil {
+		if telegramErr := utils.NotifyTelegram(fmt.Sprintf(
+			"🔴 *Generate Payroll Guru Gagal* (%04d-%02d)\n%v", year, month, err,
+		)); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram payroll error notif: %v", telegramErr))
+		}
 		return nil, fmt.Errorf("gagal menghitung kelas: %w", err)
 	}
 
 	if len(rows) == 0 {
+		if telegramErr := utils.NotifyTelegram(fmt.Sprintf(
+			"🟡 *Generate Payroll Guru* (%04d-%02d)\nTidak ada kelas selesai pada periode ini — tidak ada guru untuk dibayar.",
+			year, month,
+		)); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram payroll notif: %v", telegramErr))
+		}
 		return []domain.TeacherPaymentDetail{}, nil
 	}
 
-	// ── 2. Load teacher details for response ──────────────────────────────────
 	teacherUUIDs := make([]string, len(rows))
 	for i, row := range rows {
 		teacherUUIDs[i] = row.TeacherUUID
@@ -108,7 +108,6 @@ GROUP BY teacher_uuid`
 		teacherMap[t.UUID] = t
 	}
 
-	// ── 3. Fetch existing payment records for this period (idempotency check) ─
 	var existing []domain.TeacherPayment
 	if err := r.db.WithContext(ctx).
 		Where("period_start = ? AND period_end = ?", periodStart, periodEnd).
@@ -116,24 +115,24 @@ GROUP BY teacher_uuid`
 		return nil, fmt.Errorf("gagal memeriksa data pembayaran existing: %w", err)
 	}
 
-	// key: teacher_uuid → existing record (so we can check status and update if needed)
 	existingMap := make(map[string]domain.TeacherPayment, len(existing))
 	for _, e := range existing {
 		existingMap[e.TeacherUUID] = e
 	}
 
-	// ── 4. Insert new records + build response ────────────────────────────────
 	var details []domain.TeacherPaymentDetail
+	var inserted, updated, skippedPaid int
+	var totalPayout float64
+	var zeroEarningTeachers []string
 
 	for _, row := range rows {
 		earning := row.TotalPricePaid * commissionRate
 		teacher := teacherMap[row.TeacherUUID]
 
-		// ── DEBUG: trace raw values so you can spot a zero ──────────────────
-		log.Printf(
-			"[TeacherPayment] teacher=%s classes=%d price_paid_sum=%.2f commission=%.4f => earning=%.2f",
-			row.TeacherUUID, row.ClassCount, row.TotalPricePaid, commissionRate, earning,
-		)
+		if earning == 0 {
+			zeroEarningTeachers = append(zeroEarningTeachers, teacher.Name)
+		}
+		totalPayout += earning
 
 		details = append(details, domain.TeacherPaymentDetail{
 			TeacherUUID:    row.TeacherUUID,
@@ -148,18 +147,12 @@ GROUP BY teacher_uuid`
 			PeriodEnd:      periodEnd.Format("2006-01-02"),
 		})
 
-		// ── Upsert logic ────────────────────────────────────────────────────────
 		if prev, exists := existingMap[row.TeacherUUID]; exists {
-			// Already paid → never touch it; keep existing amounts in detail
 			if prev.Status == domain.TeacherPaymentStatusPaid {
-				log.Printf(
-					"[TeacherPayment] teacher=%s already PAID — skipped",
-					row.TeacherUUID,
-				)
+				skippedPaid++
 				continue
 			}
 
-			// Unpaid → re-calculate and update so stale rows are corrected
 			if err := r.db.WithContext(ctx).
 				Model(&domain.TeacherPayment{}).
 				Where("id = ?", prev.ID).
@@ -170,11 +163,10 @@ GROUP BY teacher_uuid`
 				}).Error; err != nil {
 				return nil, fmt.Errorf("gagal memperbarui data pembayaran untuk guru %s: %w", row.TeacherUUID, err)
 			}
-			log.Printf("[TeacherPayment] teacher=%s unpaid record updated id=%d", row.TeacherUUID, prev.ID)
+			updated++
 			continue
 		}
 
-		// No record yet → insert new
 		record := domain.TeacherPayment{
 			TeacherUUID:  row.TeacherUUID,
 			PeriodStart:  periodStart,
@@ -188,6 +180,18 @@ GROUP BY teacher_uuid`
 		if err := r.db.WithContext(ctx).Create(&record).Error; err != nil {
 			return nil, fmt.Errorf("gagal menyimpan data pembayaran untuk guru %s: %w", row.TeacherUUID, err)
 		}
+		inserted++
+	}
+
+	summary := fmt.Sprintf(
+		"💵 *Generate Payroll Guru* (%04d-%02d)\nGuru diproses: %d\nBaru: %d | Diperbarui: %d | Dilewati (sudah dibayar): %d\nTotal payout: Rp%.0f\nKomisi: %.0f%%",
+		year, month, len(rows), inserted, updated, skippedPaid, totalPayout, commissionRate*100,
+	)
+	if len(zeroEarningTeachers) > 0 {
+		summary += fmt.Sprintf("\n\n⚠️ Earning Rp0 untuk: %s (cek price_paid/quota)", strings.Join(zeroEarningTeachers, ", "))
+	}
+	if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+		zlog.Warn().Msg(fmt.Sprintf("failed to send telegram payroll notif: %v", telegramErr))
 	}
 
 	return details, nil

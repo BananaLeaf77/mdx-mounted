@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	zlog "github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -32,14 +33,12 @@ func (s *managerService) GetAllBookedClasses(ctx context.Context) (*[]domain.Boo
 }
 
 func (s *managerService) CancelBookedClass(ctx context.Context, bookingID int, managerUUID string, reason *string) error {
-	// Load booking first for notification
 	var bookings *[]domain.Booking
 	bookings, err := s.managerRepo.GetAllBookedClasses(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Find the specific booking for notification
 	var targetBooking *domain.Booking
 	for i := range *bookings {
 		if (*bookings)[i].ID == bookingID {
@@ -52,10 +51,29 @@ func (s *managerService) CancelBookedClass(ctx context.Context, bookingID int, m
 		return err
 	}
 
-	if targetBooking != nil && s.messenger != nil && s.messenger.IsLoggedIn() {
-		s.sendManagerCancelNotif(targetBooking, reason)
+	if targetBooking == nil {
+		zlog.Warn().Msg(fmt.Sprintf("CancelBookedClass: booking #%d cancelled but not found for notification lookup", bookingID))
+		if telegramErr := utils.NotifyTelegram(fmt.Sprintf(
+			"⚠️ *Kelas Dibatalkan Manajemen (#%d)*\nBerhasil dibatalkan, tapi data booking tidak ditemukan untuk notifikasi.",
+			bookingID,
+		)); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
+		}
+		return nil
 	}
 
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		msg := fmt.Sprintf(
+			"❌ *Kelas Dibatalkan Manajemen*\nSiswa: %s\nGuru: %s\n\n🔕 Notifikasi WA dilewati (tidak terhubung)",
+			targetBooking.Student.Name, targetBooking.Schedule.Teacher.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
+		}
+		return nil
+	}
+
+	s.sendManagerCancelNotif(targetBooking, reason)
 	return nil
 }
 
@@ -141,17 +159,40 @@ Halo %s,
 	mgr := s.messenger
 	tPhone := booking.Schedule.Teacher.Phone
 	sPhone := booking.Student.Phone
+	tName := booking.Schedule.Teacher.Name
+	sName := booking.Student.Name
+
 	go func() {
-		sendWA(mgr, tPhone, teacherMsg)
-		sendWA(mgr, sPhone, studentMsg)
+		teacherErr := sendWA(mgr, tPhone, teacherMsg)
+		studentErr := sendWA(mgr, sPhone, studentMsg)
+
+		status := func(err error) string {
+			if err != nil {
+				return "❌ Gagal"
+			}
+			return "✅ Terkirim"
+		}
+
+		summary := fmt.Sprintf(
+			"❌ *Kelas Dibatalkan Manajemen*\nSiswa: %s\nGuru: %s\nTanggal: %s, %s\nJam: %s\nAlasan: %s\n\nWA Guru: %s\nWA Siswa: %s",
+			sName, tName, dayName, dateStr, classTime, cancelReason,
+			status(teacherErr), status(studentErr),
+		)
+		if teacherErr != nil {
+			summary += fmt.Sprintf("\n\n⚠️ Error Guru: %v", teacherErr)
+		}
+		if studentErr != nil {
+			summary += fmt.Sprintf("\n⚠️ Error Siswa: %v", studentErr)
+		}
+
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram cancel notif: %v", telegramErr))
+		}
 	}()
 }
 
-func (s *managerService) GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]domain.TeacherSchedule, error) {
-	if teacherUUID == "" {
-		return nil, errors.New("UUID guru tidak boleh kosong")
-	}
-	return s.managerRepo.GetTeacherSchedules(ctx, teacherUUID)
+func (s *managerService) GetTeacherSchedules(ctx context.Context, teacherUUID string, requiredDuration int) ([]domain.TeacherSchedule, error) {
+	return s.managerRepo.GetTeacherSchedules(ctx, teacherUUID, requiredDuration)
 }
 
 func (s *managerService) GetAllTeachers(ctx context.Context, exceptTeacherUUID string) ([]domain.User, error) {
@@ -168,10 +209,18 @@ func (s *managerService) RebookWithSubstitute(ctx context.Context, req domain.Re
 		return nil, err
 	}
 
-	if s.messenger != nil && s.messenger.IsLoggedIn() {
-		s.sendRebookNotif(booking)
+	if s.messenger == nil || !s.messenger.IsLoggedIn() {
+		msg := fmt.Sprintf(
+			"🔄 *Kelas Pengganti Dibuat*\nSiswa: %s\nGuru Pengganti: %s\n\n🔕 Notifikasi WA dilewati (tidak terhubung)",
+			booking.Student.Name, booking.Schedule.Teacher.Name,
+		)
+		if telegramErr := utils.NotifyTelegram(msg); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram rebook notif: %v", telegramErr))
+		}
+		return booking, nil
 	}
 
+	s.sendRebookNotif(booking)
 	return booking, nil
 }
 
@@ -183,7 +232,6 @@ func (s *managerService) sendRebookNotif(booking *domain.Booking) {
 	classTime := fmt.Sprintf("%s - %s", booking.Schedule.StartTime, booking.Schedule.EndTime)
 	salutation := salutationFor(booking.Schedule.Teacher.Gender)
 
-	// ── Nil-safe instrument name (trial packages have no fixed instrument) ───
 	instrumentName := "-"
 	if booking.PackageUsed.Package != nil {
 		if booking.PackageUsed.Package.TrialInstrument != "" {
@@ -199,7 +247,6 @@ func (s *managerService) sendRebookNotif(booking *domain.Booking) {
 	appURL := "https://www.mdxmusiccourse.cloud/"
 	appName := os.Getenv("APP_NAME")
 
-	// ── 1. Notifikasi ke Guru Pengganti ─────────────────────────────────────
 	teacherMsg := fmt.Sprintf(`*PENUGASAN GURU PENGGANTI*
 
 Halo %s %s,
@@ -224,7 +271,6 @@ Kelas ini adalah pengganti dari kelas yang dibatalkan. Silakan selesaikan kelas 
 		appURL, appName,
 	)
 
-	// ── 2. Notifikasi ke Siswa ───────────────────────────────────────────────
 	studentMsg := fmt.Sprintf(`*KONFIRMASI KELAS PENGGANTI*
 
 Halo %s,
@@ -251,7 +297,6 @@ Kelas ini merupakan pengganti dari kelas yang sebelumnya dibatalkan. Semangat be
 		appURL, appName,
 	)
 
-	// ── 3. Notifikasi ke Manager/Admin (JID yang sedang login) ──────────────
 	managerMsg := fmt.Sprintf(`*RINGKASAN KELAS BAYANGAN*
 
 Manager telah membuat kelas pengganti:
@@ -278,8 +323,9 @@ Notifikasi telah dikirim ke guru dan siswa.
 	mgr := s.messenger
 	tPhone := booking.Schedule.Teacher.Phone
 	sPhone := booking.Student.Phone
+	tName := booking.Schedule.Teacher.Name
+	sName := booking.Student.Name
 
-	// Ambil nomor manager dari JID yang sedang login
 	managerJID := mgr.GetJID()
 	managerPhone := ""
 	if managerJID != "" {
@@ -289,10 +335,43 @@ Notifikasi telah dikirim ke guru dan siswa.
 	}
 
 	go func() {
-		sendWA(mgr, tPhone, teacherMsg)
-		sendWA(mgr, sPhone, studentMsg)
+		teacherErr := sendWA(mgr, tPhone, teacherMsg)
+		studentErr := sendWA(mgr, sPhone, studentMsg)
+
+		var managerErr error
 		if managerPhone != "" {
-			sendWA(mgr, managerPhone, managerMsg)
+			managerErr = mgr.SendMessage(managerPhone, managerMsg)
+			if managerErr != nil {
+				zlog.Warn().Msg(fmt.Sprintf("WA send to manager failed: %v", managerErr))
+			}
+		} else {
+			managerErr = errors.New("manager WA JID tidak tersedia")
+		}
+
+		status := func(err error) string {
+			if err != nil {
+				return "❌ Gagal"
+			}
+			return "✅ Terkirim"
+		}
+
+		summary := fmt.Sprintf(
+			"🔄 *Kelas Pengganti Dibuat*\nSiswa: %s\nGuru Pengganti: %s\nTanggal: %s, %s\nJam: %s\n\nWA Guru: %s\nWA Siswa: %s\nWA Manager: %s",
+			sName, tName, dayName, dateStr, classTime,
+			status(teacherErr), status(studentErr), status(managerErr),
+		)
+		if teacherErr != nil {
+			summary += fmt.Sprintf("\n\n⚠️ Error Guru: %v", teacherErr)
+		}
+		if studentErr != nil {
+			summary += fmt.Sprintf("\n⚠️ Error Siswa: %v", studentErr)
+		}
+		if managerErr != nil {
+			summary += fmt.Sprintf("\n⚠️ Error Manager: %v", managerErr)
+		}
+
+		if telegramErr := utils.NotifyTelegram(summary); telegramErr != nil {
+			zlog.Warn().Msg(fmt.Sprintf("failed to send telegram rebook notif: %v", telegramErr))
 		}
 	}()
 }
@@ -319,6 +398,16 @@ func (s *managerService) UpdateStudent(ctx context.Context, student *domain.User
 		}
 		student.Password = string(hashed)
 	}
+	if student.Phone != "" {
+		if student.CountryCode == "" {
+			student.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(student.Phone, student.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		student.Phone = normalized
+	}
 	if err := s.managerRepo.UpdateStudent(ctx, student); err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
@@ -330,6 +419,16 @@ func (s *managerService) GetAllStudents(ctx context.Context) ([]domain.User, err
 }
 
 func (s *managerService) UpdateManager(ctx context.Context, manager *domain.User) error {
+	if manager.Phone != "" {
+		if manager.CountryCode == "" {
+			manager.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(manager.Phone, manager.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		manager.Phone = normalized
+	}
 	return s.managerRepo.UpdateManager(ctx, manager)
 }
 

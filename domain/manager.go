@@ -17,13 +17,14 @@ type ManagerUseCase interface {
 	GetCancelledClassHistories(ctx context.Context) (*[]ClassHistory, error)
 	RebookWithSubstitute(ctx context.Context, req RebookInput) (*Booking, error)
 	GetAllTeachers(ctx context.Context, exceptTeacherUUID string) ([]User, error)
-	GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]TeacherSchedule, error)
+	GetTeacherSchedules(ctx context.Context, teacherUUID string, requiredDuration int) ([]TeacherSchedule, error)
 
 	GetSetting(ctx context.Context) (*Setting, error)
 	UpdateSetting(ctx context.Context, setting *Setting) error
 }
 
 type ManagerRepository interface {
+	GetTeacherSchedules(ctx context.Context, teacherUUID string, requiredDuration int) ([]TeacherSchedule, error)
 	GetAllBookedClasses(ctx context.Context) (*[]Booking, error)
 	CancelBookedClass(ctx context.Context, bookingID int, managerUUID string, reason *string) error
 	GetAllStudents(ctx context.Context) ([]User, error)
@@ -35,7 +36,6 @@ type ManagerRepository interface {
 	GetCancelledClassHistories(ctx context.Context) (*[]ClassHistory, error)
 	RebookWithSubstitute(ctx context.Context, req RebookInput) (*Booking, error)
 	GetAllTeachers(ctx context.Context, exceptTeacherUUID string) ([]User, error)
-	GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]TeacherSchedule, error)
 
 	GetSetting(ctx context.Context) (*Setting, error)
 	UpdateSetting(ctx context.Context, setting *Setting) error

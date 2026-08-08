@@ -284,11 +284,12 @@ type ChangePasswordRequest struct {
 }
 
 type RegisterRequest struct {
-	Name     string `json:"name" binding:"required,min=3,max=50"`
-	Phone    string `json:"phone" binding:"required,min=10,max=14,numeric"`
-	Email    string `json:"email" binding:"required,email"`
-	Gender   string `json:"gender" binding:"required,oneof=male female"`
-	Password string `json:"password" binding:"required,min=8,max=64"`
+	Name        string `json:"name" binding:"required,min=3,max=50"`
+	Phone       string `json:"phone" binding:"required,min=8,max=20"`
+	CountryCode string `json:"country_code" binding:"omitempty,len=2"`
+	Email       string `json:"email" binding:"required,email"`
+	Gender      string `json:"gender" binding:"required,oneof=male female"`
+	Password    string `json:"password" binding:"required,min=8,max=64"`
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -309,6 +310,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		strings.ToLower(req.Email),
 		req.Name,
 		req.Phone,
+		req.CountryCode,
 		req.Password,
 		req.Gender,
 	); err != nil {

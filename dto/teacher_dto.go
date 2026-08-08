@@ -35,11 +35,13 @@ type SlotsAvailability struct {
 }
 
 // Request untuk Create Teacher
+// dto/teacher_dto.go — CreateTeacherRequest
 type CreateTeacherRequest struct {
 	Name              string  `json:"name" binding:"required,min=3,max=50"`
 	Email             string  `json:"email" binding:"required,email"`
 	Gender            string  `json:"gender" binding:"required,oneof=male female"`
-	Phone             string  `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Phone             string  `json:"phone" binding:"required,min=8,max=20"`
+	CountryCode       string  `json:"country_code" binding:"omitempty,len=2"`
 	Password          string  `json:"password" binding:"required,min=8"`
 	Image             *string `json:"image" binding:"omitempty,url"`
 	Bio               *string `json:"bio" binding:"omitempty,max=1000"`
@@ -68,8 +70,9 @@ type UpdateTeacherProfileRequest struct {
 
 // Request untuk Update Teacher Profile (by Teacher themselves)
 type UpdateTeacherProfileRequestByTeacher struct {
-	Name              string   `json:"name" binding:"required,min=3,max=50"`
-	Phone             string   `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Name        string `json:"name" binding:"required,min=3,max=50"`
+	Phone       string `json:"phone" binding:"required,min=8,max=20"`
+	CountryCode string `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
 	Image             *string  `json:"image" binding:"omitempty,url"`
 	Gender            string   `json:"gender" binding:"required,oneof=male female"`
 	Bio               *string  `json:"bio" binding:"omitempty,max=1000"`
@@ -85,10 +88,11 @@ type UpdateTeacherProfileRequestByTeacher struct {
 
 func MapCreateTeacherRequestToUserByTeacher(req *UpdateTeacherProfileRequestByTeacher) domain.User {
 	user := domain.User{
-		Name:   req.Name,
-		Phone:  req.Phone,
-		Image:  req.Image,
-		Gender: req.Gender,
+		Name:        req.Name,
+		Phone:       req.Phone,
+		Image:       req.Image,
+		Gender:      req.Gender,
+		CountryCode: req.CountryCode,
 		TeacherProfile: &domain.TeacherProfile{
 			Bio:               deref(req.Bio),
 			Education:         deref(req.Education),
@@ -121,6 +125,7 @@ func MapCreateTeacherRequestToUser(req *CreateTeacherRequest) *domain.User {
 		Email:    strings.ToLower(req.Email),
 		Phone:    req.Phone,
 		Password: req.Password,
+		CountryCode: req.CountryCode,
 		Role:     domain.RoleTeacher,
 		Gender:   req.Gender,
 		Image:    req.Image,

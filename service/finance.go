@@ -5,6 +5,7 @@ import (
 	"chronosphere/utils"
 	"context"
 	"errors"
+	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -51,6 +52,16 @@ func (s *financeService) GetFinanceByUUID(ctx context.Context, uuid string) (*do
 func (s *financeService) UpdateFinance(ctx context.Context, user *domain.User) error {
 	if user.UUID == "" {
 		return errors.New("UUID tidak boleh kosong")
+	}
+	if user.Phone != "" {
+		if user.CountryCode == "" {
+			user.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(user.Phone, user.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		user.Phone = normalized
 	}
 	return s.repo.UpdateFinance(ctx, user)
 }

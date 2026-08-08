@@ -4,8 +4,9 @@ import "chronosphere/domain"
 
 type UpdateStudentDataRequest struct {
 	Name   string  `json:"name" binding:"required,min=3,max=50"`
-	Phone  string  `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Phone  string  `json:"phone" binding:"required,min=8,max=20"`
 	Image  *string `json:"image" binding:"omitempty,url"`
+	CountryCode string  `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
 	Gender string  `json:"gender" binding:"required,oneof=male female"`
 }
 
@@ -13,23 +14,27 @@ func MapUpdateStudentRequestByStudent(req *UpdateStudentDataRequest) domain.User
 	return domain.User{
 		Name:   req.Name,
 		Phone:  req.Phone,
+		CountryCode: req.CountryCode,
 		Image:  req.Image,
 		Gender: req.Gender,
 	}
 }
 
+// dto/student_dto.go — CreateStudentRequest
 type CreateStudentRequest struct {
-	Name     string  `json:"name" binding:"required,min=3,max=50"`
-	Gender   string  `json:"gender" binding:"required,oneof=male female"`
-	Email    string  `json:"email" binding:"required,email"`
-	Phone    string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Password string  `json:"password" binding:"required,min=8,max=64"`
-	Image    *string `json:"image" binding:"omitempty,url"`
+	Name        string  `json:"name" binding:"required,min=3,max=50"`
+	Gender      string  `json:"gender" binding:"required,oneof=male female"`
+	Email       string  `json:"email" binding:"required,email"`
+	Phone       string  `json:"phone" binding:"required,min=8,max=20"`
+	CountryCode string  `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
+	Password    string  `json:"password" binding:"required,min=8,max=64"`
+	Image       *string `json:"image" binding:"omitempty,url"`
 }
 
 func MapCreateStudentRequestToUser(req *CreateStudentRequest) *domain.User {
 	return &domain.User{
 		Name:     req.Name,
+		CountryCode: req.CountryCode,
 		Gender:   req.Gender,
 		Email:    req.Email,
 		Phone:    req.Phone,

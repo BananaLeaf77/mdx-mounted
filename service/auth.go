@@ -144,22 +144,28 @@ func (s *authService) Login(ctx context.Context, email, password string) (*domai
 	}, nil
 }
 
-func (s *authService) Register(ctx context.Context, email string, name string, telephone string, password string, gender string) error {
+func (s *authService) Register(ctx context.Context, email string, name string, telephone string, countryCode string, password string, gender string) error {
+	if countryCode == "" {
+		countryCode = "ID"
+	}
+	normalizedPhone, err := utils.NormalizePhoneNumberIntl(telephone, countryCode)
+	if err != nil {
+		return fmt.Errorf("nomor telepon tidak valid: %w", err)
+	}
+
 	if _, err := s.userRepo.GetUserByEmail(ctx, email); err == nil {
 		return ErrEmailExists
 	}
-	if _, err := s.userRepo.GetUserByTelephone(ctx, telephone); err == nil {
+	if _, err := s.userRepo.GetUserByTelephone(ctx, normalizedPhone); err == nil {
 		return ErrTelephoneExists
 	}
 
-	// Hash password
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("gagal mengenkripsi kata sandi: %w", err)
 	}
 	hashedPassword := string(hashedBytes)
 
-	// Generate OTP
 	otp, err := utils.GenerateOTP(6)
 	if err != nil {
 		return fmt.Errorf("gagal membuat OTP: %w", err)
@@ -171,12 +177,12 @@ func (s *authService) Register(ctx context.Context, email string, name string, t
 		otpTime = 5
 	}
 
-	// Save to Redis
-	if err := s.otpRepo.SaveOTP(ctx, email, otp, hashedPassword, name, telephone, gender, time.Duration(otpTime)*time.Minute); err != nil {
+	// Save to Redis — store the normalized phone, and country code too if
+	// SaveOTP's signature/downstream OTP-verify user-creation step needs it
+	if err := s.otpRepo.SaveOTP(ctx, email, otp, hashedPassword, name, normalizedPhone, gender, time.Duration(otpTime)*time.Minute); err != nil {
 		return fmt.Errorf("gagal menyimpan OTP: %w", err)
 	}
 
-	// Kirim email OTP
 	subject := "Kode OTP MadEU Anda"
 	body := fmt.Sprintf("Kode OTP Anda adalah: %s (berlaku selama %d menit)", otp, otpTime)
 

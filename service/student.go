@@ -220,6 +220,16 @@ func (s *studentUseCase) GetMyProfile(ctx context.Context, userUUID string) (*do
 }
 
 func (s *studentUseCase) UpdateStudentData(ctx context.Context, userUUID string, user domain.User) error {
+	if user.Phone != "" {
+		if user.CountryCode == "" {
+			user.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(user.Phone, user.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		user.Phone = normalized
+	}
 	return s.repo.UpdateStudentData(ctx, userUUID, user)
 }
 
@@ -455,14 +465,11 @@ _Selamat belajar! 🎶_
 	}()
 }
 
-// sendWA is a fire-and-forget helper shared across student service.
 func sendWA(mgr *config.WAManager, phone, msg string) error {
-	normalized := utils.NormalizePhoneNumber(phone)
-	if normalized == "" {
-		zlog.Warn().Msg(fmt.Sprintf("WA send skipped, invalid phone: %s", phone))
-		return fmt.Errorf("invalid phone number: %s", phone)
+	if phone == "" {
+		return fmt.Errorf("phone number kosong")
 	}
-	if err := mgr.SendMessage(normalized, msg); err != nil {
+	if err := mgr.SendMessage(phone, msg); err != nil {
 		zlog.Warn().Msg(fmt.Sprintf("WA send failed to %s: %v", phone, err))
 		return err
 	}

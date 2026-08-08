@@ -22,6 +22,24 @@ func NewAdminRepository(db *gorm.DB) domain.AdminRepository {
 	return &adminRepo{db: db}
 }
 
+func (r *adminRepo) GetAllUsersForPhoneBackfill(ctx context.Context) ([]domain.User, error) {
+	var users []domain.User
+	if err := r.db.WithContext(ctx).
+		Select("uuid, name, phone, country_code").
+		Where("deleted_at IS NULL").
+		Find(&users).Error; err != nil {
+		return nil, fmt.Errorf("gagal mengambil data user: %w", err)
+	}
+	return users, nil
+}
+
+func (r *adminRepo) UpdateUserPhone(ctx context.Context, uuid string, newPhone string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.User{}).
+		Where("uuid = ?", uuid).
+		Update("phone", newPhone).Error
+}
+
 func (r *adminRepo) GetExistingRecognitionSourceIDs(ctx context.Context, sourceType string) (map[int]bool, error) {
 	var ids []int
 	if err := r.db.WithContext(ctx).

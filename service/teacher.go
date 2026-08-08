@@ -89,6 +89,16 @@ func (s *teacherService) GetMyProfile(ctx context.Context, uuid string) (*domain
 }
 
 func (s *teacherService) UpdateTeacherData(ctx context.Context, userUUID string, user domain.User) error {
+	if user.Phone != "" {
+		if user.CountryCode == "" {
+			user.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(user.Phone, user.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		user.Phone = normalized
+	}
 	return s.repo.UpdateTeacherData(ctx, userUUID, user)
 }
 

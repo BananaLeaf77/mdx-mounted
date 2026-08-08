@@ -69,7 +69,6 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		// Assign package to student
 		admin.POST("/assign-package", h.AssignPackageToStudent)
 
-
 		// Class Histories
 
 		// WhatsApp
@@ -77,6 +76,8 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 		admin.POST("/whatsapp/connect", h.ConnectWhatsApp)
 		admin.POST("/whatsapp/disconnect", h.DisconnectWhatsApp)
 		admin.POST("/whatsapp/ping", h.PingWhatsApp)
+		//
+		admin.POST("/backfill-phone-numbers", h.BackfillPhoneNumbers)
 
 	}
 
@@ -106,6 +107,20 @@ func NewAdminHandler(app *gin.Engine, uc domain.AdminUseCase, jwtManager *utils.
 	wa := app.Group("/wa")
 	wa.Use(config.AuthMiddleware(jwtManager))
 	wa.GET("/warmup-status", h.GetWhatsAppWarmupStatus)
+}
+
+func (h *AdminHandler) BackfillPhoneNumbers(c *gin.Context) {
+	name := utils.GetAPIHitter(c)
+
+	result, err := h.uc.BackfillPhoneNumbers(c.Request.Context())
+	if err != nil {
+		utils.PrintLogInfo(&name, 500, "BackfillPhoneNumbers", &err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	utils.PrintLogInfo(&name, 200, "BackfillPhoneNumbers", nil)
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": result})
 }
 
 func (h *AdminHandler) ExportRecognitionRows(c *gin.Context) {

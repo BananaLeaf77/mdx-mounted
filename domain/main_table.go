@@ -39,7 +39,8 @@ type User struct {
 	Name             string     `gorm:"not null;size:50" json:"name"`
 	Gender           string     `gorm:"not null;size:10" json:"gender"` // male | female
 	Email            string     `gorm:"unique;not null" json:"email"`
-	Phone            string     `gorm:"unique;not null;size:14" json:"phone"`
+	Phone            string     `gorm:"unique;not null;size:15" json:"phone"`
+	CountryCode      string     `gorm:"not null;default:'ID';size:2" json:"country_code"` // ISO 3166-1 alpha-2
 	Password         string     `gorm:"not null" json:"-"`
 	Role             string     `gorm:"not null" json:"role"`             // student | teacher | admin
 	Image            *string    `gorm:"type:text" json:"image,omitempty"` // nullable, default NULL

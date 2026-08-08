@@ -6,17 +6,18 @@ import (
 )
 
 type RebookRequest struct {
-	OriginalBookingID int    `json:"original_booking_id" binding:"required,gt=0"`
-	SubScheduleID     int    `json:"sub_schedule_id" binding:"required,gt=0"`
+	OriginalBookingID int `json:"original_booking_id" binding:"required,gt=0"`
+	SubScheduleID     int `json:"sub_schedule_id" binding:"required,gt=0"`
 }
 
 type ManagerUpdateStudentRequest struct {
-	Name     string  `json:"name" binding:"omitempty,min=3,max=50"`
-	Gender   string  `json:"gender" binding:"omitempty,oneof=male female"`
-	Email    string  `json:"email" binding:"omitempty,email"`
-	Phone    string  `json:"phone" binding:"omitempty,numeric,min=9,max=14"`
-	Password string  `json:"password" binding:"omitempty,min=8,max=64"`
-	Image    *string `json:"image" binding:"omitempty,url"`
+	Name        string  `json:"name" binding:"omitempty,min=3,max=50"`
+	Gender      string  `json:"gender" binding:"omitempty,oneof=male female"`
+	Email       string  `json:"email" binding:"omitempty,email"`
+	Phone       string  `json:"phone" binding:"omitempty,min=8,max=20"`
+	CountryCode string  `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
+	Password    string  `json:"password" binding:"omitempty,min=8,max=64"`
+	Image       *string `json:"image" binding:"omitempty,url"`
 }
 
 func MapUpdateStudentRequest(req *ManagerUpdateStudentRequest) *domain.User {
@@ -43,39 +44,43 @@ func MapUpdateStudentRequest(req *ManagerUpdateStudentRequest) *domain.User {
 
 // Request untuk Create Teacher
 type CreateManagerRequest struct {
-	Name     string  `json:"name" binding:"required,min=3,max=50"`
-	Email    string  `json:"email" binding:"required,email"`
-	Phone    string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Password string  `json:"password" binding:"required,min=8,max=64"`
-	Gender   string  `json:"gender" binding:"required,oneof=male female"`
-	Image    *string `json:"image" binding:"omitempty,url"`
-	Bio      *string `json:"bio" binding:"omitempty,max=500"`
+	Name        string  `json:"name" binding:"required,min=3,max=50"`
+	Email       string  `json:"email" binding:"required,email"`
+	Phone       string  `json:"phone" binding:"required,min=8,max=20"`
+	CountryCode string  `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
+	Password    string  `json:"password" binding:"required,min=8,max=64"`
+	Gender      string  `json:"gender" binding:"required,oneof=male female"`
+	Image       *string `json:"image" binding:"omitempty,url"`
+	Bio         *string `json:"bio" binding:"omitempty,max=500"`
 }
 
 // Request untuk Update Teacher
 type UpdateManagerProfileRequest struct {
-	Name   string  `json:"name" binding:"required,min=3,max=50"`
-	Email  string  `json:"email" binding:"required,email"`
-	Phone  string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Image  *string `json:"image" binding:"omitempty,url"`
-	Gender string  `json:"gender" binding:"required,oneof=male female"`
+	Name        string  `json:"name" binding:"required,min=3,max=50"`
+	Email       string  `json:"email" binding:"required,email"`
+	Phone       string  `json:"phone" binding:"required,min=8,max=20"`
+	CountryCode string  `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
+	Image       *string `json:"image" binding:"omitempty,url"`
+	Gender      string  `json:"gender" binding:"required,oneof=male female"`
 }
 
 type UpdateManagerProfileRequestByManager struct {
-	Name   string  `json:"name" binding:"required,min=3,max=50"`
-	Email  string  `json:"email" binding:"required,email"`
-	Phone  string  `json:"phone" binding:"required,numeric,min=9,max=14"`
-	Image  *string `json:"image" binding:"omitempty,url"`
-	Gender string  `json:"gender" binding:"required,oneof=male female"`
+	Name        string  `json:"name" binding:"required,min=3,max=50"`
+	Email       string  `json:"email" binding:"required,email"`
+	Phone       string  `json:"phone" binding:"required,min=8,max=20"`
+	Image       *string `json:"image" binding:"omitempty,url"`
+	CountryCode string  `json:"country_code" binding:"omitempty,len=2"` // defaults to "ID" if empty
+	Gender      string  `json:"gender" binding:"required,oneof=male female"`
 }
 
 func MapCreateManagerRequestToUserByManager(req *UpdateManagerProfileRequestByManager) domain.User {
 	return domain.User{
-		Name:   req.Name,
-		Email:  strings.ToLower(req.Email),
-		Phone:  req.Phone,
-		Image:  req.Image,
-		Gender: req.Gender,
+		Name:        req.Name,
+		Email:       strings.ToLower(req.Email),
+		Phone:       req.Phone,
+		CountryCode: req.CountryCode,
+		Image:       req.Image,
+		Gender:      req.Gender,
 	}
 }
 
@@ -106,7 +111,7 @@ type UpdateManagerRequest struct {
 	UUID   string `json:"uuid" binding:"required,uuid"`
 	Name   string `json:"name" binding:"required,min=3,max=50"`
 	Gender string `json:"gender" binding:"required,oneof=male female"`
-	Phone  string `json:"phone" binding:"required,numeric,min=9,max=14"`
+	Phone  string `json:"phone" binding:"required,min=8,max=20"`
 	Image  string `json:"image" binding:"omitempty,url"`
 }
 

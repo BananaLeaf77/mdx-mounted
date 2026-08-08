@@ -3,9 +3,10 @@ package utils
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nyaruka/phonenumbers"
 )
 
 // formatJID converts a WhatsApp JID like "6289529539993:49@s.whatsapp.net"
@@ -57,33 +58,39 @@ func TranslateDayOfWeek(dayOfWeek string) string {
 	}
 }
 
-// Helper function to normalize phone numbers for WhatsApp
-func NormalizePhoneNumber(phone string) string {
-	phone = strings.TrimSpace(phone)
-	phone = regexp.MustCompile(`[^\d]`).ReplaceAllString(phone, "")
+func NormalizePhoneNumberIntl(raw string, countryCode string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("nomor telepon kosong")
+	}
+	if countryCode == "" {
+		countryCode = "ID" // fallback for legacy data without a country set
+	}
 
-	if phone == "" {
+	num, err := phonenumbers.Parse(raw, countryCode)
+	if err != nil {
+		return "", fmt.Errorf("gagal mem-parsing nomor telepon: %w", err)
+	}
+
+	if !phonenumbers.IsValidNumber(num) {
+		return "", fmt.Errorf("nomor telepon tidak valid untuk region %s", countryCode)
+	}
+
+	e164 := phonenumbers.Format(num, phonenumbers.E164) // "+818012345678"
+	return strings.TrimPrefix(e164, "+"), nil
+}
+
+// NormalizePhoneNumber is kept for backward compatibility with existing
+// call sites that don't yet pass a country code — assumes Indonesian
+// numbers, matching the old hardcoded behavior. Prefer
+// NormalizePhoneNumberIntl for anything touching a student/teacher record
+// that has a CountryCode field available.
+func NormalizePhoneNumber(raw string) string {
+	normalized, err := NormalizePhoneNumberIntl(raw, "ID")
+	if err != nil {
 		return ""
 	}
-
-	// Fix duplicate country code (e.g. "6262..." → "62...")
-	for strings.HasPrefix(phone, "6262") {
-		phone = phone[2:]
-	}
-
-	switch {
-	case len(phone) == 10:
-		phone = "62" + phone[1:]
-	case strings.HasPrefix(phone, "0"):
-		phone = "62" + phone[1:]
-	case strings.HasPrefix(phone, "62"):
-		// already correct
-	default:
-		// bare local number without leading 0
-		phone = "62" + phone
-	}
-
-	return phone
+	return normalized
 }
 
 func CalculateEndTime(startTime string, durationHours float64) string {

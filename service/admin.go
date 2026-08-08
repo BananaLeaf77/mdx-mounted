@@ -32,6 +32,73 @@ func NewAdminService(adminRepo domain.AdminRepository, mgr *config.WAManager, da
 	}
 }
 
+func (s *adminService) BackfillPhoneNumbers(ctx context.Context) (*domain.PhoneBackfillResult, error) {
+	users, err := s.adminRepo.GetAllUsersForPhoneBackfill(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &domain.PhoneBackfillResult{UsersScanned: len(users)}
+
+	// Pass 1: compute what every user's normalized number WOULD be, without
+	// writing anything yet, so we can catch collisions before they hit the DB.
+	type plannedUpdate struct {
+		UUID     string
+		OldPhone string
+		NewPhone string
+	}
+	var toUpdate []plannedUpdate
+	targetCounts := make(map[string][]string) // normalized phone -> list of user UUIDs/names
+
+	for _, u := range users {
+		countryCode := u.CountryCode
+		if countryCode == "" {
+			countryCode = "ID"
+		}
+
+		normalized, err := utils.NormalizePhoneNumberIntl(u.Phone, countryCode)
+		if err != nil {
+			result.Failed++
+			result.FailedDetails = append(result.FailedDetails, fmt.Sprintf("%s (%s): %v", u.Name, u.Phone, err))
+			continue
+		}
+
+		if normalized == u.Phone {
+			result.AlreadyNormal++
+			continue
+		}
+
+		toUpdate = append(toUpdate, plannedUpdate{UUID: u.UUID, OldPhone: u.Phone, NewPhone: normalized})
+		targetCounts[normalized] = append(targetCounts[normalized], fmt.Sprintf("%s (was: %s)", u.Name, u.Phone))
+	}
+
+	// Check for collisions: two different existing users whose numbers would
+	// normalize to the SAME real phone number. Don't touch these automatically
+	// — that's a genuine duplicate-account situation needing a human decision.
+	collisionTargets := make(map[string]bool)
+	for normalized, names := range targetCounts {
+		if len(names) > 1 {
+			result.Collisions = append(result.Collisions, fmt.Sprintf("%s -> %s", normalized, strings.Join(names, ", ")))
+			collisionTargets[normalized] = true
+		}
+	}
+
+	// Pass 2: write only the non-colliding updates
+	for _, u := range toUpdate {
+		if collisionTargets[u.NewPhone] {
+			continue // skip — needs manual review, listed in result.Collisions
+		}
+		if err := s.adminRepo.UpdateUserPhone(ctx, u.UUID, u.NewPhone); err != nil {
+			result.Failed++
+			result.FailedDetails = append(result.FailedDetails, fmt.Sprintf("uuid=%s update failed: %v", u.UUID, err))
+			continue
+		}
+		result.Normalized++
+	}
+
+	return result, nil
+}
+
 func (s *adminService) ExportRecognitionRows(ctx context.Context, filter domain.RecognitionRowFilter) ([]byte, error) {
 	rows, err := s.adminRepo.GetAllRecognitionRowsForExport(ctx, filter)
 	if err != nil {
@@ -134,6 +201,16 @@ func (s *adminService) GetBookedClasses(ctx context.Context) ([]domain.Booking, 
 }
 
 func (s *adminService) UpdateAdmin(ctx context.Context, payload domain.User) error {
+	if payload.Phone != "" {
+		if payload.CountryCode == "" {
+			payload.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(payload.Phone, payload.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		payload.Phone = normalized
+	}
 	if err := s.adminRepo.UpdateAdmin(ctx, payload); err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}
@@ -341,6 +418,15 @@ func (s *adminService) CreateStudent(ctx context.Context, user *domain.User) (*d
 	}
 	user.Role = domain.RoleStudent
 
+	if user.CountryCode == "" {
+		user.CountryCode = "ID"
+	}
+	normalized, err := utils.NormalizePhoneNumberIntl(user.Phone, user.CountryCode)
+	if err != nil {
+		return nil, fmt.Errorf("nomor telepon tidak valid: %w", err)
+	}
+	user.Phone = normalized
+
 	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, errors.New("gagal mengenkripsi password")
@@ -360,6 +446,15 @@ func (s *adminService) CreateTeacher(ctx context.Context, user *domain.User, ins
 	}
 	user.Role = domain.RoleTeacher
 
+	if user.CountryCode == "" {
+		user.CountryCode = "ID"
+	}
+	normalized, err := utils.NormalizePhoneNumberIntl(user.Phone, user.CountryCode)
+	if err != nil {
+		return nil, fmt.Errorf("nomor telepon tidak valid: %w", err)
+	}
+	user.Phone = normalized
+
 	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, errors.New("gagal mengenkripsi password")
@@ -377,6 +472,19 @@ func (s *adminService) UpdateTeacher(ctx context.Context, user *domain.User, ins
 	if user.UUID == "" {
 		return errors.New("uuid teacher tidak boleh kosong")
 	}
+
+	// Phone is optional on update — only re-normalize if it's actually being changed
+	if user.Phone != "" {
+		if user.CountryCode == "" {
+			user.CountryCode = "ID"
+		}
+		normalized, err := utils.NormalizePhoneNumberIntl(user.Phone, user.CountryCode)
+		if err != nil {
+			return fmt.Errorf("nomor telepon tidak valid: %w", err)
+		}
+		user.Phone = normalized
+	}
+
 	if err := s.adminRepo.UpdateTeacher(ctx, user, instrumentIDs); err != nil {
 		return errors.New(utils.TranslateDBError(err))
 	}

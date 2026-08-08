@@ -13,6 +13,15 @@ type WANumberInfo struct {
 	WALink string `json:"wa_link"` // https://wa.me/6289529539993
 }
 
+type PhoneBackfillResult struct {
+	UsersScanned  int      `json:"users_scanned"`
+	AlreadyNormal int      `json:"already_normalized"`
+	Normalized    int      `json:"normalized"`
+	Failed        int      `json:"failed"`
+	FailedDetails []string `json:"failed_details,omitempty"`
+	Collisions    []string `json:"collisions,omitempty"` // needs manual review, nothing written for these
+}
+
 type WAWarmupInfo struct {
 	Warmed      bool          `json:"warmed"`
 	AdminNumber *WANumberInfo `json:"admin_number,omitempty"` // only present when warmed == false
@@ -33,6 +42,7 @@ const (
 )
 
 type AdminUseCase interface {
+	BackfillPhoneNumbers(ctx context.Context) (*PhoneBackfillResult, error)
 	ExportRecognitionRows(ctx context.Context, filter RecognitionRowFilter) ([]byte, error)
 
 	GetWhatsAppWarmupInfo(ctx context.Context, userUUID string) (*WAWarmupInfo, error)
@@ -97,6 +107,8 @@ type AdminUseCase interface {
 }
 
 type AdminRepository interface {
+	GetAllUsersForPhoneBackfill(ctx context.Context) ([]User, error)
+	UpdateUserPhone(ctx context.Context, uuid string, newPhone string) error
 	GetAllRecognitionRowsForExport(ctx context.Context, filter RecognitionRowFilter) ([]RecognitionRowDetail, error)
 
 	// Self

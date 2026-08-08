@@ -43,7 +43,7 @@ func (r *managerRepo) GetAllBookedClasses(ctx context.Context) (*[]domain.Bookin
 		Find(&bookings).Error; err != nil {
 		return nil, fmt.Errorf("gagal mengambil data kelas: %w", err)
 	}
-	
+
 	loc, _ := time.LoadLocation("Asia/Makassar")
 	now := time.Now().In(loc)
 
@@ -192,14 +192,19 @@ func (r *managerRepo) CancelBookedClass(ctx context.Context, bookingID int, mana
 	return nil
 }
 
-func (r *managerRepo) GetTeacherSchedules(ctx context.Context, teacherUUID string) ([]domain.TeacherSchedule, error) {
+func (r *managerRepo) GetTeacherSchedules(ctx context.Context, teacherUUID string, requiredDuration int) ([]domain.TeacherSchedule, error) {
+	query := r.db.WithContext(ctx).
+		Where("teacher_uuid = ? AND deleted_at IS NULL", teacherUUID)
+
+	if requiredDuration > 0 {
+		query = query.Where("duration = ?", requiredDuration)
+	}
+
 	var schedules []domain.TeacherSchedule
-	if err := r.db.WithContext(ctx).
-		Where("teacher_uuid = ? AND deleted_at IS NULL", teacherUUID).
-		Order("day_of_week, start_time").
-		Find(&schedules).Error; err != nil {
+	if err := query.Find(&schedules).Error; err != nil {
 		return nil, err
 	}
+
 	return schedules, nil
 }
 
@@ -230,6 +235,7 @@ func (r *managerRepo) GetCancelledClassHistories(ctx context.Context) (*[]domain
 		Preload("Booking.Schedule.Teacher").
 		Preload("Booking.PackageUsed").
 		Preload("Booking.PackageUsed.Package.Instrument").
+		Preload("Booking.CancelUser").
 		Joins("LEFT JOIN bookings ON class_histories.booking_id = bookings.id").
 		Where("class_histories.status = ?", domain.StatusCancelled).
 		Where("bookings.status = ?", domain.StatusCancelled).
@@ -256,6 +262,7 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 	if err := tx.
 		Preload("PackageUsed").
 		Preload("PackageUsed.Package").
+		Preload("Schedule"). // needed to know the original teacher's uuid for step 3
 		Where("id = ? AND status = ?", req.OriginalBookingID, domain.StatusCancelled).
 		First(&original).Error; err != nil {
 		tx.Rollback()
@@ -284,6 +291,19 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		return nil, errors.New("guru pengganti tidak boleh sama dengan guru yang membatalkan")
 	}
 
+	// 3b. Substitute schedule's duration must match the student's package duration —
+	// same guard BookClass already enforces at normal booking time. Without this,
+	// a 60-minute package can silently get paired with a 30-minute substitute slot
+	// (or vice versa), shorting the student and creating a teacher-pay mismatch
+	// since GenerateMonthlyPayments has no way to know the actual class length.
+	if original.PackageUsed.Package != nil && subSchedule.Duration != original.PackageUsed.Package.Duration {
+		tx.Rollback()
+		return nil, fmt.Errorf(
+			"durasi jadwal pengganti (%d menit) tidak sesuai dengan durasi paket siswa (%d menit)",
+			subSchedule.Duration, original.PackageUsed.Package.Duration,
+		)
+	}
+
 	// 4. Create new booking for the substitute
 	newBooking := domain.Booking{
 		StudentUUID:      original.StudentUUID,
@@ -293,7 +313,7 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		InstrumentID:     original.InstrumentID, // Keep original instrument
 		Status:           domain.StatusBooked,
 		BookedAt:         time.Now(),
-		IsManual:         true, // ← this
+		IsManual:         true,
 	}
 
 	if err := tx.Create(&newBooking).Error; err != nil {
@@ -301,7 +321,7 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 		return nil, fmt.Errorf("gagal membuat booking baru: %w", err)
 	}
 
-	// 5. Deduct quota back — it was refunded when the original teacher cancelled,
+	// 5. Deduct quota back — it was refunded when the original teacher cancelled
 	if err := tx.Model(&domain.StudentPackage{}).
 		Where("id = ?", original.StudentPackageID).
 		UpdateColumn("remaining_quota", gorm.Expr("remaining_quota - 1")).Error; err != nil {
@@ -338,7 +358,6 @@ func (r *managerRepo) RebookWithSubstitute(ctx context.Context, req domain.Reboo
 			packageCopy := *newBooking.PackageUsed.Package
 			packageCopy.TrialInstrument = instrument.Name
 
-			// For consistency with other parts of the system, we might also want to set the instrument itself
 			if packageCopy.Instrument == nil {
 				packageCopy.Instrument = &domain.Instrument{}
 			}
